@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -7,7 +8,6 @@ from tkinter import filedialog, messagebox, ttk
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageTk
-import ast
 
 try:
     import cv2
@@ -20,6 +20,7 @@ LPARAMS_CSV = os.path.join(BASE_DIR, "Landmark2DPoints.csv")
 
 class AnnotationGUI(tk.Tk):
     # Initializes the main GUI, state, and loads landmarks from CSV.
+
     def __init__(self):
         super().__init__()
         self.title("2D Point Annotation")
@@ -79,12 +80,21 @@ class AnnotationGUI(tk.Tk):
         ctrl = tk.Frame(self)
         ctrl.pack(side=tk.RIGHT, fill="y", padx=10, pady=10)
         self._ctrl = ctrl
-        tk.Button(ctrl, text="Load Image", command=self.load_image).pack(fill="x", pady=5)
-        tk.Button(ctrl, text="Save Annotations", command=self.save_annotations).pack(fill="x", pady=5)
+        tk.Button(ctrl, text="Load Image", command=self.load_image).pack(
+            fill="x", pady=5
+        )
+        tk.Button(ctrl, text="Save Annotations", command=self.save_annotations).pack(
+            fill="x", pady=5
+        )
         img_frame = ttk.LabelFrame(ctrl, text="Image")
         img_frame.pack(fill="x", pady=(10, 10))
-        tk.Entry(img_frame, textvariable=self.path_var, state="readonly",
-                 relief="sunken", justify="left").pack(fill="x", padx=6, pady=6)
+        tk.Entry(
+            img_frame,
+            textvariable=self.path_var,
+            state="readonly",
+            relief="sunken",
+            justify="left",
+        ).pack(fill="x", padx=6, pady=6)
         tk.Label(ctrl, text="Landmarks:").pack(anchor="w")
         PANEL_WIDTH = 300
         SCROLLBAR_WIDTH = 18
@@ -102,68 +112,109 @@ class AnnotationGUI(tk.Tk):
         )
         self.lp_canvas.pack(side=tk.LEFT, fill="both")
         self.lp_scrollbar = tk.Scrollbar(
-            self.landmark_panel_container, orient="vertical",
-            command=self.lp_canvas.yview
+            self.landmark_panel_container,
+            orient="vertical",
+            command=self.lp_canvas.yview,
         )
         self.lp_scrollbar.pack(side=tk.RIGHT, fill="y")
         self.lp_canvas.configure(yscrollcommand=self.lp_scrollbar.set)
         self.lp_inner = tk.Frame(self.lp_canvas)
         self.lp_canvas.create_window((0, 0), window=self.lp_inner, anchor="nw")
-        self.lp_inner.bind("<Configure>", lambda e: self.lp_canvas.configure(
-            scrollregion=self.lp_canvas.bbox("all")))
+        self.lp_inner.bind(
+            "<Configure>",
+            lambda e: self.lp_canvas.configure(scrollregion=self.lp_canvas.bbox("all")),
+        )
         self.lp_inner.bind("<Enter>", lambda e: self._bind_landmark_scroll(True))
         self.lp_inner.bind("<Leave>", lambda e: self._bind_landmark_scroll(False))
         ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
         buttons_row = tk.Frame(ctrl)
         buttons_row.pack(fill="x", pady=(0, 6))
-        tk.Button(buttons_row, text="View All",
-                  command=lambda: self._set_all_visibility(True)
-                  ).pack(side="left", expand=True, fill="x", padx=(0, 4))
-        tk.Button(buttons_row, text="View None",
-                  command=lambda: self._set_all_visibility(False)
-                  ).pack(side="left", expand=True, fill="x")
+        tk.Button(
+            buttons_row, text="View All", command=lambda: self._set_all_visibility(True)
+        ).pack(side="left", expand=True, fill="x", padx=(0, 4))
+        tk.Button(
+            buttons_row,
+            text="View None",
+            command=lambda: self._set_all_visibility(False),
+        ).pack(side="left", expand=True, fill="x")
         ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
         hover_wrap = ttk.LabelFrame(ctrl, text="Hover Circle Tool")
         hover_wrap.pack(fill="x")
         tk.Checkbutton(
-            hover_wrap, text="Show Hover Circle",
-            variable=self.hover_enabled, command=self._toggle_hover
+            hover_wrap,
+            text="Show Hover Circle",
+            variable=self.hover_enabled,
+            command=self._toggle_hover,
         ).pack(anchor="w", padx=6, pady=(6, 0))
         self.radius_scale = tk.Scale(
-            hover_wrap, from_=1, to=300, orient="horizontal", label="Hover Radius",
-            variable=self.hover_radius, command=self._on_radius_change
+            hover_wrap,
+            from_=1,
+            to=300,
+            orient="horizontal",
+            label="Hover Radius",
+            variable=self.hover_radius,
+            command=self._on_radius_change,
         )
         self.radius_scale.config(state="disabled")
         self.radius_scale.pack(fill="x", padx=6, pady=6)
         seg_wrap = ttk.LabelFrame(ctrl, text="Fill Tool (Obturator)")
         seg_wrap.pack(fill="x", pady=(8, 0))
-        row1 = tk.Frame(seg_wrap); row1.pack(fill="x", padx=6, pady=(6, 2))
+        row1 = tk.Frame(seg_wrap)
+        row1.pack(fill="x", padx=6, pady=(6, 2))
         tk.Label(row1, text="Method:").pack(side="left")
-        ttk.Combobox(row1, textvariable=self.method, values=["Flood Fill", "Adaptive CC"],
-                     width=14, state="readonly").pack(side="left", padx=(6, 0))
-        tk.Checkbutton(row1, text="CLAHE", variable=self.use_clahe,
-                       command=lambda: self._resegment_selected_if_needed()).pack(side="left", padx=(10, 0))
+        ttk.Combobox(
+            row1,
+            textvariable=self.method,
+            values=["Flood Fill", "Adaptive CC"],
+            width=14,
+            state="readonly",
+        ).pack(side="left", padx=(6, 0))
+        tk.Checkbutton(
+            row1,
+            text="CLAHE",
+            variable=self.use_clahe,
+            command=lambda: self._resegment_selected_if_needed(),
+        ).pack(side="left", padx=(10, 0))
         tk.Scale(
-            seg_wrap, from_=1, to=50, orient="horizontal",
-            label="Sensitivity", variable=self.fill_sensitivity,
-            command=lambda _v: self._resegment_selected_if_needed()
+            seg_wrap,
+            from_=1,
+            to=50,
+            orient="horizontal",
+            label="Sensitivity",
+            variable=self.fill_sensitivity,
+            command=lambda _v: self._resegment_selected_if_needed(),
         ).pack(fill="x", padx=6, pady=(6, 4))
         tk.Checkbutton(
-            seg_wrap, text="Edge lock (flood fill)", variable=self.edge_lock,
-            command=lambda: self._resegment_selected_if_needed()
+            seg_wrap,
+            text="Edge lock (flood fill)",
+            variable=self.edge_lock,
+            command=lambda: self._resegment_selected_if_needed(),
         ).pack(anchor="w", padx=6)
         tk.Scale(
-            seg_wrap, from_=1, to=5, orient="horizontal",
-            label="Edge lock width", variable=self.edge_lock_width,
-            command=lambda _v: self._resegment_selected_if_needed()
+            seg_wrap,
+            from_=1,
+            to=5,
+            orient="horizontal",
+            label="Edge lock width",
+            variable=self.edge_lock_width,
+            command=lambda _v: self._resegment_selected_if_needed(),
         ).pack(fill="x", padx=6, pady=(2, 6))
         tk.Scale(
-            seg_wrap, from_=-10, to=30, orient="horizontal",
-            label="Grow / Shrink (post)", variable=self.grow_shrink,
-            command=lambda _v: self._apply_grow_shrink_only_for(self.selected_landmark.get())
+            seg_wrap,
+            from_=-10,
+            to=30,
+            orient="horizontal",
+            label="Grow / Shrink (post)",
+            variable=self.grow_shrink,
+            command=lambda _v: self._apply_grow_shrink_only_for(
+                self.selected_landmark.get()
+            ),
         ).pack(fill="x", padx=6, pady=(2, 6))
-        tk.Button(seg_wrap, text="Re-segment (use current sliders)",
-                  command=lambda: self._resegment_for(self.selected_landmark.get())).pack(fill="x", padx=6, pady=(0, 8))
+        tk.Button(
+            seg_wrap,
+            text="Re-segment (use current sliders)",
+            command=lambda: self._resegment_for(self.selected_landmark.get()),
+        ).pack(fill="x", padx=6, pady=(0, 8))
 
     # Builds the landmark selection table with visibility and status controls.
     def _build_landmark_panel(self):
@@ -177,27 +228,39 @@ class AnnotationGUI(tk.Tk):
         table.grid_columnconfigure(0, minsize=70)
         table.grid_columnconfigure(1, minsize=140)
         table.grid_columnconfigure(2, minsize=100)
-        tk.Label(table, text="View", anchor="w").grid(row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2))
-        tk.Label(table, text="Name", anchor="w").grid(row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2))
-        tk.Label(table, text="Annotated", anchor="w").grid(row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2))
+        tk.Label(table, text="View", anchor="w").grid(
+            row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2)
+        )
+        tk.Label(table, text="Name", anchor="w").grid(
+            row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2)
+        )
+        tk.Label(table, text="Annotated", anchor="w").grid(
+            row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2)
+        )
         for i, lm in enumerate(getattr(self, "landmarks", []), start=1):
             vis_var = tk.BooleanVar(value=True)
             found_var = tk.BooleanVar(value=False)
             self.landmark_visibility[lm] = vis_var
             self.landmark_found[lm] = found_var
-            tk.Checkbutton(table, variable=vis_var, command=self._draw_points) \
-                .grid(row=i, column=0, sticky="w", padx=(2, 4), pady=1)
+            tk.Checkbutton(table, variable=vis_var, command=self._draw_points).grid(
+                row=i, column=0, sticky="w", padx=(2, 4), pady=1
+            )
             rb = tk.Radiobutton(
-                table, text=lm, variable=self.selected_landmark, value=lm,
-                anchor="w", justify="left", command=self._on_landmark_selected
+                table,
+                text=lm,
+                variable=self.selected_landmark,
+                value=lm,
+                anchor="w",
+                justify="left",
+                command=self._on_landmark_selected,
             )
             rb.grid(row=i, column=1, sticky="w", padx=(2, 4), pady=1)
             self.landmark_radio_widgets[lm] = rb
-            tk.Checkbutton(table, text="", variable=found_var, state="disabled") \
-                .grid(row=i, column=2, sticky="w", padx=(2, 4), pady=1)
+            tk.Checkbutton(table, text="", variable=found_var, state="disabled").grid(
+                row=i, column=2, sticky="w", padx=(2, 4), pady=1
+            )
         if getattr(self, "landmarks", None) and not self.selected_landmark.get():
             self.selected_landmark.set(self.landmarks[0])
-
 
     # Locks the initial window min-size after the first layout pass.
     def _lock_initial_minsize(self):
@@ -254,13 +317,11 @@ class AnnotationGUI(tk.Tk):
             new_top = max(y1, new_top)
             self.lp_canvas.yview_moveto((new_top - y1) / total)
 
-
     # Applies stored per-landmark settings when a landmark is selected.
     def _on_landmark_selected(self):
         lm = self.selected_landmark.get()
         self._apply_settings_to_ui_for(lm)
         self.after_idle(self._scroll_landmark_into_view, lm)
-
 
     def _change_selected_landmark(self, step: int):
         if not getattr(self, "landmarks", None):
@@ -288,7 +349,6 @@ class AnnotationGUI(tk.Tk):
         self._change_selected_landmark(1)
         return "break"
 
-
     # Toggles visibility for all landmarks and redraws markers.
     def _set_all_visibility(self, value: bool):
         for var in self.landmark_visibility.values():
@@ -302,7 +362,7 @@ class AnnotationGUI(tk.Tk):
         if messagebox.askyesno(
             "Unsaved annotations",
             "You have unsaved annotation changes for this image.\n"
-            f"Do you want to save before you {why}?"
+            f"Do you want to save before you {why}?",
         ):
             self.save_annotations()
         else:
@@ -368,10 +428,17 @@ class AnnotationGUI(tk.Tk):
                 x, y = pts[lm]
                 if lm in ("LOB", "ROB"):
                     st = per_img_settings.get(lm, self._current_settings_dict())
-                    method_code = 'FF' if st['method'] == 'Flood Fill' else 'ACC'
-                    cell = [float(x), float(y), method_code,
-                            int(st['sens']), int(st['edge_lock']), int(st['edge_width']),
-                            int(st['clahe']), int(st['grow'])]
+                    method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
+                    cell = [
+                        float(x),
+                        float(y),
+                        method_code,
+                        int(st["sens"]),
+                        int(st["edge_lock"]),
+                        int(st["edge_width"]),
+                        int(st["clahe"]),
+                        int(st["grow"]),
+                    ]
                     row[lm] = repr(cell)
                 else:
                     row[lm] = f"[{float(x)},{float(y)}]"
@@ -392,23 +459,23 @@ class AnnotationGUI(tk.Tk):
     def load_points(self, show_message: bool = True):
         if not self.current_image_path:
             if show_message:
-                messagebox.showwarning('Load Points', 'No image loaded.')
+                messagebox.showwarning("Load Points", "No image loaded.")
             return
         if not os.path.exists(LPARAMS_CSV):
             if show_message:
-                messagebox.showerror('Load Points', f'CSV not found: {LPARAMS_CSV}')
+                messagebox.showerror("Load Points", f"CSV not found: {LPARAMS_CSV}")
             return
         try:
             df = pd.read_csv(LPARAMS_CSV)
         except Exception as e:
             if show_message:
-                messagebox.showerror('Load Points', f'Failed to read CSV:\n{e}')
+                messagebox.showerror("Load Points", f"Failed to read CSV:\n{e}")
             return
         if df.empty:
             self.annotations[self.current_image_path] = {}
             self._update_found_checks({})
             if show_message:
-                messagebox.showinfo('Load Points', 'No saved points for this image.')
+                messagebox.showinfo("Load Points", "No saved points for this image.")
             return
         col0 = df.columns[0]
         rowdf = df.loc[df[col0] == self.current_image_path]
@@ -416,7 +483,7 @@ class AnnotationGUI(tk.Tk):
             self.annotations[self.current_image_path] = {}
             self._update_found_checks({})
             if show_message:
-                messagebox.showinfo('Load Points', 'No saved points for this image.')
+                messagebox.showinfo("Load Points", "No saved points for this image.")
             return
         row = rowdf.iloc[0]
         pts = {}
@@ -433,15 +500,21 @@ class AnnotationGUI(tk.Tk):
                     pts[lm] = (x, y)
                 except Exception:
                     continue
-                if lm in ("LOB", "ROB") and isinstance(arr, (list, tuple)) and len(arr) >= 8:
+                if (
+                    lm in ("LOB", "ROB")
+                    and isinstance(arr, (list, tuple))
+                    and len(arr) >= 8
+                ):
                     method_code = str(arr[2])
                     st = {
-                        'method': 'Flood Fill' if method_code in ('FF', 'Flood Fill') else 'Adaptive CC',
-                        'sens': int(arr[3]),
-                        'edge_lock': int(arr[4]),
-                        'edge_width': int(arr[5]),
-                        'clahe': int(arr[6]),
-                        'grow': int(arr[7]),
+                        "method": "Flood Fill"
+                        if method_code in ("FF", "Flood Fill")
+                        else "Adaptive CC",
+                        "sens": int(arr[3]),
+                        "edge_lock": int(arr[4]),
+                        "edge_width": int(arr[5]),
+                        "clahe": int(arr[6]),
+                        "grow": int(arr[7]),
                     }
                     per_img_settings[lm] = st
         self.annotations[self.current_image_path] = pts
@@ -455,12 +528,17 @@ class AnnotationGUI(tk.Tk):
                 except Exception:
                     self.last_seed[lm] = None
                 vis_var = self.landmark_visibility.get(lm)
-                if self.last_seed.get(lm) is not None and vis_var is not None and vis_var.get() and cv2 is not None:
+                if (
+                    self.last_seed.get(lm) is not None
+                    and vis_var is not None
+                    and vis_var.get()
+                    and cv2 is not None
+                ):
                     self._resegment_for(lm, apply_saved_settings=True)
                 else:
                     self._update_overlay_for(lm)
         if show_message:
-            messagebox.showinfo('Load Points', 'Points loaded from CSV.')
+            messagebox.showinfo("Load Points", "Points loaded from CSV.")
 
     # Updates the disabled “Annotated” checkboxes based on available points.
     def _update_found_checks(self, pts_dict):
@@ -481,10 +559,17 @@ class AnnotationGUI(tk.Tk):
             if vis_var is not None and not vis_var.get():
                 continue
             r = 5
-            self.canvas.create_oval(x - r, y - r, x + r, y + r,
-                                    outline="red", width=2, tags="marker")
-            self.canvas.create_text(x, y - 10, text=lm,
-                                    fill="yellow", font=("Arial", 10, "bold"), tags="marker")
+            self.canvas.create_oval(
+                x - r, y - r, x + r, y + r, outline="red", width=2, tags="marker"
+            )
+            self.canvas.create_text(
+                x,
+                y - 10,
+                text=lm,
+                fill="yellow",
+                font=("Arial", 10, "bold"),
+                tags="marker",
+            )
         for lm in ("LOB", "ROB"):
             self._update_overlay_for(lm)
         self._update_pair_lines()
@@ -636,32 +721,40 @@ class AnnotationGUI(tk.Tk):
         if vis_var is not None:
             vis = bool(vis_var.get())
         has_mask = (
-            self.current_image_path and
-            self.current_image_path in self.seg_masks and
-            lm in self.seg_masks[self.current_image_path]
+            self.current_image_path
+            and self.current_image_path in self.seg_masks
+            and lm in self.seg_masks[self.current_image_path]
         )
         if not has_mask or not vis:
             self._remove_overlay_for(lm)
             return
         mask = self.seg_masks[self.current_image_path][lm]
         self._render_overlay_for(lm, mask)
-        self.canvas.tag_raise('marker')
+        self.canvas.tag_raise("marker")
 
     # Renders a semi-transparent RGBA overlay from a binary mask.
-    def _render_overlay_for(self, lm: str, mask: np.ndarray, fill_rgba=(0, 255, 255, 120)):
+    def _render_overlay_for(
+        self, lm: str, mask: np.ndarray, fill_rgba=(0, 255, 255, 120)
+    ):
         if mask is None or self.current_image is None:
             return
         h, w = mask.shape[:2]
         overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        color_img = Image.new("RGBA", (w, h), (fill_rgba[0], fill_rgba[1], fill_rgba[2], 255))
+        color_img = Image.new(
+            "RGBA", (w, h), (fill_rgba[0], fill_rgba[1], fill_rgba[2], 255)
+        )
         alpha = (mask.astype(np.uint8) * int(fill_rgba[3])).astype(np.uint8)
         alpha_img = Image.fromarray(alpha, mode="L")
         overlay.paste(color_img, (0, 0), alpha_img)
         self.seg_img_objs[lm] = ImageTk.PhotoImage(overlay)
         if lm not in self.seg_item_ids:
-            self.seg_item_ids[lm] = self.canvas.create_image(0, 0, anchor="nw", image=self.seg_img_objs[lm], tags=f"seg_{lm}")
+            self.seg_item_ids[lm] = self.canvas.create_image(
+                0, 0, anchor="nw", image=self.seg_img_objs[lm], tags=f"seg_{lm}"
+            )
         else:
-            self.canvas.itemconfigure(self.seg_item_ids[lm], image=self.seg_img_objs[lm])
+            self.canvas.itemconfigure(
+                self.seg_item_ids[lm], image=self.seg_img_objs[lm]
+            )
         self.canvas.tag_lower(self.seg_item_ids[lm], "marker")
         self.canvas.tag_raise("marker")
 
@@ -675,7 +768,9 @@ class AnnotationGUI(tk.Tk):
         x, y = round(event.x, 1), round(event.y, 1)
         lm = self.selected_landmark.get()
         if not lm:
-            messagebox.showwarning("No Landmark", "Please select a landmark in the list.")
+            messagebox.showwarning(
+                "No Landmark", "Please select a landmark in the list."
+            )
             return
         self.annotations.setdefault(self.current_image_path, {})[lm] = (x, y)
         if lm in self.landmark_found:
@@ -684,7 +779,10 @@ class AnnotationGUI(tk.Tk):
         self.dirty = True
         if lm in ("LOB", "ROB"):
             if cv2 is None:
-                messagebox.showerror("OpenCV missing", 'cv2 is not available. Install with "pip install opencv-python".')
+                messagebox.showerror(
+                    "OpenCV missing",
+                    'cv2 is not available. Install with "pip install opencv-python".',
+                )
                 return
             self.last_seed[lm] = (int(x), int(y))
             self._store_current_settings_for(lm)
@@ -712,8 +810,10 @@ class AnnotationGUI(tk.Tk):
         else:
             mask = self._segment_adaptive_cc(x, y)
         if mask is None:
-            messagebox.showwarning("Segmentation",
-                                   "No region found. Try toggling CLAHE, increasing Sensitivity, or switch Method.")
+            messagebox.showwarning(
+                "Segmentation",
+                "No region found. Try toggling CLAHE, increasing Sensitivity, or switch Method.",
+            )
             return
         mask = self._grow_shrink(mask, self.grow_shrink.get())
         self.seg_masks.setdefault(self.current_image_path, {})[lm] = mask
@@ -739,7 +839,9 @@ class AnnotationGUI(tk.Tk):
         if self.edge_lock.get():
             edges = cv2.Canny(gray, 40, 120)
             k = max(1, min(5, int(self.edge_lock_width.get())))
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1))
+            kernel = cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE, (2 * k + 1, 2 * k + 1)
+            )
             barrier = cv2.dilate(edges, kernel, iterations=1)
             barrier = (barrier > 0).astype(np.uint8)
         ff_mask = np.zeros((h + 2, w + 2), np.uint8)
@@ -752,8 +854,13 @@ class AnnotationGUI(tk.Tk):
         flags = cv2.FLOODFILL_MASK_ONLY | 4 | (255 << 8)
         try:
             _area, _, _, _ = cv2.floodFill(
-                img_ff, ff_mask, seedPoint=(int(x), int(y)), newVal=0,
-                loDiff=tol, upDiff=tol, flags=flags
+                img_ff,
+                ff_mask,
+                seedPoint=(int(x), int(y)),
+                newVal=0,
+                loDiff=tol,
+                upDiff=tol,
+                flags=flags,
             )
         except cv2.error:
             return None
@@ -770,11 +877,14 @@ class AnnotationGUI(tk.Tk):
         sens = int(self.fill_sensitivity.get())
         block = max(11, 2 * (5 + sens // 2) + 1)
         C = max(2, min(15, 12 - sens // 5))
-        thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-                                    cv2.THRESH_BINARY_INV, block, C)
+        thr = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block, C
+        )
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
         thr = cv2.morphologyEx(thr, cv2.MORPH_OPEN, kernel, iterations=1)
-        labels = cv2.connectedComponentsWithStats((thr > 0).astype(np.uint8), connectivity=8)[1]
+        labels = cv2.connectedComponentsWithStats(
+            (thr > 0).astype(np.uint8), connectivity=8
+        )[1]
         lbl = labels[int(y), int(x)]
         if lbl == 0:
             r = 3
@@ -817,12 +927,12 @@ class AnnotationGUI(tk.Tk):
     # Returns a dict of the current UI segmentation settings.
     def _current_settings_dict(self) -> dict:
         return {
-            'method': self.method.get(),
-            'sens': int(self.fill_sensitivity.get()),
-            'edge_lock': 1 if self.edge_lock.get() else 0,
-            'edge_width': int(self.edge_lock_width.get()),
-            'clahe': 1 if self.use_clahe.get() else 0,
-            'grow': int(self.grow_shrink.get()),
+            "method": self.method.get(),
+            "sens": int(self.fill_sensitivity.get()),
+            "edge_lock": 1 if self.edge_lock.get() else 0,
+            "edge_width": int(self.edge_lock_width.get()),
+            "clahe": 1 if self.use_clahe.get() else 0,
+            "grow": int(self.grow_shrink.get()),
         }
 
     # Stores current UI settings for a specific landmark on this image.
@@ -835,17 +945,27 @@ class AnnotationGUI(tk.Tk):
         st = self.lm_settings.get(self.current_image_path, {}).get(lm)
         if not st:
             return
-        self.method.set(st['method'])
-        try: self.fill_sensitivity.set(int(st['sens']))
-        except Exception: pass
-        try: self.edge_lock.set(bool(int(st['edge_lock'])))
-        except Exception: pass
-        try: self.edge_lock_width.set(int(st['edge_width']))
-        except Exception: pass
-        try: self.use_clahe.set(bool(int(st['clahe'])))
-        except Exception: pass
-        try: self.grow_shrink.set(int(st['grow']))
-        except Exception: pass
+        self.method.set(st["method"])
+        try:
+            self.fill_sensitivity.set(int(st["sens"]))
+        except Exception:
+            pass
+        try:
+            self.edge_lock.set(bool(int(st["edge_lock"])))
+        except Exception:
+            pass
+        try:
+            self.edge_lock_width.set(int(st["edge_width"]))
+        except Exception:
+            pass
+        try:
+            self.use_clahe.set(bool(int(st["clahe"])))
+        except Exception:
+            pass
+        try:
+            self.grow_shrink.set(int(st["grow"]))
+        except Exception:
+            pass
 
     # Toggle visibility.
     def _set_selected_visibility(self, visible: bool):
