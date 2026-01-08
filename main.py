@@ -12,7 +12,7 @@ import pandas as pd
 from PIL import Image, ImageTk
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LPARAMS_CSV = os.path.join(BASE_DIR, "Landmark2DPointsAP.csv")
+# LPARAMS_CSV = os.path.join(BASE_DIR, "Landmark2DPointsAP.csv")
 
 
 class AnnotationGUI(tk.Tk):
@@ -47,18 +47,24 @@ class AnnotationGUI(tk.Tk):
         self.edge_lock_width = tk.IntVar(value=2)
         self.use_clahe = tk.BooleanVar(value=True)
         self.grow_shrink = tk.IntVar(value=0)
+        self.disp_scale: float = 1.0
+        self.disp_off: Tuple[int, int] = (0, 0)  # (offset_x, offset_y)
+        self.disp_size: Tuple[int, int] = (0, 0)  # (disp_w, disp_h)
+        self.base_img_item: Optional[int] = None
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
+        self.csv_loaded = False
         self._setup_ui()
         self.after(0, self._lock_initial_minsize)
-        if not os.path.exists(LPARAMS_CSV):
-            messagebox.showerror("Error", f"CSV not found: {LPARAMS_CSV}")
-            self.destroy()
-            return
-        df = pd.read_csv(LPARAMS_CSV)
-        self.landmarks = list(df.columns[1:])
-        if self.landmarks:
-            self.selected_landmark.set(self.landmarks[0])
-        self._build_landmark_panel()
+        # if not os.path.exists(self.abs_csv_path):
+        #     messagebox.showerror("Error", f"CSV not found: {self.abs_csv_path}")
+        #     self.destroy()
+        #     return
+        # df = pd.read_csv(self.abs_csv_path)
+        # self.landmarks = list(df.columns[1:])
+        # if self.landmarks:
+        #     self.selected_landmark.set(self.landmarks[0])
+        # self._build_landmark_panel()
+        self.landmarks = []
         self.bind("<Up>", self._on_arrow_up)
         self.bind("<Down>", self._on_arrow_down)
         self.bind("<Left>", self._on_arrow_left)
@@ -67,7 +73,9 @@ class AnnotationGUI(tk.Tk):
     # Builds the left image canvas, right control panel, and tool widgets.
     def _setup_ui(self) -> None:
         self.canvas = tk.Canvas(self, bg="grey", highlightthickness=0)
-        self.canvas.pack(side=tk.LEFT)
+        self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
+        # recompute transform & redraw on canvas size changes
+        self.canvas.bind("<Configure>", self._on_canvas_resize)
         self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<Motion>", self._on_mouse_move)
         self.canvas.bind("<Leave>", lambda e: self._hide_hover_circle())
@@ -83,6 +91,7 @@ class AnnotationGUI(tk.Tk):
         tk.Button(ctrl, text="Save Annotations", command=self.save_annotations).pack(
             fill="x", pady=5
         )
+        tk.Button(ctrl, text="Load CSV", command=self.load_csv).pack(fill="x", pady=5)
         img_frame = ttk.LabelFrame(ctrl, text="Image")
         img_frame.pack(fill="x", pady=(10, 10))
         tk.Entry(
@@ -101,6 +110,7 @@ class AnnotationGUI(tk.Tk):
         )
         self.landmark_panel_container.pack(fill="x", pady=(2, 0))
         self.landmark_panel_container.pack_propagate(False)
+
         self.lp_canvas = tk.Canvas(
             self.landmark_panel_container,
             height=CANVAS_HEIGHT,
@@ -213,7 +223,37 @@ class AnnotationGUI(tk.Tk):
             command=lambda: self._resegment_for(self.selected_landmark.get()),
         ).pack(fill="x", padx=6, pady=(0, 8))
 
+    def _recompute_transform(self) -> None:
+        if not self.current_image:
+            return
+        cw = max(1, self.canvas.winfo_width())
+        ch = max(1, self.canvas.winfo_height())
+        iw, ih = self.current_image.size
+        scale = min(cw / iw, ch / ih)
+        disp_w, disp_h = max(1, int(round(iw * scale))), max(1, int(round(ih * scale)))
+        off_x = (cw - disp_w) // 2
+        off_y = (ch - disp_h) // 2
+        self.disp_scale = scale
+        self.disp_off = (off_x, off_y)
+        self.disp_size = (disp_w, disp_h)
+
+    def _img_to_screen(self, xi: float, yi: float) -> Tuple[float, float]:
+        off_x, off_y = self.disp_off
+        s = self.disp_scale
+        return off_x + xi * s, off_y + yi * s
+
+    def _screen_to_img(self, xs: float, ys: float) -> Tuple[float, float]:
+        off_x, off_y = self.disp_off
+        s = self.disp_scale or 1.0
+        return (xs - off_x) / s, (ys - off_y) / s
+
+    def _display_rect(self) -> Tuple[int, int, int, int]:
+        off_x, off_y = self.disp_off
+        disp_w, disp_h = self.disp_size
+        return off_x, off_y, off_x + disp_w, off_y + disp_h
+
     # Builds the landmark selection table with visibility and status controls.
+
     def _build_landmark_panel(self) -> None:
         for w in self.lp_inner.winfo_children():
             w.destroy()
@@ -258,6 +298,35 @@ class AnnotationGUI(tk.Tk):
             )
         if getattr(self, "landmarks", None) and not self.selected_landmark.get():
             self.selected_landmark.set(self.landmarks[0])
+
+    # (4) Render base image (add to class)
+    def _render_base_image(self) -> None:
+        if not self.current_image:
+            return
+
+        self._recompute_transform()
+        disp_w, disp_h = self.disp_size
+        off_x, off_y = self.disp_off
+
+        resized = self.current_image.resize((disp_w, disp_h), Image.Resampling.LANCZOS)
+        self.img_obj = ImageTk.PhotoImage(resized)
+
+        if self.base_img_item is None:
+            self.base_img_item = self.canvas.create_image(
+                off_x, off_y, anchor="nw", image=self.img_obj, tags="base"
+            )
+        else:
+            self.canvas.itemconfigure(self.base_img_item, image=self.img_obj)
+            self.canvas.coords(self.base_img_item, off_x, off_y)
+
+    # (5) Handle canvas resize (add to class)
+    def _on_canvas_resize(self, _event=None) -> None:
+        if not self.current_image:
+            return
+        self._render_base_image()
+        self._draw_points()
+        for lm in ("LOB", "ROB"):
+            self._update_overlay_for(lm)
 
     # Locks the initial window min-size after the first layout pass.
     def _lock_initial_minsize(self) -> None:
@@ -352,6 +421,18 @@ class AnnotationGUI(tk.Tk):
             var.set(value)
         self._draw_points()
 
+    def load_csv(self) -> None:
+        self._maybe_save_before_destructive_action("load point name CSV")
+        self.abs_csv_path = filedialog.askopenfilename(
+            initialdir=BASE_DIR, filetypes=[("CSV File", ("*.csv"))]
+        )
+
+        df = pd.read_csv(self.abs_csv_path)
+        self.landmarks = list(df.columns[1:])
+        if self.landmarks:
+            self.selected_landmark.set(self.landmarks[0])
+        self._build_landmark_panel()
+
     # Prompts to save pending changes before destructive operations.
     def _maybe_save_before_destructive_action(self, why: str = "continue") -> None:
         if not self.current_image_path or not self.dirty:
@@ -403,15 +484,9 @@ class AnnotationGUI(tk.Tk):
         w, h = self.current_image.size
         self.canvas.config(width=w, height=h)
         self.canvas.delete("all")
-        self.img_obj = ImageTk.PhotoImage(self.current_image)
-        self.canvas.create_image(0, 0, anchor="nw", image=self.img_obj, tags="base")
+        self.base_img_item = None
         self._remove_all_overlays()
-        self.last_seed.clear()
-        self.lm_settings.setdefault(self.current_image_path, {})
-        self._fit_window_and_set_min()
-        self.path_var.set(self.current_image_path)
-        self.annotations.setdefault(self.current_image_path, {})
-        self.load_points(show_message=False)
+        self._render_base_image()
         self._draw_points()
         self._hide_hover_circle()
         self.dirty = False
@@ -421,8 +496,8 @@ class AnnotationGUI(tk.Tk):
         if not self.current_image_path:
             messagebox.showwarning("Save", "No image loaded.")
             return
-        if os.path.exists(LPARAMS_CSV):
-            df: pd.DataFrame = pd.read_csv(LPARAMS_CSV)
+        if os.path.exists(self.abs_csv_path):
+            df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
             col0 = df.columns[0]
             for lm in self.landmarks:
                 if lm not in df.columns:
@@ -460,8 +535,8 @@ class AnnotationGUI(tk.Tk):
         keep_cols = [col0] + self.landmarks
         df = df[[c for c in df.columns if c in keep_cols]]
         try:
-            df.to_csv(LPARAMS_CSV, index=False)
-            messagebox.showinfo("Saved", f"Annotations saved to {LPARAMS_CSV}")
+            df.to_csv(self.abs_csv_path, index=False)
+            messagebox.showinfo("Saved", f"Annotations saved to {self.abs_csv_path}")
             self.dirty = False
         except Exception as e:
             messagebox.showerror("Save Failed", f"Could not save CSV:\n{e}")
@@ -472,12 +547,14 @@ class AnnotationGUI(tk.Tk):
             if show_message:
                 messagebox.showwarning("Load Points", "No image loaded.")
             return
-        if not os.path.exists(LPARAMS_CSV):
+        if not os.path.exists(self.abs_csv_path):
             if show_message:
-                messagebox.showerror("Load Points", f"CSV not found: {LPARAMS_CSV}")
+                messagebox.showerror(
+                    "Load Points", f"CSV not found: {self.abs_csv_path}"
+                )
             return
         try:
-            df = pd.read_csv(LPARAMS_CSV)
+            df = pd.read_csv(self.abs_csv_path)
         except Exception as e:
             if show_message:
                 messagebox.showerror("Load Points", f"Failed to read CSV:\n{e}")
@@ -569,13 +646,15 @@ class AnnotationGUI(tk.Tk):
             vis_var = self.landmark_visibility.get(lm)
             if vis_var is not None and not vis_var.get():
                 continue
+            xs, ys = self._img_to_screen(x, y)
+
             r = 5
             self.canvas.create_oval(
-                x - r, y - r, x + r, y + r, outline="red", width=2, tags="marker"
+                xs - r, ys - r, xs + r, ys + r, outline="red", width=2, tags="marker"
             )
             self.canvas.create_text(
-                x,
-                y - 10,
+                xs,
+                ys - 10,
                 text=lm,
                 fill="yellow",
                 font=("Arial", 10, "bold"),
@@ -621,11 +700,13 @@ class AnnotationGUI(tk.Tk):
                 if (va is None or va.get()) and (vb is None or vb.get()):
                     x1, y1 = pts[ka]
                     x2, y2 = pts[kb]
+                    xs1, ys1 = self._img_to_screen(x1, y1)
+                    xs2, ys2 = self._img_to_screen(x2, y2)
                     if key in self.pair_line_ids:
-                        self.canvas.coords(self.pair_line_ids[key], x1, y1, x2, y2)
+                        self.canvas.coords(self.pair_line_ids[key], xs1, ys1, xs2, ys2)
                     else:
                         self.pair_line_ids[key] = self.canvas.create_line(
-                            x1, y1, x2, y2, fill=color, width=2, tags="pairline"
+                            xs1, ys1, xs2, ys2, fill=color, width=2, tags="pairline"
                         )
                     try:
                         self.canvas.tag_lower(self.pair_line_ids[key], "marker")
@@ -662,9 +743,11 @@ class AnnotationGUI(tk.Tk):
     def _on_mouse_move(self, event) -> None:
         if not self.hover_enabled.get() or not self.current_image:
             return
-        w, h = self.current_image.size
-        if 0 <= event.x < w and 0 <= event.y < h:
-            self._update_hover_circle(event.x, event.y)
+        x0, y0, x1, y1 = self._display_rect()
+        if x0 <= event.x < x1 and y0 <= event.y < y1:
+            self._update_hover_circle(
+                event.x, event.y
+            )  # hover circle stays screen-space
         else:
             self._hide_hover_circle()
 
@@ -747,38 +830,56 @@ class AnnotationGUI(tk.Tk):
 
     # Renders a semi-transparent RGBA overlay from a binary mask.
     def _render_overlay_for(
-        self, lm: str, mask: np.ndarray, fill_rgba=(0, 255, 255, 120)
+        self,
+        lm: str,
+        mask: np.ndarray,
+        fill_rgba: Tuple[int, int, int, int] = (0, 255, 255, 120),
     ) -> None:
         if mask is None or self.current_image is None:
             return
-        h, w = mask.shape[:2]
-        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        color_img = Image.new(
-            "RGBA", (w, h), (fill_rgba[0], fill_rgba[1], fill_rgba[2], 255)
+
+        # Ensure transform is current
+        if self.disp_size == (0, 0):
+            self._recompute_transform()
+
+        disp_w, disp_h = self.disp_size
+        off_x, off_y = self.disp_off
+
+        mask_u8 = (mask > 0).astype(np.uint8) * 255
+        mask_img = Image.fromarray(mask_u8, mode="L").resize(
+            (disp_w, disp_h), Image.Resampling.NEAREST
         )
-        alpha = (mask.astype(np.uint8) * int(fill_rgba[3])).astype(np.uint8)
-        alpha_img = Image.fromarray(alpha, mode="L")
-        overlay.paste(color_img, (0, 0), alpha_img)
+
+        overlay = Image.new("RGBA", (disp_w, disp_h), (0, 0, 0, 0))
+        color_img = Image.new("RGBA", (disp_w, disp_h), fill_rgba)
+
+        overlay.paste(color_img, (0, 0), mask_img)
+
         self.seg_img_objs[lm] = ImageTk.PhotoImage(overlay)
+
         if lm not in self.seg_item_ids:
             self.seg_item_ids[lm] = self.canvas.create_image(
-                0, 0, anchor="nw", image=self.seg_img_objs[lm], tags=f"seg_{lm}"
+                off_x, off_y, anchor="nw", image=self.seg_img_objs[lm], tags=f"seg_{lm}"
             )
         else:
             self.canvas.itemconfigure(
                 self.seg_item_ids[lm], image=self.seg_img_objs[lm]
             )
+            self.canvas.coords(self.seg_item_ids[lm], off_x, off_y)
+
         self.canvas.tag_lower(self.seg_item_ids[lm], "marker")
         self.canvas.tag_raise("marker")
 
     # Handles click to place a landmark and optionally run LOB/ROB segmentation.
     def _on_click(self, event) -> None:
+        x0, y0, x1, y1 = self._display_rect()
         if not self.current_image:
             return
         w, h = self.current_image.size
-        if not (0 <= event.x < w and 0 <= event.y < h):
+        if not (x0 <= event.x < x1 and y0 <= event.y < y1):
             return
-        x, y = round(event.x, 1), round(event.y, 1)
+        xi, yi = self._screen_to_img(event.x, event.y)
+        x, y = round(xi, 1), round(yi, 1)  # or clamp if you want
         lm = self.selected_landmark.get()
         if not lm:
             messagebox.showwarning(
@@ -1014,7 +1115,7 @@ class AnnotationGUI(tk.Tk):
 
 
 if __name__ == "__main__":
-    if not os.path.exists(LPARAMS_CSV):
-        pd.DataFrame(columns=["image_path"]).to_csv(LPARAMS_CSV, index=False)
+    # if not os.path.exists(LPARAMS_CSV):
+    #     pd.DataFrame(columns=["image_path"]).to_csv(LPARAMS_CSV, index=False)
     app = AnnotationGUI()
     app.mainloop()
