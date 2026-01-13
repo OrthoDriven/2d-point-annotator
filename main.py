@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import os
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Optional, Tuple
 
@@ -535,6 +536,8 @@ class AnnotationGUI(tk.Tk):
         keep_cols = [col0] + self.landmarks
         df = df[[c for c in df.columns if c in keep_cols]]
         try:
+            parent_path = Path(self.abs_csv_path)
+            parent_path.parent.absolute().mkdir(exist_ok=True)
             df.to_csv(self.abs_csv_path, index=False)
             messagebox.showinfo("Saved", f"Annotations saved to {self.abs_csv_path}")
             self.dirty = False
