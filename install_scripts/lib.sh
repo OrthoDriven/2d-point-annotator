@@ -25,8 +25,28 @@ require_dir() {
 utc_now_iso() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
 utc_to_epoch() {
-    # GNU date (Fedora) compatible
-    date -u -d "$1" +%s 2>/dev/null || echo "0"
+    # Input format expected: 2026-01-15T12:34:56Z
+
+    if [[ "${OSTYPE:-}" == darwin* ]]; then
+        pixi run python - "$1" <<'PY'
+import sys, datetime
+s = sys.argv[1].strip()
+try:
+    if s.endswith("Z"):
+        dt = datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    else:
+        dt = datetime.datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        else:
+            dt = dt.astimezone(datetime.timezone.utc)
+    print(int(dt.timestamp()))
+except Exception:
+    print(0)
+PY
+    else
+        date -u -d "$1" +%s 2>/dev/null || echo "0"
+    fi
 }
 
 # -----------------------------
