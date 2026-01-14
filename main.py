@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import os
+import platform
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -13,7 +14,7 @@ import pandas as pd
 from PIL import Image, ImageTk
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# LPARAMS_CSV = os.path.join(BASE_DIR, "Landmark2DPointsAP.csv")
+PLATFORM = platform.system()
 
 
 class AnnotationGUI(tk.Tk):
