@@ -61,5 +61,6 @@ REPO_ZIP_URL="$REPO_ZIP_URL"
 EOF
 
 if [ "$OSTYPE" == "darwin" ]; then
+    echo "MacOS Detected!"
     ln -s "$PROJECT_DIR/install_scripts/UnixLauncher.sh" "$HOME/Desktop/Run_Annotator.command"
 fi
