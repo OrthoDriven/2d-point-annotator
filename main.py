@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import ast
+import datetime
 import os
 import platform
+import shutil
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -14,6 +16,9 @@ import pandas as pd
 from PIL import Image, ImageTk
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR_PATH = Path(BASE_DIR)
+DATA_DIR = Path(BASE_DIR).resolve().parent / "data"
+print(DATA_DIR)
 PLATFORM = platform.system()
 
 
@@ -537,10 +542,33 @@ class AnnotationGUI(tk.Tk):
         keep_cols = [col0] + self.landmarks
         df = df[[c for c in df.columns if c in keep_cols]]
         try:
-            parent_path = Path(self.abs_csv_path)
-            parent_path.parent.absolute().mkdir(exist_ok=True)
-            df.to_csv(self.abs_csv_path, index=False)
-            messagebox.showinfo("Saved", f"Annotations saved to {self.abs_csv_path}")
+            csv_path = Path(self.abs_csv_path).expanduser().resolve()
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # 1) Save the "real" CSV
+            df.to_csv(str(csv_path), index=False)
+
+            # 2) Daily backup: keep current + previous
+            now = datetime.datetime.now()
+            iso_date = now.date().isoformat()  # "YYYY-MM-DD"
+
+            backup_dir = DATA_DIR / iso_date
+            backup_dir.mkdir(parents=True, exist_ok=True)
+
+            backup_path = backup_dir / f"{csv_path.stem}_backup{csv_path.suffix}"
+            prev_path = backup_dir / f"{csv_path.stem}_backup.prev{csv_path.suffix}"
+
+            # If a backup already exists, rotate it to ".prev" first
+            if backup_path.exists():
+                # replace() is atomic on the same filesystem
+                backup_path.replace(prev_path)
+
+            shutil.copy2(str(csv_path), str(backup_path))
+
+            messagebox.showinfo(
+                "Saved",
+                f"Annotations saved to {csv_path}\nBackup: {backup_path}",
+            )
             self.dirty = False
         except Exception as e:
             messagebox.showerror("Save Failed", f"Could not save CSV:\n{e}")
