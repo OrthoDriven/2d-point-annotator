@@ -6,7 +6,7 @@ import os
 import platform
 import shutil
 import tkinter as tk
-from pathlib import Path
+from pathlib import Path, PurePath
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Optional, Tuple
 
@@ -468,6 +468,7 @@ class AnnotationGUI(tk.Tk):
         if not abs_path:
             return
         rel_path = os.path.relpath(abs_path, BASE_DIR)
+        image_filename = PurePath(rel_path).name
         try:
             self.current_image = Image.open(abs_path)
 
@@ -493,6 +494,11 @@ class AnnotationGUI(tk.Tk):
         self.canvas.delete("all")
         self.base_img_item = None
         self._remove_all_overlays()
+        self.last_seed.clear()
+        self.lm_settings.setdefault(self.current_image_path, {})
+        self.path_var.set(image_filename)
+        self.annotations.setdefault(self.current_image_path, {})
+        self.load_points(show_message=False)
         self._render_base_image()
         self._draw_points()
         self._hide_hover_circle()
@@ -514,7 +520,8 @@ class AnnotationGUI(tk.Tk):
             cols: List[str] = [col0] + self.landmarks
             df = pd.DataFrame(columns=cols)
         row = {col0: self.current_image_path}
-        pts = self.annotations.get(self.current_image_path, {})
+        # pts = self.annotations.get(self.current_image_path, {})
+        pts = self._get_annotations()
         per_img_settings = self.lm_settings.setdefault(self.current_image_path, {})
         for lm in self.landmarks:
             if lm in pts:
@@ -574,6 +581,27 @@ class AnnotationGUI(tk.Tk):
             messagebox.showerror("Save Failed", f"Could not save CSV:\n{e}")
 
     # Loads saved points and per-landmark settings for the current image.
+    def _get_annotations(self) -> Dict[str, Tuple[float, float]]:
+        # Previously, we would get the annotations by the following:
+        # pts = self.annotations.get[self.current_image_path]
+        # This has a majro problem:
+        # 1) There is no way to share annotations between computers,
+        # unless they kept everything in the exact filepath
+        # We're fixing that by making getting points a bit more modular
+
+        if self.current_image_path is not None:
+            current_filename = PurePath(self.current_image_path).name
+            print(current_filename)
+            print(self.current_image_path)
+            # First, if you are on the same computer, then we can do the same thing that we were doing before:
+            print(f"All keys: {self.annotations.keys()}")
+            for key in self.annotations.keys():
+                if current_filename in key:
+                    print(f"{current_filename} found in {key}")
+                    return self.annotations.get(key, {})
+
+        return {}
+
     def load_points(self, show_message: bool = True) -> None:
         if not self.current_image_path:
             if show_message:
@@ -587,6 +615,7 @@ class AnnotationGUI(tk.Tk):
             return
         try:
             df = pd.read_csv(self.abs_csv_path)
+            print(df)
         except Exception as e:
             if show_message:
                 messagebox.showerror("Load Points", f"Failed to read CSV:\n{e}")
@@ -600,11 +629,25 @@ class AnnotationGUI(tk.Tk):
         col0 = df.columns[0]
         rowdf = df.loc[df[col0] == self.current_image_path]
         if rowdf.empty:
-            self.annotations[self.current_image_path] = {}
-            self._update_found_checks({})
-            if show_message:
-                messagebox.showinfo("Load Points", "No saved points for this image.")
-            return
+            # Check if the current image filename is in any of the rows
+            # Only if that fails do we reset the points values
+            current_filename = PurePath(self.current_image_path).name
+            found_filename = False
+            for name in df[col0]:
+                if current_filename in name:
+                    rowdf = df.loc[df[col0] == name]
+                    found_filename = True
+                    break
+
+            if found_filename is False:
+                print("ROWDF EMPTY")
+                self.annotations[self.current_image_path] = {}
+                self._update_found_checks({})
+                if show_message:
+                    messagebox.showinfo(
+                        "Load Points", "No saved points for this image."
+                    )
+                return
         row = rowdf.iloc[0]
         pts = {}
         per_img_settings = self.lm_settings.setdefault(self.current_image_path, {})
@@ -672,7 +715,8 @@ class AnnotationGUI(tk.Tk):
         self.canvas.delete("marker")
         if not self.current_image_path:
             return
-        pts = self.annotations.get(self.current_image_path, {})
+        # pts = self.annotations.get(self.current_image_path, {})
+        pts = self._get_annotations()
         self._update_found_checks(pts)
         for lm, (x, y) in pts.items():
             vis_var = self.landmark_visibility.get(lm)
@@ -717,7 +761,8 @@ class AnnotationGUI(tk.Tk):
         if not self.current_image_path:
             self._remove_pair_lines()
             return
-        pts = self.annotations.get(self.current_image_path, {})
+        # pts = self.annotations.get(self.current_image_path, {})
+        pts = self._get_annotations()
         pairs = [("ldf", "lpf"), ("rdf", "rpf")]
         color = "#00FFFF"
         for a, b in pairs:
