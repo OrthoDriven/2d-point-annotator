@@ -18,7 +18,6 @@ from PIL import Image, ImageTk
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR_PATH = Path(BASE_DIR)
 DATA_DIR = Path(BASE_DIR).resolve().parent / "data"
-print(DATA_DIR)
 PLATFORM = platform.system()
 
 
@@ -591,13 +590,9 @@ class AnnotationGUI(tk.Tk):
 
         if self.current_image_path is not None:
             current_filename = PurePath(self.current_image_path).name
-            print(current_filename)
-            print(self.current_image_path)
             # First, if you are on the same computer, then we can do the same thing that we were doing before:
-            print(f"All keys: {self.annotations.keys()}")
             for key in self.annotations.keys():
                 if current_filename in key:
-                    print(f"{current_filename} found in {key}")
                     return self.annotations.get(key, {})
 
         return {}
@@ -615,7 +610,6 @@ class AnnotationGUI(tk.Tk):
             return
         try:
             df = pd.read_csv(self.abs_csv_path)
-            print(df)
         except Exception as e:
             if show_message:
                 messagebox.showerror("Load Points", f"Failed to read CSV:\n{e}")
@@ -640,7 +634,6 @@ class AnnotationGUI(tk.Tk):
                     break
 
             if found_filename is False:
-                print("ROWDF EMPTY")
                 self.annotations[self.current_image_path] = {}
                 self._update_found_checks({})
                 if show_message:
