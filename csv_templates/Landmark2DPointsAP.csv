@@ -1,0 +1,4 @@
+image_path,LASIS,RASIS,LDTSI,RDTSI,LPOD,RPOD,LBD,RBD,LPT,RPT,LOB,ROB,LIT,RIT,SMPS,LAC,LLSIAS,LMDIAS,RAC,RLSIAS,RMDIAS,LSGT,LLGT,LLT,LFHC,LLFH,LPF,LDF,RSGT,RLGT,RLT,RFHC,RLFH,RPF,RDF
+set_001_0001_20251124_11.tif,"[332.9,283.4]",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+test_image.tif,"[244.7,394.2]","[200.6,191.5]","[194.2,264.1]","[330.8,250.6]","[332.4,310.3]",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+../../../Downloads/test_image.tif,"[244.7,394.2]","[200.6,191.5]","[194.2,264.1]","[330.8,250.6]","[332.4,310.3]",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
