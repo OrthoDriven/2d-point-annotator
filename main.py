@@ -94,6 +94,12 @@ class AnnotationGUI(tk.Tk):
         tk.Button(ctrl, text="Load Image", command=self.load_image).pack(
             fill="x", pady=5
         )
+        tk.Button(ctrl, text="Next Image", command=self._next_image).pack(
+            fill="x", pady=5
+        )
+        tk.Button(ctrl, text="Previous Image", command=self._prev_image).pack(
+            fill="x", pady=5
+        )
         tk.Button(ctrl, text="Save Annotations", command=self.save_annotations).pack(
             fill="x", pady=5
         )
@@ -464,12 +470,104 @@ class AnnotationGUI(tk.Tk):
             initialdir=BASE_DIR,
             filetypes=[("Image files", ("*.png", "*.jpg", "*.jpeg", "*.bmp", ".tif"))],
         )
+        self.absolute_current_image_path = abs_path
         if not abs_path:
             return
         rel_path = os.path.relpath(abs_path, BASE_DIR)
         image_filename = PurePath(rel_path).name
+
+        self.load_image_from_path(Path(abs_path))
+        # try:
+        #     self.current_image = Image.open(abs_path)
+
+        #     if self.current_image.mode == "I;16":
+        #         arr = np.array(self.current_image, dtype=np.uint16)
+
+        #         lo = np.percentile(arr, 1)
+        #         hi = np.percentile(arr, 99)
+
+        #         arr = np.clip(arr, lo, hi)
+        #         arr = ((arr - lo) / (hi - lo) * 255).astype(np.uint8)
+
+        #         img = Image.fromarray(arr, mode="L").convert("RGB")
+        #         self.current_image = img
+        #     self.current_image.convert("RGB")
+
+        # except Exception as e:
+        #     messagebox.showerror("Load Image", f"Failed to open image:\n{e}")
+        #     return
+        # self.current_image_path = rel_path
+        # w, h = self.current_image.size
+        # self.canvas.config(width=w, height=h)
+        # self.canvas.delete("all")
+        # self.base_img_item = None
+        # self._remove_all_overlays()
+        # self.last_seed.clear()
+        # self.lm_settings.setdefault(self.current_image_path, {})
+        # self.path_var.set(image_filename)
+        # self.annotations.setdefault(self.current_image_path, {})
+        # self.load_points(show_message=False)
+        # self._render_base_image()
+        # self._draw_points()
+        # self._hide_hover_circle()
+        # self.dirty = False
+        # self._next_image()
+
+    def _next_image(self) -> None:
+        # Loads the next image in the current directory
+        self._maybe_save_before_destructive_action("load next image")
+
+        # Get the parent directory of the currently loaded image
+        current_image_directory = Path(self.absolute_current_image_path).parent
+        # Get all the images from that directory
+        all_files = sorted(
+            [
+                str(file)
+                for file in current_image_directory.iterdir()
+                if file.suffix == ".tif"
+            ]
+        )
+
+        # Get the index of the current file
+        idx = all_files.index(str(self.absolute_current_image_path))
+        if len(all_files) == idx + 1:
+            messagebox.showwarning(
+                "End of Directory",
+                "You've reached the end of the current image directory, please use 'Load Image' to find a new image, or use 'Prev Image' to move backward",
+            )
+        else:
+            self.absolute_current_image_path = all_files[idx + 1]
+            self.load_image_from_path(Path(self.absolute_current_image_path))
+
+    def _prev_image(self) -> None:
+        # Loads the next image in the current directory
+        self._maybe_save_before_destructive_action("load next image")
+
+        # Get the parent directory of the currently loaded image
+        current_image_directory = Path(self.absolute_current_image_path).parent
+        # Get all the images from that directory
+        all_files = sorted(
+            [
+                str(file)
+                for file in current_image_directory.iterdir()
+                if file.suffix == ".tif"
+            ]
+        )
+
+        # Get the index of the current file
+        idx = all_files.index(str(self.absolute_current_image_path))
+        if idx == 0:
+            messagebox.showwarning(
+                "Beginning of Directory",
+                "You've reached the beginning of the current image directory, please use 'Load Image' to find a new image, or use 'Next Image' to move forward",
+            )
+        else:
+            self.absolute_current_image_path = all_files[idx - 1]
+            self.load_image_from_path(Path(self.absolute_current_image_path))
+
+    def load_image_from_path(self, path: Path) -> None:
         try:
-            self.current_image = Image.open(abs_path)
+            self.current_image = Image.open(path)
 
             if self.current_image.mode == "I;16":
                 arr = np.array(self.current_image, dtype=np.uint16)
@@ -487,7 +585,10 @@ class AnnotationGUI(tk.Tk):
         except Exception as e:
             messagebox.showerror("Load Image", f"Failed to open image:\n{e}")
             return
+
+        rel_path = os.path.relpath(path, BASE_DIR)
         self.current_image_path = rel_path
+        image_filename = PurePath(rel_path).name
         w, h = self.current_image.size
         self.canvas.config(width=w, height=h)
         self.canvas.delete("all")
