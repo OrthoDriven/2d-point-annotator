@@ -110,6 +110,9 @@ class AnnotationGUI(tk.Tk):
         self.bind("3", self._on_3_press)
         self.bind("4", self._on_4_press)
         self.bind("<h>", self._on_h_press)
+        self.queue_mode = False
+        self.unannotated_queue: List[Path] = []
+        self.queue_index = 0
 
     # Builds the left image canvas, right control panel, and tool widgets.
     def _setup_ui(self) -> None:
@@ -155,6 +158,25 @@ class AnnotationGUI(tk.Tk):
 
         row = ttk.Frame(img_frame)
         row.pack(fill="x", padx=6, pady=6)
+
+        tk.Button(
+            ctrl,
+            text="Find Unannotated Images",
+            command=self._find_unannotated_images,
+        ).pack(fill="x", pady=5)
+
+        # Add status label (update the Image frame to show queue status)
+        self.queue_status_var = tk.StringVar(value="")
+        tk.Label(
+            img_frame, textvariable=self.queue_status_var, fg="blue", font="16"
+        ).pack(fill="x", padx=6, pady=(0, 6))
+        self.exit_queue_btn = tk.Button(
+            ctrl,
+            text="Exit Queue Mode",
+            command=self._exit_queue_mode,
+            state="disabled",  # Only enabled when in queue mode
+        )
+        self.exit_queue_btn.pack(fill="x", pady=5)
 
         path_entry = tk.Entry(
             row,
@@ -624,63 +646,67 @@ class AnnotationGUI(tk.Tk):
         # Loads the next image in the current directory
         # self._maybe_save_before_destructive_action("load next image")
         self.save_annotations()
-        # Get the parent directory of the currently loaded image
-        # current_image_directory = (
-        #     Path(self.absolute_current_image_path).resolve().parent
-        # )
-        # # Get all the images from that directory
-        # all_files = [
-        #     file.name
-        #     for file in current_image_directory.iterdir()
-        #     if file.suffix == ".tif"
-        # ]
-        # all_files.sort()
+        if self.queue_mode:
+            # Queue mode: move backward through unannotated list
+            if self.queue_index >= len(self.unannotated_queue) - 1:
+                messagebox.showwarning(
+                    "Start of Queue",
+                    "You're at the beginning of the unannotated images.",
+                )
+                return
 
-        # # Get the index of the current file
-        # idx = all_files.index(str(Path(self.absolute_current_image_path).name))
-        idx, all_files = self._get_image_index_from_directory()
-        if len(all_files) == idx + 1:
-            messagebox.showwarning(
-                "End of Directory",
-                "You've reached the end of the current image directory, please use"
-                "'Load Image' to find a new image, or use 'Prev Image' to move backward",
-            )
+            self.queue_index += 1
+            prev_path = self.unannotated_queue[self.queue_index]
+            self.absolute_current_image_path = prev_path
+            self.load_image_from_path(prev_path)
+            self._update_queue_status()
         else:
-            self.absolute_current_image_path = Path(
-                self.absolute_current_image_path.resolve().parent / all_files[idx + 1]
-            )
-            self.load_image_from_path(Path(self.absolute_current_image_path))
+            idx, all_files = self._get_image_index_from_directory()
+            if len(all_files) == idx + 1:
+                messagebox.showwarning(
+                    "End of Directory",
+                    "You've reached the end of the current image directory, please use"
+                    "'Load Image' to find a new image, or use 'Prev Image' to move backward",
+                )
+            else:
+                self.absolute_current_image_path = Path(
+                    self.absolute_current_image_path.resolve().parent
+                    / all_files[idx + 1]
+                )
+                self.load_image_from_path(Path(self.absolute_current_image_path))
 
     def _prev_image(self) -> None:
         # Loads the next image in the current directory
         # self._maybe_save_before_destructive_action("load next image")
         self.save_annotations()
 
-        # Get the parent directory of the currently loaded image
-        # current_image_directory = Path(self.absolute_current_image_path).parent
-        # # Get all the images from that directory
-        # all_files = sorted(
-        #     [
-        #         str(file)
-        #         for file in current_image_directory.iterdir()
-        #         if file.suffix == ".tif"
-        #     ]
-        # )
+        if self.queue_mode:
+            # Queue mode: move backward through unannotated list
+            if self.queue_index <= 0:
+                messagebox.showwarning(
+                    "Start of Queue",
+                    "You're at the beginning of the unannotated images.",
+                )
+                return
 
-        # # Get the index of the current file
-        # idx = all_files.index(str(self.absolute_current_image_path))
-
-        idx, all_files = self._get_image_index_from_directory()
-        if idx == 0:
-            messagebox.showwarning(
-                "Beginning of Directory",
-                "You've reached the beginning of the current image directory, please use 'Load Image' to find a new image, or use 'Next Image' to move forward",
-            )
+            self.queue_index -= 1
+            prev_path = self.unannotated_queue[self.queue_index]
+            self.absolute_current_image_path = prev_path
+            self.load_image_from_path(prev_path)
+            self._update_queue_status()
         else:
-            self.absolute_current_image_path = Path(
-                self.absolute_current_image_path.resolve().parent / all_files[idx - 1]
-            )
-            self.load_image_from_path(Path(self.absolute_current_image_path))
+            idx, all_files = self._get_image_index_from_directory()
+            if idx == 0:
+                messagebox.showwarning(
+                    "Beginning of Directory",
+                    "You've reached the beginning of the current image directory, please use 'Load Image' to find a new image, or use 'Next Image' to move forward",
+                )
+            else:
+                self.absolute_current_image_path = Path(
+                    self.absolute_current_image_path.resolve().parent
+                    / all_files[idx - 1]
+                )
+                self.load_image_from_path(Path(self.absolute_current_image_path))
 
     def _on_pg_down(self, event) -> None:
         self._next_image()
@@ -865,7 +891,7 @@ class AnnotationGUI(tk.Tk):
 
             shutil.copy2(str(csv_path), str(backup_path))
 
-            if PLATFORM != "Linux":
+            if PLATFORM == "Windows":
                 messagebox.showinfo(
                     "Saved",
                     f"Annotations saved to {csv_path}\nBackup: {backup_path}",
@@ -1697,6 +1723,129 @@ class AnnotationGUI(tk.Tk):
                 break
             w = w.nametowidget(parent_name)
         return y
+
+    def _find_unannotated_images(self) -> None:
+        """Scan directory for images not in CSV, enter queue mode."""
+        if not hasattr(self, "abs_csv_path") or not self.abs_csv_path:
+            messagebox.showwarning(
+                "No CSV", "Please load a CSV file first (Load CSV button)"
+            )
+            return
+
+        # Select directory to scan
+        scan_dir = filedialog.askdirectory(
+            initialdir=BASE_DIR, title="Select folder to scan for unannotated images"
+        )
+
+        if not scan_dir:
+            return
+
+        scan_path = Path(scan_dir)
+
+        # Load existing annotations from CSV
+        try:
+            df = pd.read_csv(self.abs_csv_path)
+            col = self._detect_path_column(df)
+
+            # Build a set of files that are "truly annotated"
+            # (either have landmarks OR have been quality-rated as bad)
+            annotated_filenames = set()
+
+            for _, row in df.iterrows():
+                filename = Path(str(row[col])).name.lower()
+
+                # Check if any landmark columns have values
+                has_landmarks = any(
+                    pd.notna(row.get(lm)) and str(row.get(lm, "")).strip()
+                    for lm in self.landmarks
+                )
+
+                # Check image quality
+                quality = row.get("image_quality", 0)
+                try:
+                    quality = int(quality)
+                except (ValueError, TypeError):
+                    quality = 0
+
+                # Consider "annotated" if:
+                # 1. Has landmarks, OR
+                # 2. Has no landmarks but quality != 0 (marked as bad image)
+                if has_landmarks or quality != 0:
+                    annotated_filenames.add(filename)
+
+        except Exception as e:
+            messagebox.showerror("CSV Error", f"Failed to read CSV:\n{e}")
+            return
+
+        # Recursively find all image files
+        all_images = []
+        # for ext in self.possible_image_suffix:
+        #     all_images.extend(scan_path.rglob(f"*{ext}"))
+        #     # all_images.extend(scan_path.rglob(f"*{ext.lower()}"))
+        for dirpath, dirnames, filenames in scan_path.walk():
+            if "duplicates" in dirnames:
+                dirnames.remove("duplicates")
+            for file in filenames:
+                if Path(file).suffix.lower() in self.possible_image_suffix:
+                    all_images.append(dirpath / file)
+                    pass
+                pass
+            pass
+
+        # Filter to unannotated only
+        unannotated = [
+            img
+            for img in all_images
+            if (img.name.lower() not in annotated_filenames)
+            and (img.parent.name != "duplicates")
+        ]
+
+        if not unannotated:
+            messagebox.showinfo(
+                "All Done!", f"All images in {scan_path.name} are already annotated!"
+            )
+            return
+
+        # Sort for consistent ordering
+        unannotated.sort()
+
+        # Enter queue mode
+        self.unannotated_queue = unannotated
+        self.queue_index = 0
+        self.queue_mode = True
+
+        # Load first unannotated image
+        self.absolute_current_image_path = unannotated[0]
+        self.load_image_from_path(unannotated[0])
+
+        self._update_queue_status()
+
+        messagebox.showinfo(
+            "Queue Mode",
+            f"Found {len(unannotated)} unannotated images.\n\n"
+            f"Use Next/Prev (or N/B keys) to cycle through them.\n"
+            f"Click 'Exit Queue Mode' to return to normal browsing.",
+        )
+        self.exit_queue_btn.config(state="normal")
+        return
+
+    def _update_queue_status(self) -> None:
+        """Update the queue status label."""
+        if self.queue_mode and self.unannotated_queue:
+            self.queue_status_var.set(
+                f"Queue: {self.queue_index + 1} / {len(self.unannotated_queue)} unannotated"
+            )
+        else:
+            self.queue_status_var.set("")
+
+    def _exit_queue_mode(self) -> None:
+        """Return to normal directory browsing."""
+        self.queue_mode = False
+        self.unannotated_queue.clear()
+        self.queue_index = 0
+        self._update_queue_status()
+        self.exit_queue_btn.config(state="disabled")
+        messagebox.showinfo("Queue Mode", "Returned to normal directory browsing.")
 
 
 if __name__ == "__main__":
