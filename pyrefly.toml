@@ -1,0 +1,7 @@
+project-includes = [
+    "**/*.py*",
+    "**/*.ipynb",
+]
+
+
+python-interpreter-path = "./.pixi/envs/default/bin/python3"
