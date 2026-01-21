@@ -27,12 +27,27 @@ class AnnotationGUI(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("2D Point Annotation")
+        self.possible_image_suffix = [
+            ".png",
+            ".PNG",
+            ".jpg",
+            ".jpeg",
+            ".JPEG",
+            ".JPG",
+            ".bmp",
+            ".BMP",
+            ".tif",
+            ".tiff",
+            ".TIFF",
+            ".TIF",
+        ]
         self._start_min_w = 0
         self._start_min_h = 0
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.csv_path_column = "image_path"
         self.dirty = False
         self.path_var = tk.StringVar(value="No image loaded")
-        self.quality_var = tk.StringVar(value="No image loaded")
+        self.quality_var = tk.StringVar(value="N/A")
         self.selected_landmark = tk.StringVar(value="")
         self.landmark_visibility: Dict[str, tk.BooleanVar] = {}
         self.landmark_found = {}
@@ -110,7 +125,7 @@ class AnnotationGUI(tk.Tk):
         tk.Button(ctrl, text="Load CSV", command=self.load_landmarks_from_csv).pack(
             fill="x", pady=5
         )
-        img_frame = ttk.LabelFrame(ctrl, text="Image")
+        img_frame = ttk.LabelFrame(ctrl, text="Image + Quality")
         img_frame.pack(fill="x", pady=(10, 10))
 
         row = ttk.Frame(img_frame)
@@ -255,6 +270,22 @@ class AnnotationGUI(tk.Tk):
             text="Re-segment (use current sliders)",
             command=lambda: self._resegment_for(self.selected_landmark.get()),
         ).pack(fill="x", padx=6, pady=(0, 8))
+
+    def _detect_path_column(self, df: pd.DataFrame) -> str:
+        """Detect which column contains image paths."""
+        # Try known column names in order of preference
+        candidates = ["image_path", "Dataset", "dataset", "path", "file", "filename"]
+
+        for col in candidates:
+            if col in df.columns:
+                return col
+
+        # Fallback: use first column if none match
+        if len(df.columns) > 0:
+            return df.columns[0]
+
+        # Last resort default
+        return "image_path"
 
     def _recompute_transform(self) -> None:
         if not self.current_image:
@@ -461,8 +492,14 @@ class AnnotationGUI(tk.Tk):
         )
 
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
+        self.csv_path_column = self._detect_path_column(df)
+
         # Removing columns that we know are not landmarks, the rest are assumed to be landmarks
-        df.drop(columns=["image_quality", "image_path"], inplace=True, errors="ignore")
+        df.drop(
+            columns=["image_quality", self.csv_path_column],
+            inplace=True,
+            errors="ignore",
+        )
 
         self.landmarks = list(df.columns)
         if self.landmarks:
@@ -494,7 +531,7 @@ class AnnotationGUI(tk.Tk):
             initialdir=BASE_DIR,
             filetypes=[("Image files", ("*.png", "*.jpg", "*.jpeg", "*.bmp", ".tif"))],
         )
-        self.absolute_current_image_path = abs_path
+        self.absolute_current_image_path = Path(abs_path)
         if not abs_path:
             return
 
@@ -502,22 +539,59 @@ class AnnotationGUI(tk.Tk):
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
 
+        return
+
+    def _get_image_index_from_directory(self) -> Tuple[int, list]:
+        # Grab the directory that the current image lives in
+        current_image_directory = (
+            Path(self.absolute_current_image_path).resolve().parent
+        )
+        current_image_name = Path(self.absolute_current_image_path).resolve().name
+
+        all_files = [
+            file.name
+            for file in current_image_directory.iterdir()
+            if file.suffix.lower() in self.possible_image_suffix
+        ]
+
+        all_files.sort()
+
+        try:
+            idx = all_files.index(current_image_name)
+        except ValueError:
+            # If current image not found, check case-insensitive match
+            current_lower = current_image_name.lower()
+            for i, fname in enumerate(all_files):
+                if fname.lower() == current_lower:
+                    idx = i
+                    break
+            else:
+                raise ValueError(
+                    f"Current image '{current_image_name}' not found in directory. "
+                    f"Available files: {all_files[:5]}..."  # Show first 5 for debugging
+                )
+
+        return idx, all_files
+
     def _next_image(self) -> None:
         # Loads the next image in the current directory
         # self._maybe_save_before_destructive_action("load next image")
         self.save_annotations()
         # Get the parent directory of the currently loaded image
-        current_image_directory = Path(self.absolute_current_image_path).parent
-        # Get all the images from that directory
-        all_files = [
-            str(file)
-            for file in current_image_directory.iterdir()
-            if file.suffix == ".tif"
-        ]
-        all_files.sort()
+        # current_image_directory = (
+        #     Path(self.absolute_current_image_path).resolve().parent
+        # )
+        # # Get all the images from that directory
+        # all_files = [
+        #     file.name
+        #     for file in current_image_directory.iterdir()
+        #     if file.suffix == ".tif"
+        # ]
+        # all_files.sort()
 
-        # Get the index of the current file
-        idx = all_files.index(str(self.absolute_current_image_path))
+        # # Get the index of the current file
+        # idx = all_files.index(str(Path(self.absolute_current_image_path).name))
+        idx, all_files = self._get_image_index_from_directory()
         if len(all_files) == idx + 1:
             messagebox.showwarning(
                 "End of Directory",
@@ -525,7 +599,9 @@ class AnnotationGUI(tk.Tk):
                 "'Load Image' to find a new image, or use 'Prev Image' to move backward",
             )
         else:
-            self.absolute_current_image_path = all_files[idx + 1]
+            self.absolute_current_image_path = Path(
+                self.absolute_current_image_path.resolve().parent / all_files[idx + 1]
+            )
             self.load_image_from_path(Path(self.absolute_current_image_path))
 
     def _prev_image(self) -> None:
@@ -534,25 +610,29 @@ class AnnotationGUI(tk.Tk):
         self.save_annotations()
 
         # Get the parent directory of the currently loaded image
-        current_image_directory = Path(self.absolute_current_image_path).parent
-        # Get all the images from that directory
-        all_files = sorted(
-            [
-                str(file)
-                for file in current_image_directory.iterdir()
-                if file.suffix == ".tif"
-            ]
-        )
+        # current_image_directory = Path(self.absolute_current_image_path).parent
+        # # Get all the images from that directory
+        # all_files = sorted(
+        #     [
+        #         str(file)
+        #         for file in current_image_directory.iterdir()
+        #         if file.suffix == ".tif"
+        #     ]
+        # )
 
-        # Get the index of the current file
-        idx = all_files.index(str(self.absolute_current_image_path))
+        # # Get the index of the current file
+        # idx = all_files.index(str(self.absolute_current_image_path))
+
+        idx, all_files = self._get_image_index_from_directory()
         if idx == 0:
             messagebox.showwarning(
                 "Beginning of Directory",
                 "You've reached the beginning of the current image directory, please use 'Load Image' to find a new image, or use 'Next Image' to move forward",
             )
         else:
-            self.absolute_current_image_path = all_files[idx - 1]
+            self.absolute_current_image_path = Path(
+                self.absolute_current_image_path.resolve().parent / all_files[idx - 1]
+            )
             self.load_image_from_path(Path(self.absolute_current_image_path))
 
     def _on_pg_down(self, event) -> None:
@@ -650,7 +730,7 @@ class AnnotationGUI(tk.Tk):
         if Path(self.abs_csv_path).exists():
             df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
             # col0 = df.columns[0]
-            col0 = "image_path"
+            col0 = self._detect_path_column(df)
             # Ensure image_quality column exists
             if "image_quality" not in df.columns:
                 df["image_quality"] = 0  # ← Add this
@@ -658,7 +738,7 @@ class AnnotationGUI(tk.Tk):
                 if lm not in df.columns:
                     df[lm] = ""
         else:
-            col0 = "image_path"
+            col0 = self.csv_path_column
             cols: List[str] = [col0, "image_quality"] + self.landmarks
             df = pd.DataFrame(columns=cols)
         row = {
@@ -694,17 +774,23 @@ class AnnotationGUI(tk.Tk):
         current_filename = PurePath(self.current_image_path).name
         current_path_str = str(self.current_image_path)
 
-        # Try exact match first
-        mask = df[col0] == current_path_str
+        # If you're starting from a fresh CSV, then the dataframe is empty, which will throw
+        # errors when doing dataframe key querying. We only have to worry about duplicates with
+        # a non-empty dataframe
 
-        # If no exact match, try filename matching
-        if not mask.any():
-            mask = df[col0].apply(lambda x: current_filename in str(x))
+        if not df.empty:
+            # Try exact match first
+            mask = df[col0] == current_path_str
 
-        # Remove matching rows
-        df = df[~mask]
+            # If no exact match, try filename matching
+            if not mask.any():
+                mask = df[col0].apply(lambda x: current_filename in str(x))
 
-        df = df[df[col0] != self.current_image_path]
+            # Remove matching rows
+            df = df[~mask]
+
+            df = df[df[col0] != self.current_image_path]
+
         df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
         keep_cols = [col0, "image_quality"] + self.landmarks
         df = df[[c for c in df.columns if c in keep_cols]]
@@ -732,10 +818,11 @@ class AnnotationGUI(tk.Tk):
 
             shutil.copy2(str(csv_path), str(backup_path))
 
-            # messagebox.showinfo(
-            #     "Saved",
-            #     f"Annotations saved to {csv_path}\nBackup: {backup_path}",
-            # )
+            if PLATFORM != "Linux":
+                messagebox.showinfo(
+                    "Saved",
+                    f"Annotations saved to {csv_path}\nBackup: {backup_path}",
+                )
             self.dirty = False
         except Exception as e:
             messagebox.showerror("Save Failed", f"Could not save CSV:\n{e}")
@@ -784,7 +871,9 @@ class AnnotationGUI(tk.Tk):
                 messagebox.showinfo("Load Points", "No saved points for this image.")
             return
         # We know that this is image_path
-        df_img_path_col = "image_path"  # this is just grabbing image_path
+        # df_img_path_col = "image_path"  # this is just grabbing image_path
+        df_img_path_col = self._detect_path_column(df)
+
         # rowdf = df.loc[df[col0] == self.current_image_path]
         rowdf = df.loc[df[df_img_path_col] == str(self.current_image_path)]
         if rowdf.empty:
@@ -1058,7 +1147,7 @@ class AnnotationGUI(tk.Tk):
             vis = bool(vis_var.get())
         has_mask = (
             self.current_image_path
-            and self.current_image_path in self.seg_masks
+            and str(self.current_image_path) in self.seg_masks
             and lm in self.seg_masks[str(self.current_image_path)]
         )
         if not has_mask or not vis:
@@ -1187,12 +1276,14 @@ class AnnotationGUI(tk.Tk):
         if seed is None or cv2 is None or self.current_image is None:
             return
         x, y = seed
-        if apply_saved_settings:
-            self._apply_settings_to_ui_for(lm)
-        if self.method.get() == "Flood Fill":
-            mask = self._segment_ff(x, y)
-        else:
-            mask = self._segment_adaptive_cc(x, y)
+        mask = self._segment_with_fallback(x, y, lm)
+
+        # if apply_saved_settings:
+        #     self._apply_settings_to_ui_for(lm)
+        # if self.method.get() == "Flood Fill":
+        #     mask = self._segment_ff(x, y)
+        # else:
+        #     mask = self._segment_adaptive_cc(x, y)
         if mask is None:
             messagebox.showwarning(
                 "Segmentation",
@@ -1202,6 +1293,60 @@ class AnnotationGUI(tk.Tk):
         mask = self._grow_shrink(mask, self.grow_shrink.get())
         self.seg_masks.setdefault(str(self.current_image_path), {})[lm] = mask
         self._update_overlay_for(lm)
+
+    def _segment_with_fallback(self, x: int, y: int, lm: str) -> np.ndarray | None:
+        """
+        Try segmentation with multiple fallback strategies.
+        Returns mask or None if all strategies fail.
+        """
+        # Strategy 1: Try with current settings
+        if self.method.get() == "Flood Fill":
+            mask = self._segment_ff(x, y)
+        else:
+            mask = self._segment_adaptive_cc(x, y)
+
+        if mask is not None:
+            return mask
+
+        # Strategy 2: Try nearby seed points (jittering)
+        offsets = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (2, 2), (-2, -2)]
+        for dx, dy in offsets[1:]:  # Skip (0,0) since we already tried it
+            new_x, new_y = x + dx, y + dy
+            if self.method.get() == "Flood Fill":
+                mask = self._segment_ff(new_x, new_y)
+            else:
+                mask = self._segment_adaptive_cc(new_x, new_y)
+
+            if mask is not None:
+                return mask
+
+        # Strategy 3: Try opposite method
+        if self.method.get() == "Flood Fill":
+            mask = self._segment_adaptive_cc(x, y)
+        else:
+            mask = self._segment_ff(x, y)
+
+        if mask is not None:
+            return mask
+
+        # Strategy 4: Try with relaxed sensitivity (more permissive)
+        original_sens = self.fill_sensitivity.get()
+        relaxed_sens = min(50, original_sens + 10)
+        self.fill_sensitivity.set(relaxed_sens)
+
+        if self.method.get() == "Flood Fill":
+            mask = self._segment_ff(x, y)
+        else:
+            mask = self._segment_adaptive_cc(x, y)
+
+        # Restore original
+        self.fill_sensitivity.set(original_sens)
+
+        if mask is not None:
+            return mask
+
+        # All strategies failed
+        return None
 
     # Converts image to preprocessed grayscale (CLAHE + blur).
     def _preprocess_gray(self):
