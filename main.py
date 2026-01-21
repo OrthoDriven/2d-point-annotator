@@ -61,20 +61,16 @@ class AnnotationGUI(tk.Tk):
         self.csv_loaded = False
         self._setup_ui()
         self.after(0, self._lock_initial_minsize)
-        # if not os.path.exists(self.abs_csv_path):
-        #     messagebox.showerror("Error", f"CSV not found: {self.abs_csv_path}")
-        #     self.destroy()
-        #     return
-        # df = pd.read_csv(self.abs_csv_path)
-        # self.landmarks = list(df.columns[1:])
-        # if self.landmarks:
-        #     self.selected_landmark.set(self.landmarks[0])
-        # self._build_landmark_panel()
         self.landmarks = []
         self.bind("<Up>", self._on_arrow_up)
         self.bind("<Down>", self._on_arrow_down)
+        self.bind("<f>", self._on_arrow_down)
+        self.bind("<d>", self._on_arrow_up)
         self.bind("<Left>", self._on_arrow_left)
         self.bind("<Right>", self._on_arrow_right)
+        self.bind("<Control-b>", self._on_pg_up)
+        self.bind("<Control-n>", self._on_pg_down)
+        self.bind("<BackSpace>", self._on_backspace)
 
     # Builds the left image canvas, right control panel, and tool widgets.
     def _setup_ui(self) -> None:
@@ -473,45 +469,8 @@ class AnnotationGUI(tk.Tk):
         self.absolute_current_image_path = abs_path
         if not abs_path:
             return
-        rel_path = os.path.relpath(abs_path, BASE_DIR)
-        image_filename = PurePath(rel_path).name
 
         self.load_image_from_path(Path(abs_path))
-        # try:
-        #     self.current_image = Image.open(abs_path)
-
-        #     if self.current_image.mode == "I;16":
-        #         arr = np.array(self.current_image, dtype=np.uint16)
-
-        #         lo = np.percentile(arr, 1)
-        #         hi = np.percentile(arr, 99)
-
-        #         arr = np.clip(arr, lo, hi)
-        #         arr = ((arr - lo) / (hi - lo) * 255).astype(np.uint8)
-
-        #         img = Image.fromarray(arr, mode="L").convert("RGB")
-        #         self.current_image = img
-        #     self.current_image.convert("RGB")
-
-        # except Exception as e:
-        #     messagebox.showerror("Load Image", f"Failed to open image:\n{e}")
-        #     return
-        # self.current_image_path = rel_path
-        # w, h = self.current_image.size
-        # self.canvas.config(width=w, height=h)
-        # self.canvas.delete("all")
-        # self.base_img_item = None
-        # self._remove_all_overlays()
-        # self.last_seed.clear()
-        # self.lm_settings.setdefault(self.current_image_path, {})
-        # self.path_var.set(image_filename)
-        # self.annotations.setdefault(self.current_image_path, {})
-        # self.load_points(show_message=False)
-        # self._render_base_image()
-        # self._draw_points()
-        # self._hide_hover_circle()
-        # self.dirty = False
-        # self._next_image()
 
     def _next_image(self) -> None:
         # Loads the next image in the current directory
@@ -538,6 +497,18 @@ class AnnotationGUI(tk.Tk):
         else:
             self.absolute_current_image_path = all_files[idx + 1]
             self.load_image_from_path(Path(self.absolute_current_image_path))
+
+    def _on_pg_down(self, event) -> None:
+        self._next_image()
+        return
+
+    def _on_pg_up(self, event) -> None:
+        self._prev_image()
+        return
+
+    def _on_backspace(self, event) -> None:
+        self._delete_current_landmark()
+        return
 
     def _prev_image(self) -> None:
         # Loads the next image in the current directory
@@ -995,7 +966,7 @@ class AnnotationGUI(tk.Tk):
         if not has_mask or not vis:
             self._remove_overlay_for(lm)
             return
-        mask = self.seg_masks[self.current_image_path][lm]
+        mask = self.seg_masks[str(self.current_image_path)][lm]
         self._render_overlay_for(lm, mask)
         self.canvas.tag_raise("marker")
 
@@ -1057,7 +1028,7 @@ class AnnotationGUI(tk.Tk):
                 "No Landmark", "Please select a landmark in the list."
             )
             return
-        self.annotations.setdefault(self.current_image_path, {})[lm] = (x, y)
+        self.annotations.setdefault(str(self.current_image_path), {})[lm] = (x, y)
         if lm in self.landmark_found:
             self.landmark_found[lm].set(True)
         self._draw_points()
@@ -1072,6 +1043,36 @@ class AnnotationGUI(tk.Tk):
             self.last_seed[lm] = (int(x), int(y))
             self._store_current_settings_for(lm)
             self._resegment_for(lm)
+        return
+
+    def _delete_current_landmark(self) -> None:
+        """
+        The goal of this function is to remove the annotation from the current landmark. When saving. I'm going to make.
+        """
+        lm = self.selected_landmark.get()
+        if not lm:
+            messagebox.showwarning(
+                "No Landmark", "Please select a landmark in the list"
+            )
+            return
+
+        # Check if that annotation exists already
+        if lm in self.annotations[str(self.current_image_path)].keys():
+            # Delete it if it does
+            del self.annotations[str(self.current_image_path)][lm]
+
+        self._draw_points()
+        self.dirty = True
+        if lm in ("LOB", "ROB"):
+            if cv2 is None:
+                messagebox.showerror(
+                    "OpenCV missing",
+                    'cv2 is not available. Install with "pip install opencv-python".',
+                )
+                return
+            self._store_current_settings_for(lm)
+            self._resegment_for(lm)
+        return
 
     # Triggers re-segmentation if the selected landmark is LOB/ROB.
     def _resegment_selected_if_needed(self) -> None:
@@ -1226,12 +1227,12 @@ class AnnotationGUI(tk.Tk):
 
     # Stores current UI settings for a specific landmark on this image.
     def _store_current_settings_for(self, lm: str) -> None:
-        per_img = self.lm_settings.setdefault(self.current_image_path, {})
+        per_img = self.lm_settings.setdefault(str(self.current_image_path), {})
         per_img[lm] = self._current_settings_dict()
 
     # Applies saved settings for a landmark back into the UI controls.
     def _apply_settings_to_ui_for(self, lm: str) -> None:
-        st = self.lm_settings.get(self.current_image_path, {}).get(lm)
+        st = self.lm_settings.get(str(self.current_image_path), {}).get(lm)
         if not st:
             return
         self.method.set(st["method"])
