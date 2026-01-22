@@ -6,6 +6,7 @@ import os
 import platform
 import shutil
 import tkinter as tk
+import tkinter.font as tkfont
 from pathlib import Path, PurePath
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Optional, Tuple
@@ -26,6 +27,18 @@ class AnnotationGUI(tk.Tk):
 
     def __init__(self) -> None:
         super().__init__()
+        self.tk.call("tk", "scaling", 1.25)
+
+        # Force Tk named fonts (for classic tk widgets)
+        import tkinter.font as tkfont
+
+        self.heading_font = tkfont.nametofont("TkDefaultFont").copy()
+        self.heading_font.configure(weight="bold")  # keep size default
+
+        self.dialogue_font = tkfont.nametofont("TkDefaultFont").copy()
+        if PLATFORM == "Linux":
+            self._configure_linux_fonts()
+
         self.title("2D Point Annotation")
         self.possible_image_suffix = [
             ".png",
@@ -76,6 +89,8 @@ class AnnotationGUI(tk.Tk):
         self.base_img_item: Optional[int] = None
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.csv_loaded = False
+        # Also adjust these if you want everything to match:
+        # Already configured above to match heading_font
         self._setup_ui()
         self.after(0, self._lock_initial_minsize)
         self.landmarks = []
@@ -94,6 +109,7 @@ class AnnotationGUI(tk.Tk):
         self.bind("2", self._on_2_press)
         self.bind("3", self._on_3_press)
         self.bind("4", self._on_4_press)
+        self.bind("<h>", self._on_h_press)
 
     # Builds the left image canvas, right control panel, and tool widgets.
     def _setup_ui(self) -> None:
@@ -110,21 +126,30 @@ class AnnotationGUI(tk.Tk):
         ctrl = tk.Frame(self)
         ctrl.pack(side=tk.RIGHT, fill="y", padx=10, pady=10)
         self._ctrl = ctrl
-        tk.Button(ctrl, text="Load Image", command=self.load_image).pack(
-            fill="x", pady=5
-        )
-        tk.Button(ctrl, text="Next Image", command=self._next_image).pack(
-            fill="x", pady=5
-        )
-        tk.Button(ctrl, text="Previous Image", command=self._prev_image).pack(
-            fill="x", pady=5
-        )
-        tk.Button(ctrl, text="Save Annotations", command=self.save_annotations).pack(
-            fill="x", pady=5
-        )
-        tk.Button(ctrl, text="Load CSV", command=self.load_landmarks_from_csv).pack(
-            fill="x", pady=5
-        )
+        tk.Button(
+            ctrl, text="Load Image", command=self.load_image, font=self.heading_font
+        ).pack(fill="x", pady=5)
+        tk.Button(
+            ctrl, text="Next Image", command=self._next_image, font=self.heading_font
+        ).pack(fill="x", pady=5)
+        tk.Button(
+            ctrl,
+            text="Previous Image",
+            command=self._prev_image,
+            font=self.heading_font,
+        ).pack(fill="x", pady=5)
+        tk.Button(
+            ctrl,
+            text="Save Annotations",
+            command=self.save_annotations,
+            font=self.heading_font,
+        ).pack(fill="x", pady=5)
+        tk.Button(
+            ctrl,
+            text="Load CSV",
+            command=self.load_landmarks_from_csv,
+            font=self.heading_font,
+        ).pack(fill="x", pady=5)
         img_frame = ttk.LabelFrame(ctrl, text="Image + Quality")
         img_frame.pack(fill="x", pady=(10, 10))
 
@@ -136,6 +161,7 @@ class AnnotationGUI(tk.Tk):
             textvariable=self.path_var,
             state="readonly",
             relief="sunken",
+            font=self.dialogue_font,
         )
         path_entry.pack(side="left", fill="x", expand=True)
 
@@ -146,10 +172,11 @@ class AnnotationGUI(tk.Tk):
             relief="sunken",
             width=10,
             justify="center",
+            font=self.dialogue_font,
         )
         quality_entry.pack(side="right", padx=(6, 0))
 
-        tk.Label(ctrl, text="Landmarks:").pack(anchor="w")
+        tk.Label(ctrl, text="Landmarks:", font=self.heading_font).pack(anchor="w")
         PANEL_WIDTH = 300
         SCROLLBAR_WIDTH = 18
         CANVAS_HEIGHT = 220
@@ -185,12 +212,16 @@ class AnnotationGUI(tk.Tk):
         buttons_row = tk.Frame(ctrl)
         buttons_row.pack(fill="x", pady=(0, 6))
         tk.Button(
-            buttons_row, text="View All", command=lambda: self._set_all_visibility(True)
+            buttons_row,
+            text="View All",
+            command=lambda: self._set_all_visibility(True),
+            font=self.dialogue_font,
         ).pack(side="left", expand=True, fill="x", padx=(0, 4))
         tk.Button(
             buttons_row,
             text="View None",
             command=lambda: self._set_all_visibility(False),
+            font=self.dialogue_font,
         ).pack(side="left", expand=True, fill="x")
         ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
         hover_wrap = ttk.LabelFrame(ctrl, text="Hover Circle Tool")
@@ -200,6 +231,7 @@ class AnnotationGUI(tk.Tk):
             text="Show Hover Circle",
             variable=self.hover_enabled,
             command=self._toggle_hover,
+            font=self.dialogue_font,
         ).pack(anchor="w", padx=6, pady=(6, 0))
         self.radius_scale = tk.Scale(
             hover_wrap,
@@ -209,6 +241,7 @@ class AnnotationGUI(tk.Tk):
             label="Hover Radius",
             variable=self.hover_radius,
             command=self._on_radius_change,
+            font=self.dialogue_font,
         )
         self.radius_scale.config(state="disabled")
         self.radius_scale.pack(fill="x", padx=6, pady=6)
@@ -216,7 +249,7 @@ class AnnotationGUI(tk.Tk):
         seg_wrap.pack(fill="x", pady=(8, 0))
         row1 = tk.Frame(seg_wrap)
         row1.pack(fill="x", padx=6, pady=(6, 2))
-        tk.Label(row1, text="Method:").pack(side="left")
+        tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
         ttk.Combobox(
             row1,
             textvariable=self.method,
@@ -229,6 +262,7 @@ class AnnotationGUI(tk.Tk):
             text="CLAHE",
             variable=self.use_clahe,
             command=lambda: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
         ).pack(side="left", padx=(10, 0))
         tk.Scale(
             seg_wrap,
@@ -238,12 +272,14 @@ class AnnotationGUI(tk.Tk):
             label="Sensitivity",
             variable=self.fill_sensitivity,
             command=lambda _v: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(6, 4))
         tk.Checkbutton(
             seg_wrap,
             text="Edge lock (flood fill)",
             variable=self.edge_lock,
             command=lambda: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
         ).pack(anchor="w", padx=6)
         tk.Scale(
             seg_wrap,
@@ -253,6 +289,7 @@ class AnnotationGUI(tk.Tk):
             label="Edge lock width",
             variable=self.edge_lock_width,
             command=lambda _v: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(2, 6))
         tk.Scale(
             seg_wrap,
@@ -264,11 +301,13 @@ class AnnotationGUI(tk.Tk):
             command=lambda _v: self._apply_grow_shrink_only_for(
                 self.selected_landmark.get()
             ),
+            font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(2, 6))
         tk.Button(
             seg_wrap,
             text="Re-segment (use current sliders)",
             command=lambda: self._resegment_for(self.selected_landmark.get()),
+            font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(0, 8))
 
     def _detect_path_column(self, df: pd.DataFrame) -> str:
@@ -329,13 +368,13 @@ class AnnotationGUI(tk.Tk):
         table.grid_columnconfigure(0, minsize=70)
         table.grid_columnconfigure(1, minsize=140)
         table.grid_columnconfigure(2, minsize=100)
-        tk.Label(table, text="View", anchor="w").grid(
+        tk.Label(table, text="View", anchor="w", font=self.heading_font).grid(
             row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2)
         )
-        tk.Label(table, text="Name", anchor="w").grid(
+        tk.Label(table, text="Name", anchor="w", font=self.heading_font).grid(
             row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2)
         )
-        tk.Label(table, text="Annotated", anchor="w").grid(
+        tk.Label(table, text="Annotated", anchor="w", font=self.heading_font).grid(
             row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2)
         )
         for i, lm in enumerate(getattr(self, "landmarks", []), start=1):
@@ -343,9 +382,12 @@ class AnnotationGUI(tk.Tk):
             found_var = tk.BooleanVar(value=False)
             self.landmark_visibility[lm] = vis_var
             self.landmark_found[lm] = found_var
-            tk.Checkbutton(table, variable=vis_var, command=self._draw_points).grid(
-                row=i, column=0, sticky="w", padx=(2, 4), pady=1
-            )
+            tk.Checkbutton(
+                table,
+                variable=vis_var,
+                command=self._draw_points,
+                font=self.dialogue_font,
+            ).grid(row=i, column=0, sticky="w", padx=(2, 4), pady=1)
             rb = tk.Radiobutton(
                 table,
                 text=lm,
@@ -354,12 +396,17 @@ class AnnotationGUI(tk.Tk):
                 anchor="w",
                 justify="left",
                 command=self._on_landmark_selected,
+                font=self.dialogue_font,
             )
             rb.grid(row=i, column=1, sticky="w", padx=(2, 4), pady=1)
             self.landmark_radio_widgets[lm] = rb
-            tk.Checkbutton(table, text="", variable=found_var, state="disabled").grid(
-                row=i, column=2, sticky="w", padx=(2, 4), pady=1
-            )
+            tk.Checkbutton(
+                table,
+                text="",
+                variable=found_var,
+                state="disabled",
+                font=self.dialogue_font,
+            ).grid(row=i, column=2, sticky="w", padx=(2, 4), pady=1)
         if getattr(self, "landmarks", None) and not self.selected_landmark.get():
             self.selected_landmark.set(self.landmarks[0])
 
@@ -985,7 +1032,7 @@ class AnnotationGUI(tk.Tk):
                 ys - 10,
                 text=lm,
                 fill="yellow",
-                font=("Arial", 10, "bold"),
+                font=self.dialogue_font,
                 tags="marker",
             )
         for lm in ("LOB", "ROB"):
@@ -1517,6 +1564,129 @@ class AnnotationGUI(tk.Tk):
     def _on_arrow_right(self, event) -> None:
         self._set_selected_visibility(True)
 
+    def _format_shortcuts(
+        self,
+        rows,
+        width: int = 60,
+        gap_min: int = 2,
+        leader: str = ".",
+    ):
+        """
+        2-column text block with an 'hfill' made of leader characters (e.g. dots).
+        Looks good even with proportional fonts.
+        """
+
+        key_w = max(len(k) for k, _ in rows)
+        lines = []
+
+        for keys, action in rows:
+            left = f"{keys:<{key_w}}"
+            # Fill the middle with dots/spaces so the action ends at width-ish
+            fill_len = max(gap_min, width - len(left) - len(action))
+            fill = (leader * fill_len) if leader else (" " * fill_len)
+            lines.append(f"{left} {fill} {action}")
+
+        return "\n".join(lines)
+
+    def _on_h_press(self, event=None) -> None:
+        shortcuts = [
+            ("<up> / ↑ / d", "Previous landmark"),
+            ("<down> / ↓ / f", "Next landmark"),
+            ("<left> / <--", "Hide selected landmark"),
+            ("<right> / -->", "Show selected landmark"),
+            ("b / Ctrl+b", "Previous image"),
+            ("n / Ctrl+n", "Next image"),
+            ("1–4", "Set image quality (1-worst, 4-best)"),
+            ("Backspace", "Delete selected landmark"),
+            ("h", "Show this help"),
+            ("Mouse click", "Place landmark"),
+            ("Mouse wheel", "Adjust hover radius"),
+        ]
+        help_text = self._format_shortcuts(
+            shortcuts,
+            width=60,
+            leader=".",
+        )
+
+        win = tk.Toplevel(self)
+        win.title("Help & Keyboard Shortcuts")
+        win.transient(self)
+        win.resizable(False, False)
+
+        frm = ttk.Frame(win, padding=12)
+        frm.pack(fill="both", expand=True)
+
+        ttk.Label(
+            frm,
+            text="Keyboard Shortcuts",
+            font=self.heading_font,
+        ).pack(anchor="w", pady=(0, 8))
+
+        text = tk.Text(
+            frm,
+            wrap="none",
+            height=len(shortcuts) + 1,
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        text.pack(fill="both", expand=True)
+
+        text.configure(font=self.dialogue_font)
+
+        text.insert("1.0", help_text)
+        text.configure(state="disabled")
+
+        ttk.Button(
+            frm,
+            text="Close",
+            command=win.destroy,
+        ).pack(anchor="e", pady=(10, 0))
+
+    def _configure_linux_fonts(self) -> None:
+        # (optional) scaling tweak, only on Linux
+        self.tk.call("tk", "scaling", 1.25)
+
+        # Pick whatever you decided works well in your env
+        self.heading_font = tkfont.Font(
+            family="Liberation Sans", size=15, weight="bold"
+        )
+        self.dialogue_font = tkfont.Font(
+            family="Liberation Sans", size=12, weight="bold"
+        )
+
+        # Tk named fonts (classic tk widgets)
+        for name in (
+            "TkDefaultFont",
+            "TkTextFont",
+            "TkFixedFont",
+            "TkMenuFont",
+            "TkHeadingFont",
+        ):
+            f = tkfont.nametofont(name)
+            f.configure(family="Liberation Sans", size=12)
+
+        # ttk styles
+        style = ttk.Style(self)
+        style.theme_use(style.theme_use())  # force theme init / refresh
+
+        style.configure(".", font=self.dialogue_font)
+        for s in (
+            "TLabel",
+            "TButton",
+            "TCheckbutton",
+            "TRadiobutton",
+            "TEntry",
+            "TCombobox",
+            "TMenubutton",
+            "TNotebook",
+            "TNotebook.Tab",
+            "Treeview",
+            "Treeview.Heading",
+            "TLabelframe.Label",
+        ):
+            style.configure(s, font=self.dialogue_font)
+        return
+
     def _widget_y_in_inner(self, widget) -> int:
         y = 0
         w = widget
@@ -1531,4 +1701,5 @@ class AnnotationGUI(tk.Tk):
 
 if __name__ == "__main__":
     app = AnnotationGUI()
+    app.option_add("*Label.font", "helvetica 20 bold")
     app.mainloop()
