@@ -56,6 +56,8 @@ class AnnotationGUI(tk.Tk):
         ]
         self._start_min_w = 0
         self._start_min_h = 0
+        self.use_ff = tk.BooleanVar(value=True)
+        self.use_adap_cc = tk.BooleanVar(value=False)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.csv_path_column = "image_path"
         self.dirty = False
@@ -94,6 +96,8 @@ class AnnotationGUI(tk.Tk):
         self._setup_ui()
         self.after(0, self._lock_initial_minsize)
         self.landmarks = []
+        self.unbind("<Up>")
+        self.unbind("<Down>")
         self.bind("<Up>", self._on_arrow_up)
         self.bind("<Down>", self._on_arrow_down)
         self.bind("<f>", self._on_arrow_down)
@@ -115,6 +119,9 @@ class AnnotationGUI(tk.Tk):
         self.queue_index = 0
 
     # Builds the left image canvas, right control panel, and tool widgets.
+    def focus_widget(self, event):
+        event.widget.focus_set()
+
     def _setup_ui(self) -> None:
         self.canvas = tk.Canvas(self, bg="grey", highlightthickness=0)
         self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
@@ -272,13 +279,33 @@ class AnnotationGUI(tk.Tk):
         row1 = tk.Frame(seg_wrap)
         row1.pack(fill="x", padx=6, pady=(6, 2))
         tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
-        ttk.Combobox(
+        # self.fill_box = ttk.Combobox(
+        #     row1,
+        #     textvariable=self.method,
+        #     values=["Flood Fill", "Adaptive CC"],
+        #     width=14,
+        #     state="readonly",
+        # )
+        # self.fill_box.pack(side="left", padx=(6, 0))
+        # self.fill_box.bind_class("ComboboxListbox", "<KeyRelease>", self.focus_set())
+        self.ff_button = tk.Checkbutton(
             row1,
-            textvariable=self.method,
-            values=["Flood Fill", "Adaptive CC"],
-            width=14,
-            state="readonly",
-        ).pack(side="left", padx=(6, 0))
+            text="FF",
+            variable=self.use_ff,
+            font=self.dialogue_font,
+            command=self._change_method_to_ff,
+        )
+
+        self.ff_button.pack(side="left")
+        self.adap_cc_button = tk.Checkbutton(
+            row1,
+            text="ACC",
+            variable=self.use_adap_cc,
+            font=self.dialogue_font,
+            command=self._change_method_to_acc,
+        )
+        self.adap_cc_button.pack(side="left")
+
         tk.Checkbutton(
             row1,
             text="CLAHE",
@@ -385,33 +412,33 @@ class AnnotationGUI(tk.Tk):
         self.landmark_visibility.clear()
         self.landmark_found.clear()
         self.landmark_radio_widgets = {}
-        table = tk.Frame(self.lp_inner)
-        table.pack(fill="x", padx=2, pady=2)
-        table.grid_columnconfigure(0, minsize=70)
-        table.grid_columnconfigure(1, minsize=140)
-        table.grid_columnconfigure(2, minsize=100)
-        tk.Label(table, text="View", anchor="w", font=self.heading_font).grid(
-            row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2)
-        )
-        tk.Label(table, text="Name", anchor="w", font=self.heading_font).grid(
-            row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2)
-        )
-        tk.Label(table, text="Annotated", anchor="w", font=self.heading_font).grid(
-            row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2)
-        )
+        self.landmark_table = tk.Frame(self.lp_inner)
+        self.landmark_table.pack(fill="x", padx=2, pady=2)
+        self.landmark_table.grid_columnconfigure(0, minsize=70)
+        self.landmark_table.grid_columnconfigure(1, minsize=140)
+        self.landmark_table.grid_columnconfigure(2, minsize=100)
+        tk.Label(
+            self.landmark_table, text="View", anchor="w", font=self.heading_font
+        ).grid(row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2))
+        tk.Label(
+            self.landmark_table, text="Name", anchor="w", font=self.heading_font
+        ).grid(row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2))
+        tk.Label(
+            self.landmark_table, text="Annotated", anchor="w", font=self.heading_font
+        ).grid(row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2))
         for i, lm in enumerate(getattr(self, "landmarks", []), start=1):
             vis_var = tk.BooleanVar(value=True)
             found_var = tk.BooleanVar(value=False)
             self.landmark_visibility[lm] = vis_var
             self.landmark_found[lm] = found_var
             tk.Checkbutton(
-                table,
+                self.landmark_table,
                 variable=vis_var,
                 command=self._draw_points,
                 font=self.dialogue_font,
             ).grid(row=i, column=0, sticky="w", padx=(2, 4), pady=1)
             rb = tk.Radiobutton(
-                table,
+                self.landmark_table,
                 text=lm,
                 variable=self.selected_landmark,
                 value=lm,
@@ -423,7 +450,7 @@ class AnnotationGUI(tk.Tk):
             rb.grid(row=i, column=1, sticky="w", padx=(2, 4), pady=1)
             self.landmark_radio_widgets[lm] = rb
             tk.Checkbutton(
-                table,
+                self.landmark_table,
                 text="",
                 variable=found_var,
                 state="disabled",
@@ -892,6 +919,7 @@ class AnnotationGUI(tk.Tk):
             shutil.copy2(str(csv_path), str(backup_path))
 
             if PLATFORM == "Windows":
+                # removing the save on mac and only setting the windows.
                 messagebox.showinfo(
                     "Saved",
                     f"Annotations saved to {csv_path}\nBackup: {backup_path}",
@@ -1846,6 +1874,18 @@ class AnnotationGUI(tk.Tk):
         self._update_queue_status()
         self.exit_queue_btn.config(state="disabled")
         messagebox.showinfo("Queue Mode", "Returned to normal directory browsing.")
+
+    def _change_method_to_ff(self) -> None:
+        self.use_adap_cc.set(False)
+        self.use_ff.set(True)
+        self.method.set("Flood Fill")
+        return
+
+    def _change_method_to_acc(self) -> None:
+        self.use_adap_cc.set(True)
+        self.use_ff.set(False)
+        self.method.set("Adaptive CC")
+        return
 
 
 if __name__ == "__main__":
