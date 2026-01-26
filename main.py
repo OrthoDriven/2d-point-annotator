@@ -6,6 +6,7 @@ import os
 import platform
 import shutil
 import tkinter as tk
+import tkinter.font as tkfont
 from pathlib import Path, PurePath
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Optional, Tuple
@@ -26,13 +27,42 @@ class AnnotationGUI(tk.Tk):
 
     def __init__(self) -> None:
         super().__init__()
+        self.tk.call("tk", "scaling", 1.25)
+
+        # Force Tk named fonts (for classic tk widgets)
+        import tkinter.font as tkfont
+
+        self.heading_font = tkfont.nametofont("TkDefaultFont").copy()
+        self.heading_font.configure(weight="bold")  # keep size default
+
+        self.dialogue_font = tkfont.nametofont("TkDefaultFont").copy()
+        if PLATFORM == "Linux":
+            self._configure_linux_fonts()
+
         self.title("2D Point Annotation")
+        self.possible_image_suffix = [
+            ".png",
+            ".PNG",
+            ".jpg",
+            ".jpeg",
+            ".JPEG",
+            ".JPG",
+            ".bmp",
+            ".BMP",
+            ".tif",
+            ".tiff",
+            ".TIFF",
+            ".TIF",
+        ]
         self._start_min_w = 0
         self._start_min_h = 0
+        self.use_ff = tk.BooleanVar(value=True)
+        self.use_adap_cc = tk.BooleanVar(value=False)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.csv_path_column = "image_path"
         self.dirty = False
         self.path_var = tk.StringVar(value="No image loaded")
-        self.quality_var = tk.StringVar(value="No image loaded")
+        self.quality_var = tk.StringVar(value="N/A")
         self.selected_landmark = tk.StringVar(value="")
         self.landmark_visibility: Dict[str, tk.BooleanVar] = {}
         self.landmark_found = {}
@@ -61,9 +91,13 @@ class AnnotationGUI(tk.Tk):
         self.base_img_item: Optional[int] = None
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.csv_loaded = False
+        # Also adjust these if you want everything to match:
+        # Already configured above to match heading_font
         self._setup_ui()
         self.after(0, self._lock_initial_minsize)
         self.landmarks = []
+        self.unbind("<Up>")
+        self.unbind("<Down>")
         self.bind("<Up>", self._on_arrow_up)
         self.bind("<Down>", self._on_arrow_down)
         self.bind("<f>", self._on_arrow_down)
@@ -79,8 +113,15 @@ class AnnotationGUI(tk.Tk):
         self.bind("2", self._on_2_press)
         self.bind("3", self._on_3_press)
         self.bind("4", self._on_4_press)
+        self.bind("<h>", self._on_h_press)
+        self.queue_mode = False
+        self.unannotated_queue: List[Path] = []
+        self.queue_index = 0
 
     # Builds the left image canvas, right control panel, and tool widgets.
+    def focus_widget(self, event):
+        event.widget.focus_set()
+
     def _setup_ui(self) -> None:
         self.canvas = tk.Canvas(self, bg="grey", highlightthickness=0)
         self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
@@ -95,32 +136,61 @@ class AnnotationGUI(tk.Tk):
         ctrl = tk.Frame(self)
         ctrl.pack(side=tk.RIGHT, fill="y", padx=10, pady=10)
         self._ctrl = ctrl
-        tk.Button(ctrl, text="Load Image", command=self.load_image).pack(
-            fill="x", pady=5
-        )
-        tk.Button(ctrl, text="Next Image", command=self._next_image).pack(
-            fill="x", pady=5
-        )
-        tk.Button(ctrl, text="Previous Image", command=self._prev_image).pack(
-            fill="x", pady=5
-        )
-        tk.Button(ctrl, text="Save Annotations", command=self.save_annotations).pack(
-            fill="x", pady=5
-        )
-        tk.Button(ctrl, text="Load CSV", command=self.load_landmarks_from_csv).pack(
-            fill="x", pady=5
-        )
-        img_frame = ttk.LabelFrame(ctrl, text="Image")
+        tk.Button(
+            ctrl, text="Load Image", command=self.load_image, font=self.heading_font
+        ).pack(fill="x", pady=5)
+        tk.Button(
+            ctrl, text="Next Image", command=self._next_image, font=self.heading_font
+        ).pack(fill="x", pady=5)
+        tk.Button(
+            ctrl,
+            text="Previous Image",
+            command=self._prev_image,
+            font=self.heading_font,
+        ).pack(fill="x", pady=5)
+        tk.Button(
+            ctrl,
+            text="Save Annotations",
+            command=self.save_annotations,
+            font=self.heading_font,
+        ).pack(fill="x", pady=5)
+        tk.Button(
+            ctrl,
+            text="Load CSV",
+            command=self.load_landmarks_from_csv,
+            font=self.heading_font,
+        ).pack(fill="x", pady=5)
+        img_frame = ttk.LabelFrame(ctrl, text="Image + Quality")
         img_frame.pack(fill="x", pady=(10, 10))
 
         row = ttk.Frame(img_frame)
         row.pack(fill="x", padx=6, pady=6)
+
+        tk.Button(
+            ctrl,
+            text="Find Unannotated Images",
+            command=self._find_unannotated_images,
+        ).pack(fill="x", pady=5)
+
+        # Add status label (update the Image frame to show queue status)
+        self.queue_status_var = tk.StringVar(value="")
+        tk.Label(
+            img_frame, textvariable=self.queue_status_var, fg="blue", font="16"
+        ).pack(fill="x", padx=6, pady=(0, 6))
+        self.exit_queue_btn = tk.Button(
+            ctrl,
+            text="Exit Queue Mode",
+            command=self._exit_queue_mode,
+            state="disabled",  # Only enabled when in queue mode
+        )
+        self.exit_queue_btn.pack(fill="x", pady=5)
 
         path_entry = tk.Entry(
             row,
             textvariable=self.path_var,
             state="readonly",
             relief="sunken",
+            font=self.dialogue_font,
         )
         path_entry.pack(side="left", fill="x", expand=True)
 
@@ -131,10 +201,11 @@ class AnnotationGUI(tk.Tk):
             relief="sunken",
             width=10,
             justify="center",
+            font=self.dialogue_font,
         )
         quality_entry.pack(side="right", padx=(6, 0))
 
-        tk.Label(ctrl, text="Landmarks:").pack(anchor="w")
+        tk.Label(ctrl, text="Landmarks:", font=self.heading_font).pack(anchor="w")
         PANEL_WIDTH = 300
         SCROLLBAR_WIDTH = 18
         CANVAS_HEIGHT = 220
@@ -170,12 +241,16 @@ class AnnotationGUI(tk.Tk):
         buttons_row = tk.Frame(ctrl)
         buttons_row.pack(fill="x", pady=(0, 6))
         tk.Button(
-            buttons_row, text="View All", command=lambda: self._set_all_visibility(True)
+            buttons_row,
+            text="View All",
+            command=lambda: self._set_all_visibility(True),
+            font=self.dialogue_font,
         ).pack(side="left", expand=True, fill="x", padx=(0, 4))
         tk.Button(
             buttons_row,
             text="View None",
             command=lambda: self._set_all_visibility(False),
+            font=self.dialogue_font,
         ).pack(side="left", expand=True, fill="x")
         ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
         hover_wrap = ttk.LabelFrame(ctrl, text="Hover Circle Tool")
@@ -185,6 +260,7 @@ class AnnotationGUI(tk.Tk):
             text="Show Hover Circle",
             variable=self.hover_enabled,
             command=self._toggle_hover,
+            font=self.dialogue_font,
         ).pack(anchor="w", padx=6, pady=(6, 0))
         self.radius_scale = tk.Scale(
             hover_wrap,
@@ -194,6 +270,7 @@ class AnnotationGUI(tk.Tk):
             label="Hover Radius",
             variable=self.hover_radius,
             command=self._on_radius_change,
+            font=self.dialogue_font,
         )
         self.radius_scale.config(state="disabled")
         self.radius_scale.pack(fill="x", padx=6, pady=6)
@@ -201,19 +278,40 @@ class AnnotationGUI(tk.Tk):
         seg_wrap.pack(fill="x", pady=(8, 0))
         row1 = tk.Frame(seg_wrap)
         row1.pack(fill="x", padx=6, pady=(6, 2))
-        tk.Label(row1, text="Method:").pack(side="left")
-        ttk.Combobox(
+        tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
+        # self.fill_box = ttk.Combobox(
+        #     row1,
+        #     textvariable=self.method,
+        #     values=["Flood Fill", "Adaptive CC"],
+        #     width=14,
+        #     state="readonly",
+        # )
+        # self.fill_box.pack(side="left", padx=(6, 0))
+        # self.fill_box.bind_class("ComboboxListbox", "<KeyRelease>", self.focus_set())
+        self.ff_button = tk.Checkbutton(
             row1,
-            textvariable=self.method,
-            values=["Flood Fill", "Adaptive CC"],
-            width=14,
-            state="readonly",
-        ).pack(side="left", padx=(6, 0))
+            text="FF",
+            variable=self.use_ff,
+            font=self.dialogue_font,
+            command=self._change_method_to_ff,
+        )
+
+        self.ff_button.pack(side="left")
+        self.adap_cc_button = tk.Checkbutton(
+            row1,
+            text="ACC",
+            variable=self.use_adap_cc,
+            font=self.dialogue_font,
+            command=self._change_method_to_acc,
+        )
+        self.adap_cc_button.pack(side="left")
+
         tk.Checkbutton(
             row1,
             text="CLAHE",
             variable=self.use_clahe,
             command=lambda: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
         ).pack(side="left", padx=(10, 0))
         tk.Scale(
             seg_wrap,
@@ -223,12 +321,14 @@ class AnnotationGUI(tk.Tk):
             label="Sensitivity",
             variable=self.fill_sensitivity,
             command=lambda _v: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(6, 4))
         tk.Checkbutton(
             seg_wrap,
             text="Edge lock (flood fill)",
             variable=self.edge_lock,
             command=lambda: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
         ).pack(anchor="w", padx=6)
         tk.Scale(
             seg_wrap,
@@ -238,6 +338,7 @@ class AnnotationGUI(tk.Tk):
             label="Edge lock width",
             variable=self.edge_lock_width,
             command=lambda _v: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(2, 6))
         tk.Scale(
             seg_wrap,
@@ -249,12 +350,30 @@ class AnnotationGUI(tk.Tk):
             command=lambda _v: self._apply_grow_shrink_only_for(
                 self.selected_landmark.get()
             ),
+            font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(2, 6))
         tk.Button(
             seg_wrap,
             text="Re-segment (use current sliders)",
             command=lambda: self._resegment_for(self.selected_landmark.get()),
+            font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(0, 8))
+
+    def _detect_path_column(self, df: pd.DataFrame) -> str:
+        """Detect which column contains image paths."""
+        # Try known column names in order of preference
+        candidates = ["image_path", "Dataset", "dataset", "path", "file", "filename"]
+
+        for col in candidates:
+            if col in df.columns:
+                return col
+
+        # Fallback: use first column if none match
+        if len(df.columns) > 0:
+            return df.columns[0]
+
+        # Last resort default
+        return "image_path"
 
     def _recompute_transform(self) -> None:
         if not self.current_image:
@@ -293,42 +412,50 @@ class AnnotationGUI(tk.Tk):
         self.landmark_visibility.clear()
         self.landmark_found.clear()
         self.landmark_radio_widgets = {}
-        table = tk.Frame(self.lp_inner)
-        table.pack(fill="x", padx=2, pady=2)
-        table.grid_columnconfigure(0, minsize=70)
-        table.grid_columnconfigure(1, minsize=140)
-        table.grid_columnconfigure(2, minsize=100)
-        tk.Label(table, text="View", anchor="w").grid(
-            row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2)
-        )
-        tk.Label(table, text="Name", anchor="w").grid(
-            row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2)
-        )
-        tk.Label(table, text="Annotated", anchor="w").grid(
-            row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2)
-        )
+        self.landmark_table = tk.Frame(self.lp_inner)
+        self.landmark_table.pack(fill="x", padx=2, pady=2)
+        self.landmark_table.grid_columnconfigure(0, minsize=70)
+        self.landmark_table.grid_columnconfigure(1, minsize=140)
+        self.landmark_table.grid_columnconfigure(2, minsize=100)
+        tk.Label(
+            self.landmark_table, text="View", anchor="w", font=self.heading_font
+        ).grid(row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2))
+        tk.Label(
+            self.landmark_table, text="Name", anchor="w", font=self.heading_font
+        ).grid(row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2))
+        tk.Label(
+            self.landmark_table, text="Annotated", anchor="w", font=self.heading_font
+        ).grid(row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2))
         for i, lm in enumerate(getattr(self, "landmarks", []), start=1):
             vis_var = tk.BooleanVar(value=True)
             found_var = tk.BooleanVar(value=False)
             self.landmark_visibility[lm] = vis_var
             self.landmark_found[lm] = found_var
-            tk.Checkbutton(table, variable=vis_var, command=self._draw_points).grid(
-                row=i, column=0, sticky="w", padx=(2, 4), pady=1
-            )
+            tk.Checkbutton(
+                self.landmark_table,
+                variable=vis_var,
+                command=self._draw_points,
+                font=self.dialogue_font,
+            ).grid(row=i, column=0, sticky="w", padx=(2, 4), pady=1)
             rb = tk.Radiobutton(
-                table,
+                self.landmark_table,
                 text=lm,
                 variable=self.selected_landmark,
                 value=lm,
                 anchor="w",
                 justify="left",
                 command=self._on_landmark_selected,
+                font=self.dialogue_font,
             )
             rb.grid(row=i, column=1, sticky="w", padx=(2, 4), pady=1)
             self.landmark_radio_widgets[lm] = rb
-            tk.Checkbutton(table, text="", variable=found_var, state="disabled").grid(
-                row=i, column=2, sticky="w", padx=(2, 4), pady=1
-            )
+            tk.Checkbutton(
+                self.landmark_table,
+                text="",
+                variable=found_var,
+                state="disabled",
+                font=self.dialogue_font,
+            ).grid(row=i, column=2, sticky="w", padx=(2, 4), pady=1)
         if getattr(self, "landmarks", None) and not self.selected_landmark.get():
             self.selected_landmark.set(self.landmarks[0])
 
@@ -461,8 +588,14 @@ class AnnotationGUI(tk.Tk):
         )
 
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
+        self.csv_path_column = self._detect_path_column(df)
+
         # Removing columns that we know are not landmarks, the rest are assumed to be landmarks
-        df.drop(columns=["image_quality", "image_path"], inplace=True, errors="ignore")
+        df.drop(
+            columns=["image_quality", self.csv_path_column],
+            inplace=True,
+            errors="ignore",
+        )
 
         self.landmarks = list(df.columns)
         if self.landmarks:
@@ -494,7 +627,7 @@ class AnnotationGUI(tk.Tk):
             initialdir=BASE_DIR,
             filetypes=[("Image files", ("*.png", "*.jpg", "*.jpeg", "*.bmp", ".tif"))],
         )
-        self.absolute_current_image_path = abs_path
+        self.absolute_current_image_path = Path(abs_path)
         if not abs_path:
             return
 
@@ -502,58 +635,105 @@ class AnnotationGUI(tk.Tk):
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
 
+        return
+
+    def _get_image_index_from_directory(self) -> Tuple[int, list]:
+        # Grab the directory that the current image lives in
+        current_image_directory = (
+            Path(self.absolute_current_image_path).resolve().parent
+        )
+        current_image_name = Path(self.absolute_current_image_path).resolve().name
+
+        all_files = [
+            file.name
+            for file in current_image_directory.iterdir()
+            if file.suffix.lower() in self.possible_image_suffix
+        ]
+
+        all_files.sort()
+
+        try:
+            idx = all_files.index(current_image_name)
+        except ValueError:
+            # If current image not found, check case-insensitive match
+            current_lower = current_image_name.lower()
+            for i, fname in enumerate(all_files):
+                if fname.lower() == current_lower:
+                    idx = i
+                    break
+            else:
+                raise ValueError(
+                    f"Current image '{current_image_name}' not found in directory. "
+                    f"Available files: {all_files[:5]}..."  # Show first 5 for debugging
+                )
+
+        return idx, all_files
+
     def _next_image(self) -> None:
         # Loads the next image in the current directory
         # self._maybe_save_before_destructive_action("load next image")
         self.save_annotations()
-        # Get the parent directory of the currently loaded image
-        current_image_directory = Path(self.absolute_current_image_path).parent
-        # Get all the images from that directory
-        all_files = [
-            str(file)
-            for file in current_image_directory.iterdir()
-            if file.suffix == ".tif"
-        ]
-        all_files.sort()
+        if self.queue_mode:
+            # Queue mode: move backward through unannotated list
+            if self.queue_index >= len(self.unannotated_queue) - 1:
+                messagebox.showwarning(
+                    "Start of Queue",
+                    "You're at the beginning of the unannotated images.",
+                )
+                return
 
-        # Get the index of the current file
-        idx = all_files.index(str(self.absolute_current_image_path))
-        if len(all_files) == idx + 1:
-            messagebox.showwarning(
-                "End of Directory",
-                "You've reached the end of the current image directory, please use"
-                "'Load Image' to find a new image, or use 'Prev Image' to move backward",
-            )
+            self.queue_index += 1
+            prev_path = self.unannotated_queue[self.queue_index]
+            self.absolute_current_image_path = prev_path
+            self.load_image_from_path(prev_path)
+            self._update_queue_status()
         else:
-            self.absolute_current_image_path = all_files[idx + 1]
-            self.load_image_from_path(Path(self.absolute_current_image_path))
+            idx, all_files = self._get_image_index_from_directory()
+            if len(all_files) == idx + 1:
+                messagebox.showwarning(
+                    "End of Directory",
+                    "You've reached the end of the current image directory, please use"
+                    "'Load Image' to find a new image, or use 'Prev Image' to move backward",
+                )
+            else:
+                self.absolute_current_image_path = Path(
+                    self.absolute_current_image_path.resolve().parent
+                    / all_files[idx + 1]
+                )
+                self.load_image_from_path(Path(self.absolute_current_image_path))
 
     def _prev_image(self) -> None:
         # Loads the next image in the current directory
         # self._maybe_save_before_destructive_action("load next image")
         self.save_annotations()
 
-        # Get the parent directory of the currently loaded image
-        current_image_directory = Path(self.absolute_current_image_path).parent
-        # Get all the images from that directory
-        all_files = sorted(
-            [
-                str(file)
-                for file in current_image_directory.iterdir()
-                if file.suffix == ".tif"
-            ]
-        )
+        if self.queue_mode:
+            # Queue mode: move backward through unannotated list
+            if self.queue_index <= 0:
+                messagebox.showwarning(
+                    "Start of Queue",
+                    "You're at the beginning of the unannotated images.",
+                )
+                return
 
-        # Get the index of the current file
-        idx = all_files.index(str(self.absolute_current_image_path))
-        if idx == 0:
-            messagebox.showwarning(
-                "Beginning of Directory",
-                "You've reached the beginning of the current image directory, please use 'Load Image' to find a new image, or use 'Next Image' to move forward",
-            )
+            self.queue_index -= 1
+            prev_path = self.unannotated_queue[self.queue_index]
+            self.absolute_current_image_path = prev_path
+            self.load_image_from_path(prev_path)
+            self._update_queue_status()
         else:
-            self.absolute_current_image_path = all_files[idx - 1]
-            self.load_image_from_path(Path(self.absolute_current_image_path))
+            idx, all_files = self._get_image_index_from_directory()
+            if idx == 0:
+                messagebox.showwarning(
+                    "Beginning of Directory",
+                    "You've reached the beginning of the current image directory, please use 'Load Image' to find a new image, or use 'Next Image' to move forward",
+                )
+            else:
+                self.absolute_current_image_path = Path(
+                    self.absolute_current_image_path.resolve().parent
+                    / all_files[idx - 1]
+                )
+                self.load_image_from_path(Path(self.absolute_current_image_path))
 
     def _on_pg_down(self, event) -> None:
         self._next_image()
@@ -650,7 +830,7 @@ class AnnotationGUI(tk.Tk):
         if Path(self.abs_csv_path).exists():
             df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
             # col0 = df.columns[0]
-            col0 = "image_path"
+            col0 = self._detect_path_column(df)
             # Ensure image_quality column exists
             if "image_quality" not in df.columns:
                 df["image_quality"] = 0  # ← Add this
@@ -658,7 +838,7 @@ class AnnotationGUI(tk.Tk):
                 if lm not in df.columns:
                     df[lm] = ""
         else:
-            col0 = "image_path"
+            col0 = self.csv_path_column
             cols: List[str] = [col0, "image_quality"] + self.landmarks
             df = pd.DataFrame(columns=cols)
         row = {
@@ -694,17 +874,23 @@ class AnnotationGUI(tk.Tk):
         current_filename = PurePath(self.current_image_path).name
         current_path_str = str(self.current_image_path)
 
-        # Try exact match first
-        mask = df[col0] == current_path_str
+        # If you're starting from a fresh CSV, then the dataframe is empty, which will throw
+        # errors when doing dataframe key querying. We only have to worry about duplicates with
+        # a non-empty dataframe
 
-        # If no exact match, try filename matching
-        if not mask.any():
-            mask = df[col0].apply(lambda x: current_filename in str(x))
+        if not df.empty:
+            # Try exact match first
+            mask = df[col0] == current_path_str
 
-        # Remove matching rows
-        df = df[~mask]
+            # If no exact match, try filename matching
+            if not mask.any():
+                mask = df[col0].apply(lambda x: current_filename in str(x))
 
-        df = df[df[col0] != self.current_image_path]
+            # Remove matching rows
+            df = df[~mask]
+
+            df = df[df[col0] != self.current_image_path]
+
         df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
         keep_cols = [col0, "image_quality"] + self.landmarks
         df = df[[c for c in df.columns if c in keep_cols]]
@@ -732,10 +918,12 @@ class AnnotationGUI(tk.Tk):
 
             shutil.copy2(str(csv_path), str(backup_path))
 
-            # messagebox.showinfo(
-            #     "Saved",
-            #     f"Annotations saved to {csv_path}\nBackup: {backup_path}",
-            # )
+            if PLATFORM == "Windows":
+                # removing the save on mac and only setting the windows.
+                messagebox.showinfo(
+                    "Saved",
+                    f"Annotations saved to {csv_path}\nBackup: {backup_path}",
+                )
             self.dirty = False
         except Exception as e:
             messagebox.showerror("Save Failed", f"Could not save CSV:\n{e}")
@@ -784,7 +972,9 @@ class AnnotationGUI(tk.Tk):
                 messagebox.showinfo("Load Points", "No saved points for this image.")
             return
         # We know that this is image_path
-        df_img_path_col = "image_path"  # this is just grabbing image_path
+        # df_img_path_col = "image_path"  # this is just grabbing image_path
+        df_img_path_col = self._detect_path_column(df)
+
         # rowdf = df.loc[df[col0] == self.current_image_path]
         rowdf = df.loc[df[df_img_path_col] == str(self.current_image_path)]
         if rowdf.empty:
@@ -896,7 +1086,7 @@ class AnnotationGUI(tk.Tk):
                 ys - 10,
                 text=lm,
                 fill="yellow",
-                font=("Arial", 10, "bold"),
+                font=self.dialogue_font,
                 tags="marker",
             )
         for lm in ("LOB", "ROB"):
@@ -1058,7 +1248,7 @@ class AnnotationGUI(tk.Tk):
             vis = bool(vis_var.get())
         has_mask = (
             self.current_image_path
-            and self.current_image_path in self.seg_masks
+            and str(self.current_image_path) in self.seg_masks
             and lm in self.seg_masks[str(self.current_image_path)]
         )
         if not has_mask or not vis:
@@ -1187,12 +1377,14 @@ class AnnotationGUI(tk.Tk):
         if seed is None or cv2 is None or self.current_image is None:
             return
         x, y = seed
-        if apply_saved_settings:
-            self._apply_settings_to_ui_for(lm)
-        if self.method.get() == "Flood Fill":
-            mask = self._segment_ff(x, y)
-        else:
-            mask = self._segment_adaptive_cc(x, y)
+        mask = self._segment_with_fallback(x, y, lm)
+
+        # if apply_saved_settings:
+        #     self._apply_settings_to_ui_for(lm)
+        # if self.method.get() == "Flood Fill":
+        #     mask = self._segment_ff(x, y)
+        # else:
+        #     mask = self._segment_adaptive_cc(x, y)
         if mask is None:
             messagebox.showwarning(
                 "Segmentation",
@@ -1202,6 +1394,60 @@ class AnnotationGUI(tk.Tk):
         mask = self._grow_shrink(mask, self.grow_shrink.get())
         self.seg_masks.setdefault(str(self.current_image_path), {})[lm] = mask
         self._update_overlay_for(lm)
+
+    def _segment_with_fallback(self, x: int, y: int, lm: str) -> np.ndarray | None:
+        """
+        Try segmentation with multiple fallback strategies.
+        Returns mask or None if all strategies fail.
+        """
+        # Strategy 1: Try with current settings
+        if self.method.get() == "Flood Fill":
+            mask = self._segment_ff(x, y)
+        else:
+            mask = self._segment_adaptive_cc(x, y)
+
+        if mask is not None:
+            return mask
+
+        # Strategy 2: Try nearby seed points (jittering)
+        offsets = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (2, 2), (-2, -2)]
+        for dx, dy in offsets[1:]:  # Skip (0,0) since we already tried it
+            new_x, new_y = x + dx, y + dy
+            if self.method.get() == "Flood Fill":
+                mask = self._segment_ff(new_x, new_y)
+            else:
+                mask = self._segment_adaptive_cc(new_x, new_y)
+
+            if mask is not None:
+                return mask
+
+        # Strategy 3: Try opposite method
+        if self.method.get() == "Flood Fill":
+            mask = self._segment_adaptive_cc(x, y)
+        else:
+            mask = self._segment_ff(x, y)
+
+        if mask is not None:
+            return mask
+
+        # Strategy 4: Try with relaxed sensitivity (more permissive)
+        original_sens = self.fill_sensitivity.get()
+        relaxed_sens = min(50, original_sens + 10)
+        self.fill_sensitivity.set(relaxed_sens)
+
+        if self.method.get() == "Flood Fill":
+            mask = self._segment_ff(x, y)
+        else:
+            mask = self._segment_adaptive_cc(x, y)
+
+        # Restore original
+        self.fill_sensitivity.set(original_sens)
+
+        if mask is not None:
+            return mask
+
+        # All strategies failed
+        return None
 
     # Converts image to preprocessed grayscale (CLAHE + blur).
     def _preprocess_gray(self):
@@ -1372,6 +1618,129 @@ class AnnotationGUI(tk.Tk):
     def _on_arrow_right(self, event) -> None:
         self._set_selected_visibility(True)
 
+    def _format_shortcuts(
+        self,
+        rows,
+        width: int = 60,
+        gap_min: int = 2,
+        leader: str = ".",
+    ):
+        """
+        2-column text block with an 'hfill' made of leader characters (e.g. dots).
+        Looks good even with proportional fonts.
+        """
+
+        key_w = max(len(k) for k, _ in rows)
+        lines = []
+
+        for keys, action in rows:
+            left = f"{keys:<{key_w}}"
+            # Fill the middle with dots/spaces so the action ends at width-ish
+            fill_len = max(gap_min, width - len(left) - len(action))
+            fill = (leader * fill_len) if leader else (" " * fill_len)
+            lines.append(f"{left} {fill} {action}")
+
+        return "\n".join(lines)
+
+    def _on_h_press(self, event=None) -> None:
+        shortcuts = [
+            ("<up> / ↑ / d", "Previous landmark"),
+            ("<down> / ↓ / f", "Next landmark"),
+            ("<left> / <--", "Hide selected landmark"),
+            ("<right> / -->", "Show selected landmark"),
+            ("b / Ctrl+b", "Previous image"),
+            ("n / Ctrl+n", "Next image"),
+            ("1–4", "Set image quality (1-worst, 4-best)"),
+            ("Backspace", "Delete selected landmark"),
+            ("h", "Show this help"),
+            ("Mouse click", "Place landmark"),
+            ("Mouse wheel", "Adjust hover radius"),
+        ]
+        help_text = self._format_shortcuts(
+            shortcuts,
+            width=60,
+            leader=".",
+        )
+
+        win = tk.Toplevel(self)
+        win.title("Help & Keyboard Shortcuts")
+        win.transient(self)
+        win.resizable(False, False)
+
+        frm = ttk.Frame(win, padding=12)
+        frm.pack(fill="both", expand=True)
+
+        ttk.Label(
+            frm,
+            text="Keyboard Shortcuts",
+            font=self.heading_font,
+        ).pack(anchor="w", pady=(0, 8))
+
+        text = tk.Text(
+            frm,
+            wrap="none",
+            height=len(shortcuts) + 1,
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        text.pack(fill="both", expand=True)
+
+        text.configure(font=self.dialogue_font)
+
+        text.insert("1.0", help_text)
+        text.configure(state="disabled")
+
+        ttk.Button(
+            frm,
+            text="Close",
+            command=win.destroy,
+        ).pack(anchor="e", pady=(10, 0))
+
+    def _configure_linux_fonts(self) -> None:
+        # (optional) scaling tweak, only on Linux
+        self.tk.call("tk", "scaling", 1.25)
+
+        # Pick whatever you decided works well in your env
+        self.heading_font = tkfont.Font(
+            family="Liberation Sans", size=15, weight="bold"
+        )
+        self.dialogue_font = tkfont.Font(
+            family="Liberation Sans", size=12, weight="bold"
+        )
+
+        # Tk named fonts (classic tk widgets)
+        for name in (
+            "TkDefaultFont",
+            "TkTextFont",
+            "TkFixedFont",
+            "TkMenuFont",
+            "TkHeadingFont",
+        ):
+            f = tkfont.nametofont(name)
+            f.configure(family="Liberation Sans", size=12)
+
+        # ttk styles
+        style = ttk.Style(self)
+        style.theme_use(style.theme_use())  # force theme init / refresh
+
+        style.configure(".", font=self.dialogue_font)
+        for s in (
+            "TLabel",
+            "TButton",
+            "TCheckbutton",
+            "TRadiobutton",
+            "TEntry",
+            "TCombobox",
+            "TMenubutton",
+            "TNotebook",
+            "TNotebook.Tab",
+            "Treeview",
+            "Treeview.Heading",
+            "TLabelframe.Label",
+        ):
+            style.configure(s, font=self.dialogue_font)
+        return
+
     def _widget_y_in_inner(self, widget) -> int:
         y = 0
         w = widget
@@ -1383,7 +1752,143 @@ class AnnotationGUI(tk.Tk):
             w = w.nametowidget(parent_name)
         return y
 
+    def _find_unannotated_images(self) -> None:
+        """Scan directory for images not in CSV, enter queue mode."""
+        if not hasattr(self, "abs_csv_path") or not self.abs_csv_path:
+            messagebox.showwarning(
+                "No CSV", "Please load a CSV file first (Load CSV button)"
+            )
+            return
+
+        # Select directory to scan
+        scan_dir = filedialog.askdirectory(
+            initialdir=BASE_DIR, title="Select folder to scan for unannotated images"
+        )
+
+        if not scan_dir:
+            return
+
+        scan_path = Path(scan_dir)
+
+        # Load existing annotations from CSV
+        try:
+            df = pd.read_csv(self.abs_csv_path)
+            col = self._detect_path_column(df)
+
+            # Build a set of files that are "truly annotated"
+            # (either have landmarks OR have been quality-rated as bad)
+            annotated_filenames = set()
+
+            for _, row in df.iterrows():
+                filename = Path(str(row[col])).name.lower()
+
+                # Check if any landmark columns have values
+                has_landmarks = any(
+                    pd.notna(row.get(lm)) and str(row.get(lm, "")).strip()
+                    for lm in self.landmarks
+                )
+
+                # Check image quality
+                quality = row.get("image_quality", 0)
+                try:
+                    quality = int(quality)
+                except (ValueError, TypeError):
+                    quality = 0
+
+                # Consider "annotated" if:
+                # 1. Has landmarks, OR
+                # 2. Has no landmarks but quality != 0 (marked as bad image)
+                if has_landmarks or quality != 0:
+                    annotated_filenames.add(filename)
+
+        except Exception as e:
+            messagebox.showerror("CSV Error", f"Failed to read CSV:\n{e}")
+            return
+
+        # Recursively find all image files
+        all_images = []
+        # for ext in self.possible_image_suffix:
+        #     all_images.extend(scan_path.rglob(f"*{ext}"))
+        #     # all_images.extend(scan_path.rglob(f"*{ext.lower()}"))
+        for dirpath, dirnames, filenames in scan_path.walk():
+            if "duplicates" in dirnames:
+                dirnames.remove("duplicates")
+            for file in filenames:
+                if Path(file).suffix.lower() in self.possible_image_suffix:
+                    all_images.append(dirpath / file)
+                    pass
+                pass
+            pass
+
+        # Filter to unannotated only
+        unannotated = [
+            img
+            for img in all_images
+            if (img.name.lower() not in annotated_filenames)
+            and (img.parent.name != "duplicates")
+        ]
+
+        if not unannotated:
+            messagebox.showinfo(
+                "All Done!", f"All images in {scan_path.name} are already annotated!"
+            )
+            return
+
+        # Sort for consistent ordering
+        unannotated.sort()
+
+        # Enter queue mode
+        self.unannotated_queue = unannotated
+        self.queue_index = 0
+        self.queue_mode = True
+
+        # Load first unannotated image
+        self.absolute_current_image_path = unannotated[0]
+        self.load_image_from_path(unannotated[0])
+
+        self._update_queue_status()
+
+        messagebox.showinfo(
+            "Queue Mode",
+            f"Found {len(unannotated)} unannotated images.\n\n"
+            f"Use Next/Prev (or N/B keys) to cycle through them.\n"
+            f"Click 'Exit Queue Mode' to return to normal browsing.",
+        )
+        self.exit_queue_btn.config(state="normal")
+        return
+
+    def _update_queue_status(self) -> None:
+        """Update the queue status label."""
+        if self.queue_mode and self.unannotated_queue:
+            self.queue_status_var.set(
+                f"Queue: {self.queue_index + 1} / {len(self.unannotated_queue)} unannotated"
+            )
+        else:
+            self.queue_status_var.set("")
+
+    def _exit_queue_mode(self) -> None:
+        """Return to normal directory browsing."""
+        self.queue_mode = False
+        self.unannotated_queue.clear()
+        self.queue_index = 0
+        self._update_queue_status()
+        self.exit_queue_btn.config(state="disabled")
+        messagebox.showinfo("Queue Mode", "Returned to normal directory browsing.")
+
+    def _change_method_to_ff(self) -> None:
+        self.use_adap_cc.set(False)
+        self.use_ff.set(True)
+        self.method.set("Flood Fill")
+        return
+
+    def _change_method_to_acc(self) -> None:
+        self.use_adap_cc.set(True)
+        self.use_ff.set(False)
+        self.method.set("Adaptive CC")
+        return
+
 
 if __name__ == "__main__":
     app = AnnotationGUI()
+    app.option_add("*Label.font", "helvetica 20 bold")
     app.mainloop()

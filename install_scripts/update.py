@@ -23,8 +23,7 @@ from urllib.request import Request, urlopen
 
 def load_config():
     """Load configuration from app.env file."""
-    script_dir = Path(__file__).parent
-    install_root = script_dir.parent
+    install_root = Path(Path.home() / "2d-point-annotator")
     env_file = install_root / "app.env"
 
     config = {
