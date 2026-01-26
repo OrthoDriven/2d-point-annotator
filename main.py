@@ -9,7 +9,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from pathlib import Path, PurePath
 from tkinter import filedialog, messagebox, ttk
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import cv2
 import numpy as np
@@ -124,6 +124,9 @@ class AnnotationGUI(tk.Tk):
         self.queue_mode = False
         self.unannotated_queue: List[Path] = []
         self.queue_index = 0
+        self.check_csv_mode = False
+        self.csv_path_queue: List[Path] = []
+        self.csv_index = 0
 
     # Builds the left image canvas, right control panel, and tool widgets.
     def focus_widget(self, event):
@@ -191,6 +194,20 @@ class AnnotationGUI(tk.Tk):
             state="disabled",  # Only enabled when in queue mode
         )
         self.exit_queue_btn.pack(fill="x", pady=5)
+
+        tk.Button(
+            ctrl,
+            text="Check CSV Images",
+            command=self._check_csv_images,
+        ).pack(fill="x", pady=5)
+
+        self.exit_csv_check_btn = tk.Button(
+            ctrl,
+            text="Exit CSV Check Mode",
+            command=self._exit_csv_check_mode,
+            state="disabled",
+        )
+        self.exit_csv_check_btn.pack(fill="x", pady=5)
 
         path_entry = tk.Entry(
             row,
@@ -588,13 +605,18 @@ class AnnotationGUI(tk.Tk):
             var.set(value)
         self._draw_points()
 
-    def load_landmarks_from_csv(self) -> None:
-        self._maybe_save_before_destructive_action("load point name CSV")
-        self.abs_csv_path = filedialog.askopenfilename(
-            initialdir=BASE_DIR, filetypes=[("CSV File", ("*.csv"))]
-        )
+    def load_landmarks_from_csv(self, path: Optional[Union[Path, str]] = None) -> None:
+        if path is None:
+            self._maybe_save_before_destructive_action("load point name CSV")
+            self.abs_csv_path = filedialog.askopenfilename(
+                initialdir=BASE_DIR, filetypes=[("CSV File", ("*.csv"))]
+            )
+        else:
+            self.abs_csv_path = str(path)
 
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
+        if path is not None:
+            print(df)
         self.csv_path_column = self._detect_path_column(df)
 
         # Removing columns that we know are not landmarks, the rest are assumed to be landmarks
@@ -605,6 +627,8 @@ class AnnotationGUI(tk.Tk):
         )
 
         self.landmarks = list(df.columns)
+        if path is not None:
+            print(self.landmarks)
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
         self._build_landmark_panel()
@@ -695,6 +719,15 @@ class AnnotationGUI(tk.Tk):
             self.absolute_current_image_path = prev_path
             self.load_image_from_path(prev_path)
             self._update_queue_status()
+
+        elif self.check_csv_mode:
+            if self.csv_index >= len(self.csv_path_queue) - 1:
+                return
+            self.csv_index += 1
+            prev_path = self.csv_path_queue[self.csv_index]
+            self.absolute_current_image_path = prev_path
+            self.load_image_from_path(Path(prev_path))
+
         else:
             idx, all_files = self._get_image_index_from_directory()
             if len(all_files) == idx + 1:
@@ -729,6 +762,14 @@ class AnnotationGUI(tk.Tk):
             self.absolute_current_image_path = prev_path
             self.load_image_from_path(prev_path)
             self._update_queue_status()
+
+        elif self.check_csv_mode:
+            if self.csv_index <= 0:
+                return
+            self.csv_index -= 1
+            prev_path = self.csv_path_queue[self.csv_index]
+            self.absolute_current_image_path = prev_path
+            self.load_image_from_path(Path(prev_path))
         else:
             idx, all_files = self._get_image_index_from_directory()
             if idx == 0:
@@ -1787,7 +1828,7 @@ class AnnotationGUI(tk.Tk):
 
             # Build a set of files that are "truly annotated"
             # (either have landmarks OR have been quality-rated as bad)
-            annotated_filenames = set()
+            annotated_filenames: Set = set()
 
             for _, row in df.iterrows():
                 # filename = Path(str(row[col])).name.lower()
@@ -1896,6 +1937,29 @@ class AnnotationGUI(tk.Tk):
         self.use_adap_cc.set(True)
         self.use_ff.set(False)
         self.method.set("Adaptive CC")
+        return
+
+    def _check_csv_images(self):
+        self.abs_csv_path = filedialog.askopenfilename(
+            initialdir=BASE_DIR, filetypes=[("CSV File", ("*.csv"))]
+        )
+
+        df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
+        csv_path_column = self._detect_path_column(df)
+        self.load_landmarks_from_csv(self.abs_csv_path)
+        self.check_csv_mode = True
+        self.csv_path_queue = list(df[csv_path_column])
+        self.absolute_current_image_path = Path(self.csv_path_queue[0])
+        self.load_image_from_path(Path(self.csv_path_queue[0]))
+
+        return
+
+    def _exit_csv_check_mode(self):
+        self.check_csv_mode = False
+        self.csv_path_queue.clear()
+        self.csv_index = 0
+        self.exit_csv_check_btn.config(state="disabled")
+
         return
 
 
