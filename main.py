@@ -615,8 +615,6 @@ class AnnotationGUI(tk.Tk):
             self.abs_csv_path = str(path)
 
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
-        if path is not None:
-            print(df)
         self.csv_path_column = self._detect_path_column(df)
 
         # Removing columns that we know are not landmarks, the rest are assumed to be landmarks
@@ -627,8 +625,6 @@ class AnnotationGUI(tk.Tk):
         )
 
         self.landmarks = list(df.columns)
-        if path is not None:
-            print(self.landmarks)
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
         self._build_landmark_panel()
@@ -1941,7 +1937,7 @@ class AnnotationGUI(tk.Tk):
 
     def _check_csv_images(self):
         self.abs_csv_path = filedialog.askopenfilename(
-            initialdir=BASE_DIR, filetypes=[("CSV File", ("*.csv"))]
+            initialdir=BASE_DIR / "data/csv", filetypes=[("CSV File", ("*.csv"))]
         )
 
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)

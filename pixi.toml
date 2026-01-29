@@ -30,6 +30,7 @@ open-fonts = ">=0.7.0,<0.8"
 font-ttf-dejavu-sans-mono = ">=2.37,<3"
 font-ttf-dejavu = ">=2.37,<3"
 tk = ">=8.6.13,<9"
+polars = ">=1.37.1,<2"
 
 [target.linux-64.dependencies]
 xorg-libxft = ">=2.3.9,<3"
