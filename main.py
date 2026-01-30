@@ -9,12 +9,19 @@ import tkinter as tk
 import tkinter.font as tkfont
 from pathlib import Path, PurePath
 from tkinter import filedialog, messagebox, ttk
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageTk
+
+from path_utils import (
+    extract_filename,
+    filenames_match,
+    normalize_path_string,
+    normalize_relative_path,
+)
 
 BASE_DIR = Path(__file__).parent
 BASE_DIR_PATH = Path(BASE_DIR)
@@ -642,7 +649,8 @@ class AnnotationGUI(tk.Tk):
         current_image_directory = (
             Path(self.absolute_current_image_path).resolve().parent
         )
-        current_image_name = Path(self.absolute_current_image_path).resolve().name
+        # current_image_name = Path(self.absolute_current_image_path).resolve().name
+        current_image_name = extract_filename(self.absolute_current_image_path)
 
         all_files = [
             file.name
@@ -766,14 +774,14 @@ class AnnotationGUI(tk.Tk):
     def change_image_quality(self, val: int) -> None:
         self.current_image_quality = val
         if self.current_image_path:
-            self.path_var.set(Path(self.current_image_path).name)
+            self.path_var.set(extract_filename(self.current_image_path))
             self.quality_var.set(str(self.current_image_quality))
         self.dirty = True
         return
 
     def _update_path_var(self) -> None:
         if self.current_image_path:
-            self.path_var.set(Path(self.current_image_path).name)
+            self.path_var.set(extract_filename(self.current_image_path))
             self.quality_var.set(str(self.current_image_quality))
         self.dirty = True
 
@@ -803,7 +811,6 @@ class AnnotationGUI(tk.Tk):
             BASE_DIR.resolve(), walk_up=True
         )
         self.current_image_path = Path(rel_path)
-        image_filename = PurePath(rel_path).name
         w, h = self.current_image.size
         self.canvas.config(width=w, height=h)
         self.canvas.delete("all")
@@ -842,7 +849,7 @@ class AnnotationGUI(tk.Tk):
             cols: List[str] = [col0, "image_quality"] + self.landmarks
             df = pd.DataFrame(columns=cols)
         row = {
-            col0: str(self.current_image_path),
+            col0: normalize_path_string(self.current_image_path),
             "image_quality": self.current_image_quality,
         }
         # pts = self.annotations.get(self.current_image_path, {})
@@ -871,8 +878,8 @@ class AnnotationGUI(tk.Tk):
                 row[lm] = ""
             pass
 
-        current_filename = PurePath(self.current_image_path).name
-        current_path_str = str(self.current_image_path)
+        current_filename = extract_filename(self.current_image_path)
+        current_path_str = normalize_path_string(self.current_image_path)
 
         # If you're starting from a fresh CSV, then the dataframe is empty, which will throw
         # errors when doing dataframe key querying. We only have to worry about duplicates with
@@ -933,7 +940,7 @@ class AnnotationGUI(tk.Tk):
     def _get_annotations(self) -> Tuple[Dict[str, Tuple[float, float]], int]:
         """Returns (points_dict, quality) for current image."""
         if self.current_image_path is not None:
-            current_filename = PurePath(self.current_image_path).name
+            current_filename = extract_filename(self.current_image_path)
             # Try exact match first
             key = str(self.current_image_path)
             if key in self.annotations:
@@ -947,6 +954,9 @@ class AnnotationGUI(tk.Tk):
                     return self.annotations[key], quality
 
         return {}, 0
+
+    def _extract_filename_from_full_path(self, input: Union[Path, str]) -> str:
+        return PurePath(str(input).replace("\\", os.sep)).name
 
     def load_points(self, show_message: bool = True) -> None:
         if not self.current_image_path:
@@ -980,7 +990,7 @@ class AnnotationGUI(tk.Tk):
         if rowdf.empty:
             # Check if the current image filename is in any of the rows
             # Only if that fails do we reset the points values
-            current_filename = PurePath(self.current_image_path).name
+            current_filename = extract_filename(self.current_image_path)
             found_filename = False
             for name in list(df[df_img_path_col]):
                 if current_filename in name:
@@ -1780,7 +1790,8 @@ class AnnotationGUI(tk.Tk):
             annotated_filenames = set()
 
             for _, row in df.iterrows():
-                filename = Path(str(row[col])).name.lower()
+                # filename = Path(str(row[col])).name.lower()
+                filename = extract_filename(row[col])
 
                 # Check if any landmark columns have values
                 has_landmarks = any(
