@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import ast
 import datetime
+import json
 import os
 import platform
 import shutil
+import sqlite3
 import tkinter as tk
 import tkinter.font as tkfont
+from datetime import datetime
 from pathlib import Path, PurePath
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Optional, Set, Tuple, Union
@@ -127,6 +130,8 @@ class AnnotationGUI(tk.Tk):
         self.check_csv_mode = False
         self.csv_path_queue: List[Path] = []
         self.csv_index = 0
+        self.db_path: Optional[Path] = None
+        self.last_update = datetime.now()
 
     # Builds the left image canvas, right control panel, and tool widgets.
     def focus_widget(self, event):
@@ -614,6 +619,8 @@ class AnnotationGUI(tk.Tk):
         else:
             self.abs_csv_path = str(path)
 
+        self.db_path = Path(self.abs_csv_path).with_suffix(".db")
+        self._init_database()
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
         self.csv_path_column = self._detect_path_column(df)
 
@@ -628,6 +635,60 @@ class AnnotationGUI(tk.Tk):
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
         self._build_landmark_panel()
+
+    def _init_database(self) -> None:
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS annotations (
+            image_filename TEXT PRIMARY KEY,
+            image_path TEXT,
+            image_quality INTEGER DEFAULT 0,
+            data TEXT, -- JSON blob of all landmarks
+            modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_modified
+        ON annotations(modified_at DESC)
+        """)
+        conn.commit()
+        conn.close()
+        return
+
+    def _db_is_populated(self) -> bool:
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM annotations")
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count > 0
+
+    def _import_csv_to_db(self):
+        df = pd.read_csv(self.abs_csv_path)
+        col = self._detect_path_column(df)
+
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+
+        for _, row in df.iterrows():
+            path = str(row[col])
+            quality = int(row.get("image_quality", 0))
+            landmark_data = {}
+            for lm in self.landmarks:
+                val = row.get(lm, "")
+                if val and str(val).strip():
+                    landmark_data[lm] = str(val)
+                pass
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO annotations (image_filename, image_path, image_quality, data)
+                VALUES (?, ?, ?, ?)
+            """,
+                (extract_filename(path), path, quality, json.dumps(landmark_data)),
+            )
+        conn.commit()
+        conn.close()
 
     # Prompts to save pending changes before destructive operations.
     def _maybe_save_before_destructive_action(self, why: str = "continue") -> None:
@@ -645,6 +706,7 @@ class AnnotationGUI(tk.Tk):
     # Handles window close, offering to save unsaved annotations.
     def _on_close(self) -> None:
         self._maybe_save_before_destructive_action("exit")
+        self.window_close_flag = True
         self.destroy()
 
     # Opens an image, prepares canvas, and loads saved points.
@@ -669,7 +731,6 @@ class AnnotationGUI(tk.Tk):
         current_image_directory = (
             Path(self.absolute_current_image_path).resolve().parent
         )
-        # current_image_name = Path(self.absolute_current_image_path).resolve().name
         current_image_name = extract_filename(self.absolute_current_image_path)
 
         all_files = [
@@ -848,6 +909,7 @@ class AnnotationGUI(tk.Tk):
             BASE_DIR.resolve(), walk_up=True
         )
         self.current_image_path = Path(rel_path)
+        image_filename = PurePath(rel_path).name
         w, h = self.current_image.size
         self.canvas.config(width=w, height=h)
         self.canvas.delete("all")
@@ -868,37 +930,24 @@ class AnnotationGUI(tk.Tk):
 
     # Writes annotations (and LOB/ROB settings) back to the CSV.
     def save_annotations(self) -> None:
+        """Save to database, then export to CSV."""
         if not self.current_image_path:
             messagebox.showwarning("Save", "No image loaded.")
             return
-        if Path(self.abs_csv_path).exists():
-            df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
-            # col0 = df.columns[0]
-            col0 = self._detect_path_column(df)
-            # Ensure image_quality column exists
-            if "image_quality" not in df.columns:
-                df["image_quality"] = 0  # ← Add this
-            for lm in self.landmarks:
-                if lm not in df.columns:
-                    df[lm] = ""
-        else:
-            col0 = self.csv_path_column
-            cols: List[str] = [col0, "image_quality"] + self.landmarks
-            df = pd.DataFrame(columns=cols)
-        row = {
-            col0: normalize_path_string(self.current_image_path),
-            "image_quality": self.current_image_quality,
-        }
-        # pts = self.annotations.get(self.current_image_path, {})
+
+        # Get annotation data
         pts, quality = self._get_annotations()
-        per_img_settings = self.lm_settings.setdefault(str(self.current_image_path), {})
+        per_img_settings = self.lm_settings.get(str(self.current_image_path), {})
+
+        # Prepare landmark data
+        landmark_data = {}
         for lm in self.landmarks:
             if lm in pts:
                 x, y = pts[lm]
                 if lm in ("LOB", "ROB"):
                     st = per_img_settings.get(lm, self._current_settings_dict())
                     method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
-                    cell = [
+                    landmark_data[lm] = [
                         float(x),
                         float(y),
                         method_code,
@@ -908,76 +957,79 @@ class AnnotationGUI(tk.Tk):
                         int(st["clahe"]),
                         int(st["grow"]),
                     ]
-                    row[lm] = repr(cell)
                 else:
-                    row[lm] = f"[{float(x)},{float(y)}]"
-            else:
-                row[lm] = ""
-            pass
+                    landmark_data[lm] = [float(x), float(y)]
 
-        current_filename = extract_filename(self.current_image_path)
-        current_path_str = normalize_path_string(self.current_image_path)
+        # Save to database
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO annotations (image_filename, image_path, image_quality, data, modified_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """,
+            (
+                extract_filename(self.current_image_path),
+                str(self.current_image_path),
+                quality,
+                json.dumps(landmark_data),
+            ),
+        )
+        conn.commit()
+        conn.close()
 
-        # If you're starting from a fresh CSV, then the dataframe is empty, which will throw
-        # errors when doing dataframe key querying. We only have to worry about duplicates with
-        # a non-empty dataframe
+        # Export to CSV (periodic, not every save)
+        self._export_db_to_csv()
 
-        if not df.empty:
-            # Try exact match first
-            mask = df[col0] == current_path_str
+        self.dirty = False
+        if PLATFORM == "Windows":
+            messagebox.showinfo("Saved", "Annotations saved")
 
-            # If no exact match, try filename matching
-            if not mask.any():
-                mask = df[col0].apply(lambda x: current_filename in str(x))
+    def _export_db_to_csv(self):
+        """Export database to CSV file."""
+        current_time = datetime.now()
+        # save every so often, or save when the window is being closed
+        if ((current_time - self.last_update).total_seconds() > 20) or (
+            self.window_close_flag
+        ):
+            self.last_update = datetime.now()
 
-            # Remove matching rows
-            df = df[~mask]
+            conn = sqlite3.connect(str(self.db_path))
+            cursor = conn.cursor()
 
-            df = df[df[col0] != self.current_image_path]
+            # TODO: maybe want to dump image_filename into the csv as well, but we can keep it as image path for now
+            cursor.execute("SELECT image_path, image_quality, data FROM annotations")
+            rows = cursor.fetchall()
+            conn.close()
 
-        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-        keep_cols = [col0, "image_quality"] + self.landmarks
-        df = df[[c for c in df.columns if c in keep_cols]]
-        try:
-            csv_path = Path(self.abs_csv_path).expanduser().resolve()
-            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            # Build DataFrame
+            records = []
+            for path, quality, data_json in rows:
+                record = {self.csv_path_column: path, "image_quality": quality}
 
-            # 1) Save the "real" CSV
+                landmark_data = json.loads(data_json)
+                for lm in self.landmarks:
+                    if lm in landmark_data:
+                        record[lm] = repr(landmark_data[lm])
+                    else:
+                        record[lm] = ""
+
+                records.append(record)
+
+            df = pd.DataFrame(records)
+
+            # Ensure column order
+            cols = [self.csv_path_column, "image_quality"] + self.landmarks
+            df = df[[c for c in cols if c in df.columns]]
+
+            # Save with backup
+            csv_path = Path(self.abs_csv_path)
             df.to_csv(str(csv_path), index=False)
-
-            # 2) Daily backup: keep current + previous
-            now = datetime.datetime.now()
-            iso_date = now.date().isoformat()  # "YYYY-MM-DD"
-
-            backup_dir = DATA_DIR / iso_date
-            backup_dir.mkdir(parents=True, exist_ok=True)
-
-            backup_path = backup_dir / f"{csv_path.stem}_backup{csv_path.suffix}"
-            prev_path = backup_dir / f"{csv_path.stem}_backup.prev{csv_path.suffix}"
-
-            # If a backup already exists, rotate it to ".prev" first
-            if backup_path.exists():
-                # replace() is atomic on the same filesystem
-                backup_path.replace(prev_path)
-
-            shutil.copy2(str(csv_path), str(backup_path))
-
-            if PLATFORM == "Windows":
-                # removing the save on mac and only setting the windows.
-                messagebox.showinfo(
-                    "Saved",
-                    f"Annotations saved to {csv_path}\nBackup: {backup_path}",
-                )
-            self.dirty = False
-        except Exception as e:
-            messagebox.showerror("Save Failed", f"Could not save CSV:\n{e}")
-
-    # Loads saved points and per-landmark settings for the current image.
 
     def _get_annotations(self) -> Tuple[Dict[str, Tuple[float, float]], int]:
         """Returns (points_dict, quality) for current image."""
         if self.current_image_path is not None:
-            current_filename = extract_filename(self.current_image_path)
+            current_filename = PurePath(self.current_image_path).name
             # Try exact match first
             key = str(self.current_image_path)
             if key in self.annotations:
@@ -991,9 +1043,6 @@ class AnnotationGUI(tk.Tk):
                     return self.annotations[key], quality
 
         return {}, 0
-
-    def _extract_filename_from_full_path(self, input: Union[Path, str]) -> str:
-        return PurePath(str(input).replace("\\", os.sep)).name
 
     def load_points(self, show_message: bool = True) -> None:
         if not self.current_image_path:
@@ -1027,7 +1076,7 @@ class AnnotationGUI(tk.Tk):
         if rowdf.empty:
             # Check if the current image filename is in any of the rows
             # Only if that fails do we reset the points values
-            current_filename = extract_filename(self.current_image_path)
+            current_filename = PurePath(self.current_image_path).name
             found_filename = False
             for name in list(df[df_img_path_col]):
                 if current_filename in name:
@@ -1827,8 +1876,7 @@ class AnnotationGUI(tk.Tk):
             annotated_filenames: Set = set()
 
             for _, row in df.iterrows():
-                # filename = Path(str(row[col])).name.lower()
-                filename = extract_filename(row[col])
+                filename = Path(str(row[col])).name.lower()
 
                 # Check if any landmark columns have values
                 has_landmarks = any(
