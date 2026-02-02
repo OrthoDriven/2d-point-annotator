@@ -46,6 +46,8 @@ class AnnotationGUI(tk.Tk):
         self.heading_font.configure(weight="bold")  # keep size default
 
         self.dialogue_font = tkfont.nametofont("TkDefaultFont").copy()
+        self.landmark_font = tkfont.nametofont("TkDefaultFont").copy()
+        self.window_close_flag = False
         if PLATFORM == "Linux":
             self._configure_linux_fonts()
 
@@ -117,6 +119,7 @@ class AnnotationGUI(tk.Tk):
         self.bind("<Control-b>", self._on_pg_up)
         self.bind("<Control-n>", self._on_pg_down)
         self.bind("<n>", self._on_pg_down)
+        self.bind("<g>", self._on_pg_down)
         self.bind("<b>", self._on_pg_up)
         self.bind("<BackSpace>", self._on_backspace)
         self.bind("1", self._on_1_press)
@@ -148,6 +151,11 @@ class AnnotationGUI(tk.Tk):
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.canvas.bind("<Button-4>", lambda e: self._on_scroll_linux(1))
         self.canvas.bind("<Button-5>", lambda e: self._on_scroll_linux(-1))
+
+        self.landmark_font = tkfont.Font(
+            family="Liberation Sans", size=18, weight="bold"
+        )
+
         ctrl = tk.Frame(self)
         ctrl.pack(side=tk.RIGHT, fill="y", padx=10, pady=10)
         self._ctrl = ctrl
@@ -576,6 +584,7 @@ class AnnotationGUI(tk.Tk):
     def _on_landmark_selected(self) -> None:
         lm = self.selected_landmark.get()
         self._apply_settings_to_ui_for(lm)
+        self._draw_points()
         self.after_idle(self._scroll_landmark_into_view, lm)
 
     def _change_selected_landmark(self, step: int) -> None:
@@ -622,6 +631,7 @@ class AnnotationGUI(tk.Tk):
         self.db_path = Path(self.abs_csv_path).with_suffix(".db")
         self._init_database()
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
+
         self.csv_path_column = self._detect_path_column(df)
 
         # Removing columns that we know are not landmarks, the rest are assumed to be landmarks
@@ -635,6 +645,7 @@ class AnnotationGUI(tk.Tk):
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
         self._build_landmark_panel()
+        self._import_csv_to_db()
 
     def _init_database(self) -> None:
         conn = sqlite3.connect(str(self.db_path))
@@ -644,7 +655,7 @@ class AnnotationGUI(tk.Tk):
             image_filename TEXT PRIMARY KEY,
             image_path TEXT,
             image_quality INTEGER DEFAULT 0,
-            data TEXT, -- JSON blob of all landmarks
+            data BLOB, -- JSON blob of all landmarks
             modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
@@ -675,11 +686,20 @@ class AnnotationGUI(tk.Tk):
             path = str(row[col])
             quality = int(row.get("image_quality", 0))
             landmark_data = {}
+
             for lm in self.landmarks:
                 val = row.get(lm, "")
-                if val and str(val).strip():
-                    landmark_data[lm] = str(val)
-                pass
+                if pd.isna(val) or not str(val).strip():
+                    continue  # Skip empty values entirely
+
+                # Parse the string representation back to list
+                try:
+                    parsed = ast.literal_eval(str(val))
+                    landmark_data[lm] = parsed  # Store as actual list, not string
+                except (ValueError, SyntaxError):
+                    # If parsing fails, skip this landmark
+                    continue
+
             cursor.execute(
                 """
                 INSERT OR REPLACE INTO annotations (image_filename, image_path, image_quality, data)
@@ -707,6 +727,7 @@ class AnnotationGUI(tk.Tk):
     def _on_close(self) -> None:
         self._maybe_save_before_destructive_action("exit")
         self.window_close_flag = True
+        self._export_db_to_csv()
         self.destroy()
 
     # Opens an image, prepares canvas, and loads saved points.
@@ -997,7 +1018,6 @@ class AnnotationGUI(tk.Tk):
             conn = sqlite3.connect(str(self.db_path))
             cursor = conn.cursor()
 
-            # TODO: maybe want to dump image_filename into the csv as well, but we can keep it as image path for now
             cursor.execute("SELECT image_path, image_quality, data FROM annotations")
             rows = cursor.fetchall()
             conn.close()
@@ -1008,8 +1028,9 @@ class AnnotationGUI(tk.Tk):
                 record = {self.csv_path_column: path, "image_quality": quality}
 
                 landmark_data = json.loads(data_json)
+
                 for lm in self.landmarks:
-                    if lm in landmark_data:
+                    if lm in landmark_data and landmark_data[lm]:
                         record[lm] = repr(landmark_data[lm])
                     else:
                         record[lm] = ""
@@ -1022,8 +1043,14 @@ class AnnotationGUI(tk.Tk):
             cols = [self.csv_path_column, "image_quality"] + self.landmarks
             df = df[[c for c in cols if c in df.columns]]
 
-            # Save with backup
+            # Save CSV
             csv_path = Path(self.abs_csv_path)
+            if self.check_csv_mode:
+                dir = csv_path.parent
+                csv_name = Path(extract_filename(csv_path))
+                new_name = csv_name.stem + "_CHECKED.csv"
+                csv_path = Path(dir / new_name)
+
             df.to_csv(str(csv_path), index=False)
 
     def _get_annotations(self) -> Tuple[Dict[str, Tuple[float, float]], int]:
@@ -1168,6 +1195,12 @@ class AnnotationGUI(tk.Tk):
         pts, quality = self._get_annotations()
         self._update_found_checks(pts)
         for lm, (x, y) in pts.items():
+            drawing_current_selected = lm == self.selected_landmark.get()
+            oval_color = "blue" if drawing_current_selected else "red"
+            text_color = "orange" if drawing_current_selected else "yellow"
+            font = (
+                self.landmark_font if drawing_current_selected else self.dialogue_font
+            )
             vis_var = self.landmark_visibility.get(lm)
             if vis_var is not None and not vis_var.get():
                 continue
@@ -1175,14 +1208,20 @@ class AnnotationGUI(tk.Tk):
 
             r = 5
             self.canvas.create_oval(
-                xs - r, ys - r, xs + r, ys + r, outline="red", width=2, tags="marker"
+                xs - r,
+                ys - r,
+                xs + r,
+                ys + r,
+                outline=oval_color,
+                width=2,
+                tags="marker",
             )
             self.canvas.create_text(
                 xs,
                 ys - 10,
                 text=lm,
-                fill="yellow",
-                font=self.dialogue_font,
+                fill=text_color,
+                font=font,
                 tags="marker",
             )
         for lm in ("LOB", "ROB"):
@@ -1848,6 +1887,25 @@ class AnnotationGUI(tk.Tk):
             w = w.nametowidget(parent_name)
         return y
 
+    def _get_csv_images_from_directory(self, dir: Path) -> list[Path]:
+        df = pd.read_csv(self.abs_csv_path)
+
+        with sqlite3.connect(str(self.db_path)) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT image_filename FROM annotations")
+            rows = cursor.fetchall()
+        csv_files = [elem[0] for elem in rows]
+        print(csv_files)
+
+        local_dir_csv_files = []
+        for root, dirs, files in dir.walk():
+            for file in files:
+                if file in csv_files:
+                    local_dir_csv_files.append(Path(root / file))
+
+        return local_dir_csv_files
+
     def _find_unannotated_images(self) -> None:
         """Scan directory for images not in CSV, enter queue mode."""
         if not hasattr(self, "abs_csv_path") or not self.abs_csv_path:
@@ -1876,7 +1934,8 @@ class AnnotationGUI(tk.Tk):
             annotated_filenames: Set = set()
 
             for _, row in df.iterrows():
-                filename = Path(str(row[col])).name.lower()
+                # filename = Path(str(row[col])).name.lower()
+                filename = extract_filename(row[col])
 
                 # Check if any landmark columns have values
                 has_landmarks = any(
@@ -1903,9 +1962,6 @@ class AnnotationGUI(tk.Tk):
 
         # Recursively find all image files
         all_images = []
-        # for ext in self.possible_image_suffix:
-        #     all_images.extend(scan_path.rglob(f"*{ext}"))
-        #     # all_images.extend(scan_path.rglob(f"*{ext.lower()}"))
         for dirpath, dirnames, filenames in scan_path.walk():
             if "duplicates" in dirnames:
                 dirnames.remove("duplicates")
@@ -1992,9 +2048,25 @@ class AnnotationGUI(tk.Tk):
         csv_path_column = self._detect_path_column(df)
         self.load_landmarks_from_csv(self.abs_csv_path)
         self.check_csv_mode = True
-        self.csv_path_queue = list(df[csv_path_column])
+        # Let's check if the local directory exists
+        first_image = Path(df[csv_path_column][0])
+        if first_image.exists():
+            self.csv_path_queue = list(df[csv_path_column])
+        else:
+            if not hasattr(self, "csv_local_image_directory_path"):
+                self.csv_local_image_directory_path = filedialog.askdirectory()
+            self.csv_path_queue = self._get_csv_images_from_directory(
+                Path(self.csv_local_image_directory_path)
+            )
+            if len(self.csv_path_queue) == 0:
+                self.csv_local_image_directory_path = filedialog.askdirectory()
+
+            self.csv_path_queue = self._get_csv_images_from_directory(
+                Path(self.csv_local_image_directory_path)
+            )
+
         self.absolute_current_image_path = Path(self.csv_path_queue[0])
-        self.load_image_from_path(Path(self.csv_path_queue[0]))
+        self.load_image_from_path(self.absolute_current_image_path)
 
         return
 
