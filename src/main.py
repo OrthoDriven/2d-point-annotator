@@ -8,6 +8,7 @@ import os
 import platform
 import shutil
 import sqlite3
+import threading
 import tkinter as tk
 import tkinter.font as tkfont
 from datetime import datetime
@@ -30,17 +31,14 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageTk
 
+from dirs import APP_DIR, AUTH_DIR, BASE_DIR, BASE_DIR_PATH, PLATFORM
 from path_utils import (
     extract_filename,
     filenames_match,
     normalize_path_string,
     normalize_relative_path,
 )
-
-BASE_DIR = Path(__file__).parent
-BASE_DIR_PATH = Path(BASE_DIR)
-DATA_DIR = Path(BASE_DIR).resolve().parent / "data"
-PLATFORM = platform.system()
+from auth import OneDriveBackup
 
 
 class AnnotationGUI(tk.Tk):
@@ -151,6 +149,11 @@ class AnnotationGUI(tk.Tk):
         self.abs_csv_path: Optional[str] = None
         self.absolute_current_image_path: Optional[Path] = None
         self.csv_local_image_directory_path: Optional[str] = None
+
+        # OneDrive backup integration - initialize early to check/prompt for credentials
+        self.onedrive_backup = OneDriveBackup()
+        # Trigger credential check at startup (will show auth dialog if needed)
+        self.after(100, self._init_onedrive_credentials)
 
     # Builds the left image canvas, right control panel, and tool widgets.
     def focus_widget(self, event):
@@ -696,7 +699,7 @@ class AnnotationGUI(tk.Tk):
         else:
             self.abs_csv_path = str(path)
 
-        isolated_data_path = Path(Path(__file__).parents[1] / "data")
+        isolated_data_path = Path(BASE_DIR.parent / "data")
         db_name = extract_filename(Path(self.abs_csv_path).with_suffix(".db"))
 
         self.db_path = Path(isolated_data_path / db_name)
@@ -1201,6 +1204,127 @@ class AnnotationGUI(tk.Tk):
         self.dirty = False
         messagebox.showinfo("Saved", "Annotations saved")
 
+    def _init_onedrive_credentials(self) -> None:
+        """
+        Initialize OneDrive credentials at app startup.
+
+        If credentials don't exist, this will trigger the auth dialog.
+        Runs in background thread to not block GUI startup.
+        """
+
+        def _init():
+            try:
+                self.onedrive_backup._ensure_initialized()
+                logger.info("OneDrive credentials initialized")
+            except Exception as e:
+                logger.warning(f"OneDrive initialization failed: {e}")
+
+        thread = threading.Thread(target=_init, daemon=True)
+        thread.start()
+
+    def _backup_to_onedrive(self, csv_path: Path) -> None:
+        """
+        Backup database and CSV to OneDrive.
+
+        Uploads to: pelvic-2d-points-backup/<username>/<YYYY-MM-DD>/
+
+        On window close, shows progress dialog while uploading.
+        Otherwise uses async upload to avoid blocking GUI.
+        """
+        if self.db_path is None:
+            return
+
+        files_to_backup = [self.db_path, csv_path]
+
+        if self.window_close_flag:
+            # Show progress dialog and upload in background
+            self._backup_with_progress_dialog(files_to_backup)
+        else:
+            # Async upload during normal operation - don't block GUI
+            self.onedrive_backup.backup_multiple(
+                files_to_backup,
+                callback=lambda success, total: logger.info(
+                    f"OneDrive backup: {success}/{total} files uploaded"
+                ),
+            )
+
+    def _backup_with_progress_dialog(self, files: list) -> None:
+        """
+        Show a progress dialog while backing up files on close.
+        Runs upload in background thread, updates GUI via polling.
+        """
+        # Create progress dialog
+        dialog = tk.Toplevel(self)
+        dialog.title("Backing up to OneDrive...")
+        dialog.geometry("400x150")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        # Center on parent
+        dialog.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 400) // 2
+        y = self.winfo_y() + (self.winfo_height() - 150) // 2
+        dialog.geometry(f"400x150+{x}+{y}")
+
+        # Prevent closing via X button
+        dialog.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        frame = ttk.Frame(dialog, padding=20)
+        frame.pack(fill="both", expand=True)
+
+        status_var = tk.StringVar(value="Uploading to OneDrive...")
+        status_label = ttk.Label(frame, textvariable=status_var, font=("Helvetica", 12))
+        status_label.pack(pady=(0, 15))
+
+        # Progress bar (indeterminate mode)
+        progress = ttk.Progressbar(frame, mode="indeterminate", length=300)
+        progress.pack(pady=10)
+        progress.start(10)
+
+        file_var = tk.StringVar(value="")
+        file_label = ttk.Label(
+            frame, textvariable=file_var, font=("Helvetica", 9), foreground="gray"
+        )
+        file_label.pack(pady=(10, 0))
+
+        # Shared state for thread communication
+        upload_state = {"done": False, "success": 0, "total": len(files), "current": ""}
+
+        def do_upload():
+            """Run uploads in background thread."""
+            for fpath in files:
+                if fpath.exists():
+                    upload_state["current"] = fpath.name
+                    try:
+                        if self.onedrive_backup.upload_backup_sync(fpath):
+                            upload_state["success"] += 1
+                    except Exception as e:
+                        logger.warning(f"OneDrive backup failed for {fpath}: {e}")
+            upload_state["done"] = True
+
+        def check_progress():
+            """Poll upload state and update GUI."""
+            if upload_state["current"]:
+                file_var.set(f"Uploading: {upload_state['current']}")
+
+            if upload_state["done"]:
+                progress.stop()
+                dialog.destroy()
+            else:
+                # Check again in 100ms
+                dialog.after(100, check_progress)
+
+        # Start upload thread
+        upload_thread = threading.Thread(target=do_upload, daemon=True)
+        upload_thread.start()
+
+        # Start polling
+        check_progress()
+
+        # Wait for dialog to close (blocking but GUI-responsive)
+        self.wait_window(dialog)
+
     def _export_db_to_csv(self) -> None:
         """Export database to CSV file with atomic write (temp file + rename)."""
         current_time = datetime.now()
@@ -1266,6 +1390,10 @@ class AnnotationGUI(tk.Tk):
                 df.to_csv(str(temp_path), index=False)
                 # Atomic rename (on same filesystem)
                 temp_path.replace(csv_path)
+
+                # Backup to OneDrive after successful local save
+                self._backup_to_onedrive(csv_path)
+
             except OSError as e:
                 messagebox.showerror(
                     "CSV Export Error",
@@ -2328,6 +2456,8 @@ class AnnotationGUI(tk.Tk):
 
 
 if __name__ == "__main__":
+    isolated_data_path = Path(Path(__file__).parents[1] / "data")
+    print(isolated_data_path)
     app = AnnotationGUI()
     app.option_add("*Label.font", "helvetica 20 bold")
     app.mainloop()

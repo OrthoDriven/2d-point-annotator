@@ -6,7 +6,7 @@ platforms = ["linux-64", "win-64", "osx-arm64"]
 version = "0.1.0"
 
 [tasks]
-annotator = {cmd = "python ./main.py"}
+annotator = {cmd = "python ./src/main.py"}
 
 fc-cache = { cmd = "fc-cache -r", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/fonts", FC_CONFIG_FILE = "$CONDA_PREFIX/etc/fonts/fonts.conf" } }
 
@@ -32,6 +32,7 @@ font-ttf-dejavu = ">=2.37,<3"
 tk = ">=8.6.13,<9"
 polars = ">=1.37.1,<2"
 sqlite = ">=3.51.2,<4"
+msgraph-sdk = ">=1.48.0,<2"
 
 [target.linux-64.dependencies]
 xorg-libxft = ">=2.3.9,<3"
