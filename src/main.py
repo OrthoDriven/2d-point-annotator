@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageTk
 
+from auth import OneDriveBackup
 from dirs import APP_DIR, AUTH_DIR, BASE_DIR, BASE_DIR_PATH, PLATFORM
 from path_utils import (
     extract_filename,
@@ -38,7 +39,6 @@ from path_utils import (
     normalize_path_string,
     normalize_relative_path,
 )
-from auth import OneDriveBackup
 
 
 class AnnotationGUI(tk.Tk):
@@ -1202,7 +1202,8 @@ class AnnotationGUI(tk.Tk):
         self._export_db_to_csv()
 
         self.dirty = False
-        messagebox.showinfo("Saved", "Annotations saved")
+        if PLATFORM != "Linux":
+            messagebox.showinfo("Saved", "Annotations saved")
 
     def _init_onedrive_credentials(self) -> None:
         """

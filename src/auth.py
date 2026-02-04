@@ -239,8 +239,10 @@ class OneDriveBackup:
                         record = AuthenticationRecord.deserialize(
                             AUTH_RECORD_PATH.read_text()
                         )
+                        print("[OneDrive] Loaded existing auth record")
                     except Exception as e:
                         logger.warning(f"Failed to load auth record: {e}")
+                        record = None
 
                 # Setup credential with token cache
                 cache_opts = TokenCachePersistenceOptions(
@@ -255,22 +257,56 @@ class OneDriveBackup:
                     prompt_callback=_prompt_callback,
                 )
 
-                # Authenticate if no cached record
-                if record is None and self._credential is not None:
-                    record = self._credential.authenticate(scopes=SCOPES)
-                    AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
-                    AUTH_RECORD_PATH.write_text(record.serialize())
-                    # Close the auth dialog after successful authentication
-                    _close_auth_dialog()
+                # Always try to get a token to verify/refresh credentials
+                # This will:
+                # - Use cached token if still valid
+                # - Silently refresh using refresh token if access token expired
+                # - Raise AuthenticationRequiredError if refresh token also expired
+                #
+                # Note: TokenCachePersistenceOptions handles persisting the actual tokens.
+                # AuthenticationRecord just contains account info and only needs to be
+                # saved once after initial authentication.
+                if self._credential is not None:
+                    print("[OneDrive] Verifying/refreshing token...")
+                    try:
+                        # get_token will silently refresh if needed
+                        token = self._credential.get_token(*SCOPES)
+                        print(
+                            f"[OneDrive] Token acquired (expires: {token.expires_on})"
+                        )
+
+                        # If we didn't have a record before, save one now
+                        # (This happens on first auth or if record file was deleted)
+                        if record is None:
+                            print("[OneDrive] No auth record existed, creating one...")
+                            record = self._credential.authenticate(scopes=SCOPES)
+                            AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
+                            AUTH_RECORD_PATH.write_text(record.serialize())
+                            _close_auth_dialog()
+                            print("[OneDrive] Auth record saved")
+
+                    except Exception as token_error:
+                        print(f"[OneDrive] Token acquisition failed: {token_error}")
+                        print("[OneDrive] Re-authenticating with device code...")
+                        # Token refresh failed, need full re-auth
+                        record = self._credential.authenticate(scopes=SCOPES)
+                        AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
+                        AUTH_RECORD_PATH.write_text(record.serialize())
+                        _close_auth_dialog()
+                        print(
+                            "[OneDrive] Re-authentication successful, saved new auth record"
+                        )
 
                 self._client = GraphServiceClient(
                     credentials=self._credential, scopes=SCOPES
                 )
                 self._initialized = True
+                print("[OneDrive] Initialization complete")
                 return True
 
             except Exception as e:
                 logger.error(f"Failed to initialize OneDrive client: {e}")
+                print(f"[OneDrive] Initialization failed: {e}")
                 return False
 
     async def _ensure_folder_exists(self, folder_path: str) -> bool:
@@ -359,7 +395,9 @@ class OneDriveBackup:
 
         Uploads to: pelvic-2d-points-backup/<username>/<YYYY-MM-DD>/<filename>
         """
-        if not self._ensure_initialized():
+        # Note: _ensure_initialized must be called BEFORE entering async context
+        # (it's called in upload_backup_sync before run_until_complete)
+        if not self._client:
             logger.error("OneDrive client not initialized")
             return False
 
@@ -367,10 +405,8 @@ class OneDriveBackup:
         date_folder = get_date_folder()
         remote_folder = f"{BASE_BACKUP_FOLDER}/{username}/{date_folder}"
 
-        # Ensure folder structure exists
-        await self._ensure_folder_exists(remote_folder)
-
-        # Upload the file
+        # Try to upload directly - OneDrive API creates parent folders automatically
+        # when using path-based addressing like "root:/folder/subfolder/file.txt:"
         return await self._upload_file_async(local_path, remote_folder)
 
     def upload_backup(
@@ -393,20 +429,68 @@ class OneDriveBackup:
             return
 
         def _run():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                success = loop.run_until_complete(self._backup_file_async(path))
-                loop.close()
-                if callback:
-                    callback(success)
-            except Exception as e:
-                logger.error(f"Backup thread error: {e}")
-                if callback:
-                    callback(False)
+            # Use sync upload which creates fresh client per thread
+            success = self.upload_backup_sync(path, timeout=30.0)
+            if callback:
+                callback(success)
 
         thread = threading.Thread(target=_run, daemon=True)
         thread.start()
+
+    def _create_fresh_client(self) -> Optional[GraphServiceClient]:
+        """
+        Create a fresh Graph client for the current thread.
+
+        The MS Graph SDK uses httpx which has thread/event-loop affinity,
+        so we need a fresh client for each thread that does uploads.
+        """
+        # Use lock to prevent race conditions when multiple threads
+        # try to access the token cache simultaneously
+        with self._lock:
+            try:
+                print("[OneDrive] Creating fresh client for this thread...")
+
+                # Load cached auth record
+                record = None
+                if AUTH_RECORD_PATH.exists():
+                    try:
+                        record = AuthenticationRecord.deserialize(
+                            AUTH_RECORD_PATH.read_text()
+                        )
+                    except Exception as e:
+                        print(f"[OneDrive] Failed to load auth record: {e}")
+                        return None
+
+                if record is None:
+                    print(
+                        "[OneDrive] No auth record found - user needs to authenticate first"
+                    )
+                    return None
+
+                # Setup credential with cached token
+                # We use the auth record which enables silent token refresh
+                # No prompt_callback = won't show device code UI if interactive auth needed
+                # But silent refresh (using refresh token) will still work
+                cache_opts = TokenCachePersistenceOptions(
+                    name="onedrive-ml", allow_unencrypted_storage=True
+                )
+
+                credential = DeviceCodeCredential(
+                    client_id=CLIENT_ID,
+                    tenant_id=TENANT_ID,
+                    cache_persistence_options=cache_opts,
+                    authentication_record=record,
+                    # No prompt_callback - if interactive auth is truly needed,
+                    # it will fail gracefully rather than hang waiting for user input
+                )
+
+                client = GraphServiceClient(credentials=credential, scopes=SCOPES)
+                print("[OneDrive] Fresh client created successfully")
+                return client
+
+            except Exception as e:
+                print(f"[OneDrive] Failed to create fresh client: {e}")
+                return None
 
     def upload_backup_sync(self, file_path: str | Path, timeout: float = 30.0) -> bool:
         """
@@ -423,22 +507,64 @@ class OneDriveBackup:
         """
         path = Path(file_path)
         if not path.exists():
-            logger.warning(f"File does not exist: {path}")
+            print(f"[OneDrive] File does not exist: {path}")
             return False
 
+        print(f"[OneDrive] Starting sync upload: {path.name}")
+
         try:
+            # Create a fresh client for this thread to avoid httpx thread-affinity issues
+            client = self._create_fresh_client()
+            if not client:
+                print("[OneDrive] No client available, skipping upload")
+                return False
+
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            # Wrap the coroutine with a timeout
-            coro = asyncio.wait_for(self._backup_file_async(path), timeout=timeout)
+
+            # Define the upload coroutine inline with the fresh client
+            async def do_upload():
+                print(f"[OneDrive] Reading file: {path.name}")
+                with open(path, "rb") as f:
+                    file_content = f.read()
+                print(f"[OneDrive] File size: {len(file_content)} bytes")
+
+                username = get_safe_username()
+                date_folder = get_date_folder()
+                remote_folder = f"{BASE_BACKUP_FOLDER}/{username}/{date_folder}"
+                drive_item_path = f"root:/{remote_folder}/{path.name}:"
+
+                print(f"[OneDrive] Uploading to: {drive_item_path}")
+
+                uploaded_file = await (
+                    client.drives.by_drive_id(SHAREPOINT_DRIVE_ID)
+                    .items.by_drive_item_id(drive_item_path)
+                    .content.put(file_content)
+                )
+
+                print(
+                    f"[OneDrive] Upload complete: {uploaded_file.name if uploaded_file else 'unknown'}"
+                )
+                return uploaded_file is not None
+
+            # Run with timeout
+            print(f"[OneDrive] Running upload with {timeout}s timeout...")
+            coro = asyncio.wait_for(do_upload(), timeout=timeout)
             success = loop.run_until_complete(coro)
             loop.close()
+            print(
+                f"[OneDrive] Sync upload result: {'success' if success else 'failed'}"
+            )
             return success
+
         except asyncio.TimeoutError:
-            logger.error(f"Sync backup timed out after {timeout}s for {path}")
+            print(f"[OneDrive] Upload timed out after {timeout}s for {path}")
             return False
         except Exception as e:
-            logger.error(f"Sync backup error: {e}")
+            print(f"[OneDrive] Sync backup error: {e}")
+            import traceback
+
+            traceback.print_exc()
             return False
 
     def backup_multiple(
@@ -458,19 +584,12 @@ class OneDriveBackup:
             success_count = 0
             total = len(file_paths)
 
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-                for path in file_paths:
-                    p = Path(path)
-                    if p.exists():
-                        if loop.run_until_complete(self._backup_file_async(p)):
-                            success_count += 1
-
-                loop.close()
-            except Exception as e:
-                logger.error(f"Multi-backup error: {e}")
+            for path in file_paths:
+                p = Path(path)
+                if p.exists():
+                    # Use sync upload which creates fresh client per thread
+                    if self.upload_backup_sync(p, timeout=30.0):
+                        success_count += 1
 
             if callback:
                 callback(success_count, total)
