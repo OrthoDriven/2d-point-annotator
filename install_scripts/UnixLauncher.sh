@@ -15,7 +15,8 @@ source "$DEFAULT_ENV"
 
 export PATH="$PATH:$HOME/.pixi/bin"
 
-"$APP_DIR/install_scripts/UnixUpdate.sh" || echo "[warn] update check failed"
+# "$APP_DIR/install_scripts/UnixUpdate.sh" || echo "[warn] update check failed"
+pixi run -m "$APP_DIR" ./install_scripts/update.py
 
 if [[ ! -f "$APP_DIR/pixi.toml" ]]; then
     echo "ERROR: Could not locate pixi.toml under $APP_DIR"

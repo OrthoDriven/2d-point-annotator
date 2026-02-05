@@ -7,24 +7,52 @@ Runs outside the app directory to safely replace it.
 
 import json
 import os
+import platform
 import shutil
 import sys
 import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from typing import Optional
+
+import platformdirs
+import requests
+from packaging.version import Version as V
+from requests import ConnectionError, HTTPError, JSONDecodeError
 
 # ============================================================================
 # Configuration (loaded from app.env or defaults)
 # ============================================================================
 
 
+REPO_URL = "https://api.github.com/repos/OrthoDriven/2d-point-annotator/releases"
+SYSTEM = platform.system()
+APP_DIR_NAME_UNIX = "2d-point-annotator"
+APP_DIR_NAME_WINDOWS = "2D-Point-Annotator"
+
+
+def get_install_root() -> Path:
+    if SYSTEM == "Windows":
+        return Path(platformdirs.user_documents_dir()) / APP_DIR_NAME_WINDOWS
+    else:
+        return Path().home() / APP_DIR_NAME_UNIX
+
+
+def get_releases(url: str):
+    r = requests.get(url)
+    print(r.content)
+    return r.json()
+
+
+def download_release_zip(zip_url: str, download_path: Path, timeout: int = 20) -> None:
+    with requests.get(zip_url, stream=True, timeout=timeout) as r:
+        with open(download_path, "wb") as f:
+            f.write(r.content)
+
+
 def load_config():
-    """Load configuration from app.env file."""
-    install_root = Path(Path.home() / "2d-point-annotator")
-    env_file = install_root / "app.env"
+    install_root = get_install_root()
 
     config = {
         "INSTALL_ROOT": str(install_root),
@@ -34,15 +62,6 @@ def load_config():
         "MIN_CHECK_INTERVAL_SECONDS": 15,
         "REQUEST_TIMEOUT_SEC": 15,
     }
-
-    if env_file.exists():
-        with open(env_file, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    value = value.strip().strip('"')
-                    config[key] = value
 
     return config
 
@@ -60,21 +79,32 @@ def load_state(state_path):
             "etag": "",
             "updatedUtc": datetime.now(timezone.utc).isoformat(),
             "lastCheckUtc": "1970-01-01T00:00:00Z",
+            "version": "0.0.0",
         }
 
     try:
         with open(state_path, "r") as f:
-            return json.load(f)
+            state = json.load(f)
+            if "version" not in state.keys():
+                state["version"] = "0.0.0"
+            return state
     except Exception:
         return {
             "sha": "",
             "etag": "",
             "updatedUtc": datetime.now(timezone.utc).isoformat(),
             "lastCheckUtc": "1970-01-01T00:00:00Z",
+            "version": "0.0.0",
         }
 
 
-def save_state(state_path, sha="", etag="", update_last_check=True):
+def save_state(
+    state_path,
+    sha="",
+    etag="",
+    new_version: Optional[str] = None,
+    update_last_check=True,
+):
     """Save update state to JSON file."""
     state = load_state(state_path)
 
@@ -86,6 +116,8 @@ def save_state(state_path, sha="", etag="", update_last_check=True):
         state["lastCheckUtc"] = datetime.now(timezone.utc).isoformat()
     if sha or etag:
         state["updatedUtc"] = datetime.now(timezone.utc).isoformat()
+    if new_version is not None:
+        state["version"] = new_version
 
     with open(state_path, "w") as f:
         json.dump(state, f, indent=2)
@@ -103,25 +135,28 @@ def check_for_updates(api_url, state, user_agent, timeout):
     if state.get("etag"):
         headers["If-None-Match"] = state["etag"]
 
-    request = Request(api_url, headers=headers)
-
     try:
-        with urlopen(request, timeout=timeout) as response:
+        with requests.get(api_url, timeout=timeout) as response:
+            response.raise_for_status()
             etag = response.headers.get("ETag", "")
-            data = json.loads(response.read().decode())
+            # data = json.loads(response.read().decode())
+            data = response.json()
 
             # Handle both single commit and array responses
             if isinstance(data, list):
                 data = data[0] if data else {}
 
-            return {"status": "new", "sha": data.get("sha", ""), "etag": etag}
+            response.raise_for_status()
+            return {
+                "status": "new",
+                "sha": data.get("sha", ""),
+                "etag": etag,
+                "version": data.get("tag_name"),
+                "version_zip_url": data.get("zipball_url"),
+            }
     except HTTPError as e:
-        if e.code == 304:
-            return {"status": "unchanged"}
-        print(f"[warn] GitHub API error: HTTP {e.code}")
-        return {"status": "error"}
-    except URLError as e:
-        print(f"[warn] Network error: {e.reason}")
+        print(f"[warn] GitHub API error: HTTP {e}")
+        print(e.response.status_code)
         return {"status": "error"}
     except Exception as e:
         print(f"[warn] Unexpected error: {e}")
@@ -131,16 +166,6 @@ def check_for_updates(api_url, state, user_agent, timeout):
 # ============================================================================
 # Download & Extract
 # ============================================================================
-
-
-def download_zip(url, dest_path, user_agent, timeout):
-    """Download repository ZIP file."""
-    headers = {"User-Agent": user_agent}
-    request = Request(url, headers=headers)
-
-    with urlopen(request, timeout=timeout) as response:
-        with open(dest_path, "wb") as f:
-            shutil.copyfileobj(response, f)
 
 
 def find_project_root(extract_dir):
@@ -214,6 +239,7 @@ def should_check_for_updates(state, min_interval):
         print(f"[debug] now          = {now.isoformat()}")
         print(f"[debug] delta        = {delta:.1f} seconds")
         print(f"[debug] min interval = {min_interval} seconds")
+        print(f"[debug] version      = {state['version']}")
 
         if delta < 0:
             print("[warn] lastCheckUtc is in the future; resetting")
@@ -242,18 +268,19 @@ def run_update():
     state = load_state(state_path)
 
     # Check if we should run
-    should_check, delta = should_check_for_updates(
-        state, int(config["MIN_CHECK_INTERVAL_SECONDS"])
-    )
+    # should_check, delta = should_check_for_updates(
+    #     state, int(config["MIN_CHECK_INTERVAL_SECONDS"])
+    # )
 
-    if not should_check:
-        return
+    # if not should_check:
+    #     return
 
     # Always update lastCheckUtc from here on
     try:
         # Check for updates
         result = check_for_updates(
-            config["API_URL"],
+            # config["API_URL"],
+            REPO_URL,
             state,
             config["USER_AGENT"],
             int(config["REQUEST_TIMEOUT_SEC"]),
@@ -268,28 +295,29 @@ def run_update():
             print(f"[info] Already up-to-date ({state.get('sha', 'unknown')})")
             return
 
-        new_sha = result.get("sha", "")
-        if not new_sha:
-            print("[warn] GitHub response did not include sha")
-            return
+        current_version = V(state.get("version", "0.0.0"))
+        new_version = V(result.get("version", "0.0.0"))
 
-        if state.get("sha") == new_sha:
-            print(f"[info] Already up-to-date ({new_sha})")
+        if current_version == new_version:
+            print(f"[info] Already up-to-date (on version {new_version})")
             save_state(state_path, etag=result.get("etag", state.get("etag", "")))
             return
 
-        print(f"[info] New version detected ({new_sha}). Updating...")
+        print(
+            f"[info] New version detected ({new_version}). Updating {current_version} →→ {new_version}"
+        )
+
+        new_zip_url = result["version_zip_url"]
 
         # Download and extract
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             zip_path = temp_path / "annotator.zip"
 
-            download_zip(
-                config["REPO_ZIP_URL"],
-                zip_path,
-                config["USER_AGENT"],
-                int(config["REQUEST_TIMEOUT_SEC"]) * 6,
+            download_release_zip(
+                zip_url=new_zip_url,
+                download_path=zip_path,
+                timeout=int(config["REQUEST_TIMEOUT_SEC"]) * 6,
             )
 
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
@@ -304,8 +332,10 @@ def run_update():
             atomic_swap(project_root, app_dir)
 
         # Update state
-        save_state(state_path, sha=new_sha, etag=result.get("etag", ""))
-        print(f"[info] Update complete -> {new_sha}")
+        save_state(
+            state_path, new_version=str(new_version), etag=result.get("etag", "")
+        )
+        print(f"[info] Update complete -> {new_version}")
 
     except Exception as e:
         print(f"[error] Update failed: {e}")

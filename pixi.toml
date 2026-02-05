@@ -3,7 +3,7 @@ authors = ["Andrew Jensen <contact@ajensen.org>"]
 channels = ["conda-forge"]
 name = "2d-point-annotator"
 platforms = ["linux-64", "win-64", "osx-arm64"]
-version = "0.1.0"
+version = "1.2.0"
 
 [tasks]
 annotator = {cmd = "python ./src/main.py"}
@@ -37,6 +37,9 @@ polars = ">=1.37.1,<2"
 sqlite = ">=3.51.2,<4"
 msgraph-sdk = ">=1.48.0,<2"
 pytest = ">=8.0.0,<9"
+requests = ">=2.32.5,<3"
+packaging = ">=26.0,<27"
+platformdirs = ">=4.5.1,<5"
 
 [target.linux-64.dependencies]
 xorg-libxft = ">=2.3.9,<3"
