@@ -927,6 +927,7 @@ class AnnotationGUI(tk.Tk):
             prev_path = self.csv_path_queue[self.csv_index]
             self.absolute_current_image_path = prev_path
             self.load_image_from_path(Path(prev_path))
+            self._update_queue_status()
 
         else:
             idx, all_files = self._get_image_index_from_directory()
@@ -970,6 +971,7 @@ class AnnotationGUI(tk.Tk):
             prev_path = self.csv_path_queue[self.csv_index]
             self.absolute_current_image_path = prev_path
             self.load_image_from_path(Path(prev_path))
+            self._update_queue_status()
         else:
             idx, all_files = self._get_image_index_from_directory()
             if idx == 0:
@@ -1065,13 +1067,14 @@ class AnnotationGUI(tk.Tk):
         self.annotations.setdefault(str(self.current_image_path), {})
         self.load_points(show_message=False)
         self._render_base_image()
-        self._draw_points()
         self._hide_hover_circle()
         self.dirty = False
         self._update_path_var()
 
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
+
+        self._draw_points()
 
     def _prepare_landmark_data(self) -> dict:
         """Prepare landmark data dict for database storage."""
@@ -1549,6 +1552,22 @@ class AnnotationGUI(tk.Tk):
         pts, quality = self._get_annotations()
         self._update_found_checks(pts)
         current_image_verified = self._is_current_image_verified()
+        x_curr, y_curr = self._img_to_screen(0, 0)
+        label_font = self.landmark_font.copy()
+        label_font.configure(size=30)
+
+        landmark_is_labeled = self.selected_landmark.get() in pts.keys()
+
+        self.canvas.create_text(
+            x_curr,
+            y_curr,
+            text=self.selected_landmark.get(),
+            fill=("#FFCC66" if landmark_is_labeled else "#FF8066"),
+            font=label_font,
+            tags="marker",
+            anchor="nw",
+        )
+
         for lm, (x, y) in pts.items():
             drawing_current_selected = lm == self.selected_landmark.get()
             y_offset_label = 16 if drawing_current_selected else 12
@@ -1578,6 +1597,16 @@ class AnnotationGUI(tk.Tk):
                 width=2,
                 tags="marker",
             )
+            if self.check_csv_mode and drawing_current_selected:
+                self.canvas.create_oval(
+                    xs - 10 * r,
+                    ys - 10 * r,
+                    xs + 10 * r,
+                    ys + 10 * r,
+                    outline=oval_color,
+                    width=6,
+                    tags="marker",
+                )
 
             self.canvas.create_text(
                 xs - 1,
@@ -1761,7 +1790,7 @@ class AnnotationGUI(tk.Tk):
             self._remove_overlay_for(lm)
             return
         mask = self.seg_masks[str(self.current_image_path)][lm]
-        self._render_overlay_for(lm, mask)
+        # self._render_overlay_for(lm, mask)
         self.canvas.tag_raise("marker")
 
     # Renders a semi-transparent RGBA overlay from a binary mask.
@@ -2397,6 +2426,10 @@ class AnnotationGUI(tk.Tk):
             self.queue_status_var.set(
                 f"Queue: {self.queue_index + 1} / {len(self.unannotated_queue)} unannotated"
             )
+        elif self.check_csv_mode and self.csv_path_queue:
+            self.queue_status_var.set(
+                f"Queue: {self.csv_index + 1} / {len(self.csv_path_queue)} remaining"
+            )
         else:
             self.queue_status_var.set("")
 
@@ -2444,6 +2477,7 @@ class AnnotationGUI(tk.Tk):
 
         self.absolute_current_image_path = Path(self.csv_path_queue[0])
         self.load_image_from_path(self.absolute_current_image_path)
+        self._update_queue_status()
 
         return
 
@@ -2452,6 +2486,7 @@ class AnnotationGUI(tk.Tk):
         self.csv_path_queue.clear()
         self.csv_index = 0
         self.exit_csv_check_btn.config(state="disabled")
+        self._update_queue_status()
 
         return
 
