@@ -2,24 +2,43 @@ from __future__ import annotations
 
 import ast
 import datetime
+import json
+import logging
 import os
 import platform
 import shutil
+import sqlite3
+import threading
 import tkinter as tk
 import tkinter.font as tkfont
+from datetime import datetime
 from pathlib import Path, PurePath
 from tkinter import filedialog, messagebox, ttk
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
+
+# Configure logging - writes to file for debugging without disrupting users
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(Path(__file__).parent / "annotator.log", mode="a"),
+    ],
+)
+logger = logging.getLogger(__name__)
 
 import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageTk
 
-BASE_DIR = Path(__file__).parent
-BASE_DIR_PATH = Path(BASE_DIR)
-DATA_DIR = Path(BASE_DIR).resolve().parent / "data"
-PLATFORM = platform.system()
+from auth import OneDriveBackup
+from dirs import APP_DIR, AUTH_DIR, BASE_DIR, BASE_DIR_PATH, PLATFORM
+from path_utils import (
+    extract_filename,
+    filenames_match,
+    normalize_path_string,
+    normalize_relative_path,
+)
 
 
 class AnnotationGUI(tk.Tk):
@@ -36,6 +55,8 @@ class AnnotationGUI(tk.Tk):
         self.heading_font.configure(weight="bold")  # keep size default
 
         self.dialogue_font = tkfont.nametofont("TkDefaultFont").copy()
+        self.landmark_font = tkfont.nametofont("TkDefaultFont").copy()
+        self.window_close_flag = False
         if PLATFORM == "Linux":
             self._configure_linux_fonts()
 
@@ -107,8 +128,10 @@ class AnnotationGUI(tk.Tk):
         self.bind("<Control-b>", self._on_pg_up)
         self.bind("<Control-n>", self._on_pg_down)
         self.bind("<n>", self._on_pg_down)
+        self.bind("<g>", self._on_pg_down)
         self.bind("<b>", self._on_pg_up)
         self.bind("<BackSpace>", self._on_backspace)
+        self.bind("<space>", self._on_space)
         self.bind("1", self._on_1_press)
         self.bind("2", self._on_2_press)
         self.bind("3", self._on_3_press)
@@ -117,10 +140,75 @@ class AnnotationGUI(tk.Tk):
         self.queue_mode = False
         self.unannotated_queue: List[Path] = []
         self.queue_index = 0
+        self.check_csv_mode = False
+        self.csv_path_queue: List[Path] = []
+        self.csv_index = 0
+        self.db_path: Optional[Path] = None
+        self.last_update = datetime.now()
+        # Initialize path attributes to prevent AttributeError if accessed before assignment
+        self.abs_csv_path: Optional[str] = None
+        self.absolute_current_image_path: Optional[Path] = None
+        self.csv_local_image_directory_path: Optional[str] = None
+
+        # OneDrive backup integration - initialize early to check/prompt for credentials
+        self.onedrive_backup = OneDriveBackup()
+        # Trigger credential check at startup (will show auth dialog if needed)
+        self.after(100, self._init_onedrive_credentials)
 
     # Builds the left image canvas, right control panel, and tool widgets.
     def focus_widget(self, event):
         event.widget.focus_set()
+
+    def _on_space(self, event) -> None:
+        """
+        Here, we are marking the current image as "verified" in the table
+        """
+
+        if self.db_path is not None:
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    cur = conn.cursor()
+                    image_filename = extract_filename(self.absolute_current_image_path)
+
+                    cur.execute(
+                        """
+                        INSERT INTO annotations (image_filename, verified)
+                        VALUES (?, 1)
+                        ON CONFLICT(image_filename) DO UPDATE
+                        SET verified = 1-annotations.verified
+                        """,
+                        (image_filename,),
+                    )
+                    conn.commit()
+                self._draw_points()
+            except sqlite3.Error as e:
+                messagebox.showerror(
+                    "Database Error",
+                    f"Failed to toggle verification status:\n{e}",
+                )
+        return
+
+    def _is_current_image_verified(self) -> bool:
+        if self.db_path is not None:
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    cur = conn.cursor()
+
+                    query = """
+                        SELECT verified FROM annotations WHERE image_filename = ?
+                    """
+                    image_fname = extract_filename(self.absolute_current_image_path)
+
+                    cur.execute(
+                        query,
+                        (image_fname,),
+                    )
+                    row = cur.fetchone()
+                return bool(row[0] if row else False)
+            except sqlite3.Error:
+                # Silently return False if we can't check - non-critical operation
+                return False
+        return False
 
     def _setup_ui(self) -> None:
         self.canvas = tk.Canvas(self, bg="grey", highlightthickness=0)
@@ -133,6 +221,12 @@ class AnnotationGUI(tk.Tk):
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.canvas.bind("<Button-4>", lambda e: self._on_scroll_linux(1))
         self.canvas.bind("<Button-5>", lambda e: self._on_scroll_linux(-1))
+
+        self.landmark_font = tkfont.Font(
+            family="Liberation Sans", size=18, weight="bold"
+        )
+        self.shadow_font = tkfont.Font(family="Liberation Sans", size=20, weight="bold")
+
         ctrl = tk.Frame(self)
         ctrl.pack(side=tk.RIGHT, fill="y", padx=10, pady=10)
         self._ctrl = ctrl
@@ -184,6 +278,20 @@ class AnnotationGUI(tk.Tk):
             state="disabled",  # Only enabled when in queue mode
         )
         self.exit_queue_btn.pack(fill="x", pady=5)
+
+        tk.Button(
+            ctrl,
+            text="Check CSV Images",
+            command=self._check_csv_images,
+        ).pack(fill="x", pady=5)
+
+        self.exit_csv_check_btn = tk.Button(
+            ctrl,
+            text="Exit CSV Check Mode",
+            command=self._exit_csv_check_mode,
+            state="disabled",
+        )
+        self.exit_csv_check_btn.pack(fill="x", pady=5)
 
         path_entry = tk.Entry(
             row,
@@ -547,6 +655,7 @@ class AnnotationGUI(tk.Tk):
     def _on_landmark_selected(self) -> None:
         lm = self.selected_landmark.get()
         self._apply_settings_to_ui_for(lm)
+        self._draw_points()
         self.after_idle(self._scroll_landmark_into_view, lm)
 
     def _change_selected_landmark(self, step: int) -> None:
@@ -581,13 +690,22 @@ class AnnotationGUI(tk.Tk):
             var.set(value)
         self._draw_points()
 
-    def load_landmarks_from_csv(self) -> None:
-        self._maybe_save_before_destructive_action("load point name CSV")
-        self.abs_csv_path = filedialog.askopenfilename(
-            initialdir=BASE_DIR, filetypes=[("CSV File", ("*.csv"))]
-        )
+    def load_landmarks_from_csv(self, path: Optional[Union[Path, str]] = None) -> None:
+        if path is None:
+            self._maybe_save_before_destructive_action("load point name CSV")
+            self.abs_csv_path = filedialog.askopenfilename(
+                initialdir=BASE_DIR, filetypes=[("CSV File", ("*.csv"))]
+            )
+        else:
+            self.abs_csv_path = str(path)
 
+        isolated_data_path = Path(BASE_DIR.parent / "data")
+        db_name = extract_filename(Path(self.abs_csv_path).with_suffix(".db"))
+
+        self.db_path = Path(isolated_data_path / db_name)
+        self._init_database()
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
+
         self.csv_path_column = self._detect_path_column(df)
 
         # Removing columns that we know are not landmarks, the rest are assumed to be landmarks
@@ -601,6 +719,117 @@ class AnnotationGUI(tk.Tk):
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
         self._build_landmark_panel()
+        self._import_csv_to_db()
+
+    def _init_database(self) -> None:
+        try:
+            with sqlite3.connect(str(self.db_path)) as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS annotations (
+                    image_filename TEXT PRIMARY KEY,
+                    image_path TEXT,
+                    image_quality INTEGER DEFAULT 0,
+                    data BLOB, -- JSON blob of all landmarks
+                    modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    verified INTEGER DEFAULT 0
+                )
+                """)
+                conn.execute("""
+                CREATE INDEX IF NOT EXISTS image_filename
+                ON annotations(image_filename DESC)
+                """)
+                cols = [
+                    elem[1]
+                    for elem in conn.execute("""
+                PRAGMA table_info(annotations)
+                """)
+                ]
+
+                if "verified" not in cols:
+                    conn.execute("""
+                    ALTER TABLE annotations ADD COLUMN verified INTEGER DEFAULT 0
+                    """)
+                conn.commit()
+        except sqlite3.Error as e:
+            messagebox.showerror(
+                "Database Error",
+                f"Failed to initialize database:\n{e}\n\nAnnotations will not be saved.",
+            )
+        return
+
+    def _db_is_populated(self) -> bool:
+        try:
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM annotations")
+                count = cursor.fetchone()[0]
+            return count > 0
+        except sqlite3.Error:
+            return False
+
+    def _import_csv_to_db(self) -> None:
+        try:
+            df = pd.read_csv(self.abs_csv_path)
+        except Exception as e:
+            messagebox.showerror(
+                "CSV Error",
+                f"Failed to read CSV file:\n{e}",
+            )
+            return
+
+        col = self._detect_path_column(df)
+
+        try:
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+
+                for _, row in df.iterrows():
+                    path = str(row[col])
+                    try:
+                        quality = int(row.get("image_quality", 0))
+                    except (ValueError, TypeError):
+                        quality = 0
+                    landmark_data = {}
+
+                    for lm in self.landmarks:
+                        val = row.get(lm, "")
+                        if pd.isna(val) or not str(val).strip():
+                            continue  # Skip empty values entirely
+
+                        # Parse the string representation back to list
+                        try:
+                            parsed = ast.literal_eval(str(val))
+                            landmark_data[lm] = (
+                                parsed  # Store as actual list, not string
+                            )
+                        except (ValueError, SyntaxError):
+                            # If parsing fails, skip this landmark
+                            continue
+
+                    cursor.execute(
+                        """
+                        INSERT INTO annotations (image_filename, image_path, image_quality, data)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(image_filename) DO UPDATE SET
+                            image_path    = excluded.image_path,
+                            image_quality = excluded.image_quality,
+                            data          = excluded.data,
+                            modified_at   = CURRENT_TIMESTAMP,
+                            verified      = annotations.verified
+                        """,
+                        (
+                            extract_filename(path),
+                            path,
+                            quality,
+                            json.dumps(landmark_data),
+                        ),
+                    )
+                conn.commit()
+        except sqlite3.Error as e:
+            messagebox.showerror(
+                "Database Error",
+                f"Failed to import CSV data to database:\n{e}",
+            )
 
     # Prompts to save pending changes before destructive operations.
     def _maybe_save_before_destructive_action(self, why: str = "continue") -> None:
@@ -618,6 +847,9 @@ class AnnotationGUI(tk.Tk):
     # Handles window close, offering to save unsaved annotations.
     def _on_close(self) -> None:
         self._maybe_save_before_destructive_action("exit")
+        self.window_close_flag = True
+        if self.db_path is not None:
+            self._export_db_to_csv()
         self.destroy()
 
     # Opens an image, prepares canvas, and loads saved points.
@@ -642,7 +874,7 @@ class AnnotationGUI(tk.Tk):
         current_image_directory = (
             Path(self.absolute_current_image_path).resolve().parent
         )
-        current_image_name = Path(self.absolute_current_image_path).resolve().name
+        current_image_name = extract_filename(self.absolute_current_image_path)
 
         all_files = [
             file.name
@@ -687,6 +919,15 @@ class AnnotationGUI(tk.Tk):
             self.absolute_current_image_path = prev_path
             self.load_image_from_path(prev_path)
             self._update_queue_status()
+
+        elif self.check_csv_mode:
+            if self.csv_index >= len(self.csv_path_queue) - 1:
+                return
+            self.csv_index += 1
+            prev_path = self.csv_path_queue[self.csv_index]
+            self.absolute_current_image_path = prev_path
+            self.load_image_from_path(Path(prev_path))
+
         else:
             idx, all_files = self._get_image_index_from_directory()
             if len(all_files) == idx + 1:
@@ -721,6 +962,14 @@ class AnnotationGUI(tk.Tk):
             self.absolute_current_image_path = prev_path
             self.load_image_from_path(prev_path)
             self._update_queue_status()
+
+        elif self.check_csv_mode:
+            if self.csv_index <= 0:
+                return
+            self.csv_index -= 1
+            prev_path = self.csv_path_queue[self.csv_index]
+            self.absolute_current_image_path = prev_path
+            self.load_image_from_path(Path(prev_path))
         else:
             idx, all_files = self._get_image_index_from_directory()
             if idx == 0:
@@ -766,14 +1015,16 @@ class AnnotationGUI(tk.Tk):
     def change_image_quality(self, val: int) -> None:
         self.current_image_quality = val
         if self.current_image_path:
-            self.path_var.set(Path(self.current_image_path).name)
+            self.path_var.set(extract_filename(self.current_image_path))
             self.quality_var.set(str(self.current_image_quality))
         self.dirty = True
+        # Auto-save to database immediately after quality change
+        self._auto_save_to_db()
         return
 
     def _update_path_var(self) -> None:
         if self.current_image_path:
-            self.path_var.set(Path(self.current_image_path).name)
+            self.path_var.set(extract_filename(self.current_image_path))
             self.quality_var.set(str(self.current_image_quality))
         self.dirty = True
 
@@ -822,39 +1073,19 @@ class AnnotationGUI(tk.Tk):
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
 
-    # Writes annotations (and LOB/ROB settings) back to the CSV.
-    def save_annotations(self) -> None:
-        if not self.current_image_path:
-            messagebox.showwarning("Save", "No image loaded.")
-            return
-        if Path(self.abs_csv_path).exists():
-            df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
-            # col0 = df.columns[0]
-            col0 = self._detect_path_column(df)
-            # Ensure image_quality column exists
-            if "image_quality" not in df.columns:
-                df["image_quality"] = 0  # ← Add this
-            for lm in self.landmarks:
-                if lm not in df.columns:
-                    df[lm] = ""
-        else:
-            col0 = self.csv_path_column
-            cols: List[str] = [col0, "image_quality"] + self.landmarks
-            df = pd.DataFrame(columns=cols)
-        row = {
-            col0: str(self.current_image_path),
-            "image_quality": self.current_image_quality,
-        }
-        # pts = self.annotations.get(self.current_image_path, {})
+    def _prepare_landmark_data(self) -> dict:
+        """Prepare landmark data dict for database storage."""
         pts, quality = self._get_annotations()
-        per_img_settings = self.lm_settings.setdefault(str(self.current_image_path), {})
+        per_img_settings = self.lm_settings.get(str(self.current_image_path), {})
+
+        landmark_data = {}
         for lm in self.landmarks:
             if lm in pts:
                 x, y = pts[lm]
                 if lm in ("LOB", "ROB"):
                     st = per_img_settings.get(lm, self._current_settings_dict())
                     method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
-                    cell = [
+                    landmark_data[lm] = [
                         float(x),
                         float(y),
                         method_code,
@@ -864,71 +1095,317 @@ class AnnotationGUI(tk.Tk):
                         int(st["clahe"]),
                         int(st["grow"]),
                     ]
-                    row[lm] = repr(cell)
                 else:
-                    row[lm] = f"[{float(x)},{float(y)}]"
-            else:
-                row[lm] = ""
-            pass
+                    landmark_data[lm] = [float(x), float(y)]
 
-        current_filename = PurePath(self.current_image_path).name
-        current_path_str = str(self.current_image_path)
+        return landmark_data
 
-        # If you're starting from a fresh CSV, then the dataframe is empty, which will throw
-        # errors when doing dataframe key querying. We only have to worry about duplicates with
-        # a non-empty dataframe
+    def _auto_save_to_db(self) -> bool:
+        """
+        Auto-save annotations to database immediately after changes.
+        Returns True on success, False on failure.
+        Silent operation - no user feedback unless error occurs.
+        """
+        if not self.current_image_path or self.db_path is None:
+            return False
 
-        if not df.empty:
-            # Try exact match first
-            mask = df[col0] == current_path_str
-
-            # If no exact match, try filename matching
-            if not mask.any():
-                mask = df[col0].apply(lambda x: current_filename in str(x))
-
-            # Remove matching rows
-            df = df[~mask]
-
-            df = df[df[col0] != self.current_image_path]
-
-        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-        keep_cols = [col0, "image_quality"] + self.landmarks
-        df = df[[c for c in df.columns if c in keep_cols]]
         try:
-            csv_path = Path(self.abs_csv_path).expanduser().resolve()
-            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            pts, quality = self._get_annotations()
+            landmark_data = self._prepare_landmark_data()
 
-            # 1) Save the "real" CSV
-            df.to_csv(str(csv_path), index=False)
-
-            # 2) Daily backup: keep current + previous
-            now = datetime.datetime.now()
-            iso_date = now.date().isoformat()  # "YYYY-MM-DD"
-
-            backup_dir = DATA_DIR / iso_date
-            backup_dir.mkdir(parents=True, exist_ok=True)
-
-            backup_path = backup_dir / f"{csv_path.stem}_backup{csv_path.suffix}"
-            prev_path = backup_dir / f"{csv_path.stem}_backup.prev{csv_path.suffix}"
-
-            # If a backup already exists, rotate it to ".prev" first
-            if backup_path.exists():
-                # replace() is atomic on the same filesystem
-                backup_path.replace(prev_path)
-
-            shutil.copy2(str(csv_path), str(backup_path))
-
-            if PLATFORM == "Windows":
-                # removing the save on mac and only setting the windows.
-                messagebox.showinfo(
-                    "Saved",
-                    f"Annotations saved to {csv_path}\nBackup: {backup_path}",
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO annotations (image_filename, image_path, image_quality, data, modified_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(image_filename) DO UPDATE SET
+                        image_path    = excluded.image_path,
+                        image_quality = excluded.image_quality,
+                        data          = excluded.data,
+                        modified_at   = CURRENT_TIMESTAMP,
+                        verified      = annotations.verified
+                    """,
+                    (
+                        extract_filename(self.current_image_path),
+                        str(self.current_image_path),
+                        quality,
+                        json.dumps(landmark_data),
+                    ),
                 )
-            self.dirty = False
-        except Exception as e:
-            messagebox.showerror("Save Failed", f"Could not save CSV:\n{e}")
+                conn.commit()
 
-    # Loads saved points and per-landmark settings for the current image.
+            self.dirty = False
+            return True
+
+        except sqlite3.Error as e:
+            messagebox.showerror(
+                "Database Error",
+                f"Failed to auto-save annotations:\n{e}\n\nYour changes may not be saved.",
+            )
+            return False
+        except Exception as e:
+            messagebox.showerror(
+                "Save Error",
+                f"Unexpected error while saving:\n{e}\n\nYour changes may not be saved.",
+            )
+            return False
+
+    # Writes annotations (and LOB/ROB settings) back to the CSV.
+    def save_annotations(self) -> None:
+        """Save to database, then export to CSV."""
+        if not self.current_image_path:
+            messagebox.showwarning("Save", "No image loaded.")
+            return
+
+        # Get annotation data
+        pts, quality = self._get_annotations()
+        landmark_data = self._prepare_landmark_data()
+
+        # Save to database with error handling
+        try:
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO annotations (image_filename, image_path, image_quality, data, modified_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(image_filename) DO UPDATE SET
+                        image_path    = excluded.image_path,
+                        image_quality = excluded.image_quality,
+                        data          = excluded.data,
+                        modified_at   = CURRENT_TIMESTAMP,
+                        verified      = annotations.verified
+                    """,
+                    (
+                        extract_filename(self.current_image_path),
+                        str(self.current_image_path),
+                        quality,
+                        json.dumps(landmark_data),
+                    ),
+                )
+                conn.commit()
+        except sqlite3.Error as e:
+            messagebox.showerror(
+                "Database Error",
+                f"Failed to save annotations to database:\n{e}",
+            )
+            return
+        except Exception as e:
+            messagebox.showerror(
+                "Save Error",
+                f"Unexpected error while saving:\n{e}",
+            )
+            return
+
+        # Export to CSV (periodic, not every save)
+        self._export_db_to_csv()
+
+        self.dirty = False
+        if PLATFORM != "Linux":
+            messagebox.showinfo("Saved", "Annotations saved")
+
+    def _init_onedrive_credentials(self) -> None:
+        """
+        Initialize OneDrive credentials at app startup.
+
+        If credentials don't exist, this will trigger the auth dialog.
+        Runs in background thread to not block GUI startup.
+        """
+
+        def _init():
+            try:
+                self.onedrive_backup._ensure_initialized()
+                logger.info("OneDrive credentials initialized")
+            except Exception as e:
+                logger.warning(f"OneDrive initialization failed: {e}")
+
+        thread = threading.Thread(target=_init, daemon=True)
+        thread.start()
+
+    def _backup_to_onedrive(self, csv_path: Path) -> None:
+        """
+        Backup database and CSV to OneDrive.
+
+        Uploads to: pelvic-2d-points-backup/<username>/<YYYY-MM-DD>/
+
+        On window close, shows progress dialog while uploading.
+        Otherwise uses async upload to avoid blocking GUI.
+        """
+        if self.db_path is None:
+            return
+
+        files_to_backup = [self.db_path, csv_path]
+
+        if self.window_close_flag:
+            # Show progress dialog and upload in background
+            self._backup_with_progress_dialog(files_to_backup)
+        else:
+            # Async upload during normal operation - don't block GUI
+            self.onedrive_backup.backup_multiple(
+                files_to_backup,
+                callback=lambda success, total: logger.info(
+                    f"OneDrive backup: {success}/{total} files uploaded"
+                ),
+            )
+
+    def _backup_with_progress_dialog(self, files: list) -> None:
+        """
+        Show a progress dialog while backing up files on close.
+        Runs upload in background thread, updates GUI via polling.
+        """
+        # Create progress dialog
+        dialog = tk.Toplevel(self)
+        dialog.title("Backing up to OneDrive...")
+        dialog.geometry("400x150")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        # Center on parent
+        dialog.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 400) // 2
+        y = self.winfo_y() + (self.winfo_height() - 150) // 2
+        dialog.geometry(f"400x150+{x}+{y}")
+
+        # Prevent closing via X button
+        dialog.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        frame = ttk.Frame(dialog, padding=20)
+        frame.pack(fill="both", expand=True)
+
+        status_var = tk.StringVar(value="Uploading to OneDrive...")
+        status_label = ttk.Label(frame, textvariable=status_var, font=("Helvetica", 12))
+        status_label.pack(pady=(0, 15))
+
+        # Progress bar (indeterminate mode)
+        progress = ttk.Progressbar(frame, mode="indeterminate", length=300)
+        progress.pack(pady=10)
+        progress.start(10)
+
+        file_var = tk.StringVar(value="")
+        file_label = ttk.Label(
+            frame, textvariable=file_var, font=("Helvetica", 9), foreground="gray"
+        )
+        file_label.pack(pady=(10, 0))
+
+        # Shared state for thread communication
+        upload_state = {"done": False, "success": 0, "total": len(files), "current": ""}
+
+        def do_upload():
+            """Run uploads in background thread."""
+            for fpath in files:
+                if fpath.exists():
+                    upload_state["current"] = fpath.name
+                    try:
+                        if self.onedrive_backup.upload_backup_sync(fpath):
+                            upload_state["success"] += 1
+                    except Exception as e:
+                        logger.warning(f"OneDrive backup failed for {fpath}: {e}")
+            upload_state["done"] = True
+
+        def check_progress():
+            """Poll upload state and update GUI."""
+            if upload_state["current"]:
+                file_var.set(f"Uploading: {upload_state['current']}")
+
+            if upload_state["done"]:
+                progress.stop()
+                dialog.destroy()
+            else:
+                # Check again in 100ms
+                dialog.after(100, check_progress)
+
+        # Start upload thread
+        upload_thread = threading.Thread(target=do_upload, daemon=True)
+        upload_thread.start()
+
+        # Start polling
+        check_progress()
+
+        # Wait for dialog to close (blocking but GUI-responsive)
+        self.wait_window(dialog)
+
+    def _export_db_to_csv(self) -> None:
+        """Export database to CSV file with atomic write (temp file + rename)."""
+        current_time = datetime.now()
+        # save every so often, or save when the window is being closed
+        if ((current_time - self.last_update).total_seconds() > 20) or (
+            self.window_close_flag
+        ):
+            self.last_update = datetime.now()
+
+            try:
+                with sqlite3.connect(str(self.db_path)) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT image_path, image_quality, data FROM annotations"
+                    )
+                    rows = cursor.fetchall()
+            except sqlite3.Error as e:
+                messagebox.showerror(
+                    "Database Error",
+                    f"Failed to read annotations from database:\n{e}",
+                )
+                return
+
+            # Build DataFrame
+            records = []
+            for path, quality, data_json in rows:
+                record = {
+                    self.csv_path_column: Path(path).resolve(),
+                    "image_quality": quality,
+                }
+
+                try:
+                    landmark_data = json.loads(data_json) if data_json else {}
+                except json.JSONDecodeError:
+                    landmark_data = {}
+
+                for lm in self.landmarks:
+                    if lm in landmark_data and landmark_data[lm]:
+                        record[lm] = repr(landmark_data[lm])
+                    else:
+                        record[lm] = ""
+
+                records.append(record)
+
+            df = pd.DataFrame(records)
+
+            # Ensure column order
+            cols = [self.csv_path_column, "image_quality"] + self.landmarks
+            df = df[[c for c in cols if c in df.columns]]
+
+            # Determine final CSV path
+            csv_path = Path(self.abs_csv_path)
+            if self.check_csv_mode:
+                dir = csv_path.parent
+                csv_name = Path(extract_filename(csv_path))
+                new_name = csv_name.stem + "_CHECKED.csv"
+                csv_path = Path(dir / new_name)
+
+            # Atomic write: write to temp file, then rename
+            # This prevents corruption if the app crashes mid-write
+            temp_path = csv_path.with_suffix(".csv.tmp")
+            try:
+                df.to_csv(str(temp_path), index=False)
+                # Atomic rename (on same filesystem)
+                temp_path.replace(csv_path)
+
+                # Backup to OneDrive after successful local save
+                self._backup_to_onedrive(csv_path)
+
+            except OSError as e:
+                messagebox.showerror(
+                    "CSV Export Error",
+                    f"Failed to save CSV file:\n{e}\n\nYour data is safe in the database.",
+                )
+                # Clean up temp file if it exists
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except OSError:
+                        pass
 
     def _get_annotations(self) -> Tuple[Dict[str, Tuple[float, float]], int]:
         """Returns (points_dict, quality) for current image."""
@@ -1071,7 +1548,21 @@ class AnnotationGUI(tk.Tk):
         # pts = self.annotations.get(self.current_image_path, {})
         pts, quality = self._get_annotations()
         self._update_found_checks(pts)
+        current_image_verified = self._is_current_image_verified()
         for lm, (x, y) in pts.items():
+            drawing_current_selected = lm == self.selected_landmark.get()
+            y_offset_label = 16 if drawing_current_selected else 12
+            oval_color = (
+                "blue"
+                if drawing_current_selected
+                else ("red" if not current_image_verified else "green")
+            )
+            text_color = "orange" if drawing_current_selected else "yellow"
+            font = (
+                self.landmark_font if drawing_current_selected else self.dialogue_font
+            )
+            shadow_font = font.copy()
+            shadow_font.configure(size=font.cget("size") + 1)
             vis_var = self.landmark_visibility.get(lm)
             if vis_var is not None and not vis_var.get():
                 continue
@@ -1079,14 +1570,29 @@ class AnnotationGUI(tk.Tk):
 
             r = 5
             self.canvas.create_oval(
-                xs - r, ys - r, xs + r, ys + r, outline="red", width=2, tags="marker"
+                xs - r,
+                ys - r,
+                xs + r,
+                ys + r,
+                outline=oval_color,
+                width=2,
+                tags="marker",
+            )
+
+            self.canvas.create_text(
+                xs - 1,
+                ys - y_offset_label - 1,
+                text=lm,
+                fill="black",
+                font=shadow_font,
+                tags="marker",
             )
             self.canvas.create_text(
                 xs,
-                ys - 10,
+                ys - y_offset_label,
                 text=lm,
-                fill="yellow",
-                font=self.dialogue_font,
+                fill=text_color,
+                font=font,
                 tags="marker",
             )
         for lm in ("LOB", "ROB"):
@@ -1098,8 +1604,8 @@ class AnnotationGUI(tk.Tk):
         for key, line_id in list(self.pair_line_ids.items()):
             try:
                 self.canvas.delete(line_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to delete pair line {key}: {e}")
             self.pair_line_ids.pop(key, None)
 
     # Finds a landmark by lowercase name, returning the exact key.
@@ -1140,14 +1646,14 @@ class AnnotationGUI(tk.Tk):
                         )
                     try:
                         self.canvas.tag_lower(self.pair_line_ids[key], "marker")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Failed to lower pair line {key}: {e}")
                     continue
             if key in self.pair_line_ids:
                 try:
                     self.canvas.delete(self.pair_line_ids[key])
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to delete pair line {key}: {e}")
                 self.pair_line_ids.pop(key, None)
 
     # Enables/disables the hover circle UI and hides it when disabled.
@@ -1224,8 +1730,8 @@ class AnnotationGUI(tk.Tk):
         for lm in list(self.seg_item_ids.keys()):
             try:
                 self.canvas.delete(self.seg_item_ids[lm])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to delete overlay for {lm}: {e}")
         self.seg_item_ids.clear()
         self.seg_img_objs.clear()
         self._remove_pair_lines()
@@ -1235,8 +1741,8 @@ class AnnotationGUI(tk.Tk):
         if lm in self.seg_item_ids:
             try:
                 self.canvas.delete(self.seg_item_ids[lm])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to delete overlay for {lm}: {e}")
             self.seg_item_ids.pop(lm, None)
             self.seg_img_objs.pop(lm, None)
 
@@ -1331,6 +1837,8 @@ class AnnotationGUI(tk.Tk):
             self.last_seed[lm] = (int(x), int(y))
             self._store_current_settings_for(lm)
             self._resegment_for(lm)
+        # Auto-save to database immediately after placing landmark
+        self._auto_save_to_db()
         return
 
     def _delete_current_landmark(self) -> None:
@@ -1360,6 +1868,8 @@ class AnnotationGUI(tk.Tk):
                 return
             self._store_current_settings_for(lm)
             self._resegment_for(lm)
+        # Auto-save to database immediately after deleting landmark
+        self._auto_save_to_db()
         return
 
     # Triggers re-segmentation if the selected landmark is LOB/ROB.
@@ -1582,24 +2092,24 @@ class AnnotationGUI(tk.Tk):
         self.method.set(st["method"])
         try:
             self.fill_sensitivity.set(int(st["sens"]))
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"Failed to apply sensitivity setting for {lm}: {e}")
         try:
             self.edge_lock.set(bool(int(st["edge_lock"])))
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"Failed to apply edge_lock setting for {lm}: {e}")
         try:
             self.edge_lock_width.set(int(st["edge_width"]))
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"Failed to apply edge_width setting for {lm}: {e}")
         try:
             self.use_clahe.set(bool(int(st["clahe"])))
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"Failed to apply clahe setting for {lm}: {e}")
         try:
             self.grow_shrink.set(int(st["grow"]))
-        except Exception:
-            pass
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"Failed to apply grow setting for {lm}: {e}")
 
     # Toggle visibility.
     def _set_selected_visibility(self, visible: bool) -> None:
@@ -1752,6 +2262,32 @@ class AnnotationGUI(tk.Tk):
             w = w.nametowidget(parent_name)
         return y
 
+    def _get_csv_images_from_directory(self, dir: Path) -> list[Path]:
+        try:
+            df = pd.read_csv(self.abs_csv_path)
+        except Exception:
+            return []
+
+        try:
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT image_filename FROM annotations WHERE verified = 0"
+                )
+                rows = cursor.fetchall()
+        except sqlite3.Error:
+            return []
+
+        csv_files = [elem[0] for elem in rows]
+
+        local_dir_csv_files = []
+        for root, dirs, files in dir.walk():
+            for file in files:
+                if file in csv_files:
+                    local_dir_csv_files.append(Path(root / file))
+
+        return local_dir_csv_files
+
     def _find_unannotated_images(self) -> None:
         """Scan directory for images not in CSV, enter queue mode."""
         if not hasattr(self, "abs_csv_path") or not self.abs_csv_path:
@@ -1777,10 +2313,11 @@ class AnnotationGUI(tk.Tk):
 
             # Build a set of files that are "truly annotated"
             # (either have landmarks OR have been quality-rated as bad)
-            annotated_filenames = set()
+            annotated_filenames: Set = set()
 
             for _, row in df.iterrows():
-                filename = Path(str(row[col])).name.lower()
+                # filename = Path(str(row[col])).name.lower()
+                filename = extract_filename(row[col])
 
                 # Check if any landmark columns have values
                 has_landmarks = any(
@@ -1807,9 +2344,6 @@ class AnnotationGUI(tk.Tk):
 
         # Recursively find all image files
         all_images = []
-        # for ext in self.possible_image_suffix:
-        #     all_images.extend(scan_path.rglob(f"*{ext}"))
-        #     # all_images.extend(scan_path.rglob(f"*{ext.lower()}"))
         for dirpath, dirnames, filenames in scan_path.walk():
             if "duplicates" in dirnames:
                 dirnames.remove("duplicates")
@@ -1887,8 +2421,44 @@ class AnnotationGUI(tk.Tk):
         self.method.set("Adaptive CC")
         return
 
+    def _check_csv_images(self):
+        self.abs_csv_path = filedialog.askopenfilename(
+            initialdir=BASE_DIR / "data/csv", filetypes=[("CSV File", ("*.csv"))]
+        )
+
+        df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
+        csv_path_column = self._detect_path_column(df)
+        self.load_landmarks_from_csv(self.abs_csv_path)
+        self.check_csv_mode = True
+        if self.csv_local_image_directory_path == None:
+            self.csv_local_image_directory_path = filedialog.askdirectory()
+        self.csv_path_queue = self._get_csv_images_from_directory(
+            Path(self.csv_local_image_directory_path)
+        )
+        if len(self.csv_path_queue) == 0:
+            self.csv_local_image_directory_path = filedialog.askdirectory()
+
+        self.csv_path_queue = self._get_csv_images_from_directory(
+            Path(self.csv_local_image_directory_path)
+        )
+
+        self.absolute_current_image_path = Path(self.csv_path_queue[0])
+        self.load_image_from_path(self.absolute_current_image_path)
+
+        return
+
+    def _exit_csv_check_mode(self):
+        self.check_csv_mode = False
+        self.csv_path_queue.clear()
+        self.csv_index = 0
+        self.exit_csv_check_btn.config(state="disabled")
+
+        return
+
 
 if __name__ == "__main__":
+    isolated_data_path = Path(Path(__file__).parents[1] / "data")
+    print(isolated_data_path)
     app = AnnotationGUI()
     app.option_add("*Label.font", "helvetica 20 bold")
     app.mainloop()
