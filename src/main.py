@@ -1355,6 +1355,13 @@ class AnnotationGUI(tk.Tk):
             # Build DataFrame
             records = []
             for path, quality, data_json in rows:
+                if path == None:
+                    continue
+                if quality == None:
+                    continue
+                if data_json == None:
+                    continue
+
                 record = {
                     self.csv_path_column: Path(path).resolve(),
                     "image_quality": quality,
@@ -2307,7 +2314,7 @@ class AnnotationGUI(tk.Tk):
         except sqlite3.Error:
             return []
 
-        csv_files = [elem[0] for elem in rows]
+        csv_files = [elem[0] for elem in rows if elem is not None]
 
         local_dir_csv_files = []
         for root, dirs, files in dir.walk():
