@@ -2461,6 +2461,9 @@ class AnnotationGUI(tk.Tk):
         if self.abs_csv_path is None:
             return
 
+        if self.abs_csv_path.strip() == "":
+            return
+
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
         csv_path_column = self._detect_path_column(df)
         self.load_landmarks_from_csv(self.abs_csv_path)
