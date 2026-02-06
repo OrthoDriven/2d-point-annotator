@@ -2499,6 +2499,7 @@ class AnnotationGUI(tk.Tk):
 
 
 if __name__ == "__main__":
+    # Feature 1 change
     app = AnnotationGUI()
     app.option_add("*Label.font", "helvetica 20 bold")
     app.mainloop()
