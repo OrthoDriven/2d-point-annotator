@@ -2458,6 +2458,8 @@ class AnnotationGUI(tk.Tk):
         self.abs_csv_path = filedialog.askopenfilename(
             initialdir=BASE_DIR / "data/csv", filetypes=[("CSV File", ("*.csv"))]
         )
+        if self.abs_csv_path is None:
+            return
 
         df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
         csv_path_column = self._detect_path_column(df)
