@@ -1205,7 +1205,7 @@ class AnnotationGUI(tk.Tk):
         self._export_db_to_csv()
 
         self.dirty = False
-        if PLATFORM != "Linux":
+        if PLATFORM == "Windows":
             messagebox.showinfo("Saved", "Annotations saved")
 
     def _init_onedrive_credentials(self) -> None:
