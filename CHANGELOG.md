@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.5](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.2.4...v1.2.5) (2026-02-06)
+
+
+### Bug Fixes
+
+* fixing None in db row when exporting to csv ([ca7f0a0](https://github.com/OrthoDriven/2d-point-annotator/commit/ca7f0a0fe6d8479b14e4e9bf698c359f2475e4e8))
+* fixing None in db row when exporting to csv ([918d4f1](https://github.com/OrthoDriven/2d-point-annotator/commit/918d4f12265f03aa3b27f7656a5bcfa99de1476d))
+
 ## [1.2.4](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.2.3...v1.2.4) (2026-02-06)
 
 
