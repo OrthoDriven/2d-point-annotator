@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.6](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.2.5...v1.2.6) (2026-02-06)
+
+
+### Bug Fixes
+
+* On mac, don't display the window when you're saving. ([e75bf9e](https://github.com/OrthoDriven/2d-point-annotator/commit/e75bf9ef1a63dd7e379c28ca6fbb2ea146507f28))
+* On mac, don't display the window when you're saving. ([7f494a2](https://github.com/OrthoDriven/2d-point-annotator/commit/7f494a260c1db1f8eebfa767cbf8c58fea581ada))
+
 ## [1.2.5](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.2.4...v1.2.5) (2026-02-06)
 
 
