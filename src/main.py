@@ -2458,31 +2458,26 @@ class AnnotationGUI(tk.Tk):
         self.abs_csv_path = filedialog.askopenfilename(
             initialdir=BASE_DIR / "data/csv", filetypes=[("CSV File", ("*.csv"))]
         )
-        if self.abs_csv_path is None:
-            return
+        if self.abs_csv_path:
+            df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
+            csv_path_column = self._detect_path_column(df)
+            self.load_landmarks_from_csv(self.abs_csv_path)
+            self.check_csv_mode = True
+            if self.csv_local_image_directory_path == None:
+                self.csv_local_image_directory_path = filedialog.askdirectory()
+            self.csv_path_queue = self._get_csv_images_from_directory(
+                Path(self.csv_local_image_directory_path)
+            )
+            if len(self.csv_path_queue) == 0:
+                self.csv_local_image_directory_path = filedialog.askdirectory()
 
-        if self.abs_csv_path.strip() == "":
-            return
+            self.csv_path_queue = self._get_csv_images_from_directory(
+                Path(self.csv_local_image_directory_path)
+            )
 
-        df: pd.DataFrame = pd.read_csv(self.abs_csv_path)
-        csv_path_column = self._detect_path_column(df)
-        self.load_landmarks_from_csv(self.abs_csv_path)
-        self.check_csv_mode = True
-        if self.csv_local_image_directory_path == None:
-            self.csv_local_image_directory_path = filedialog.askdirectory()
-        self.csv_path_queue = self._get_csv_images_from_directory(
-            Path(self.csv_local_image_directory_path)
-        )
-        if len(self.csv_path_queue) == 0:
-            self.csv_local_image_directory_path = filedialog.askdirectory()
-
-        self.csv_path_queue = self._get_csv_images_from_directory(
-            Path(self.csv_local_image_directory_path)
-        )
-
-        self.absolute_current_image_path = Path(self.csv_path_queue[0])
-        self.load_image_from_path(self.absolute_current_image_path)
-        self._update_queue_status()
+            self.absolute_current_image_path = Path(self.csv_path_queue[0])
+            self.load_image_from_path(self.absolute_current_image_path)
+            self._update_queue_status()
 
         return
 
