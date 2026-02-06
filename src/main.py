@@ -2497,7 +2497,6 @@ class AnnotationGUI(tk.Tk):
 
 
 if __name__ == "__main__":
-    isolated_data_path = Path(Path(__file__).parents[1] / "data")
     app = AnnotationGUI()
     app.option_add("*Label.font", "helvetica 20 bold")
     app.mainloop()
