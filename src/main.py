@@ -1927,53 +1927,53 @@ class AnnotationGUI(tk.Tk):
         Try segmentation with multiple fallback strategies.
         Returns mask or None if all strategies fail.
         """
-        # Strategy 1: Try with current settings
-        if self.method.get() == "Flood Fill":
-            mask = self._segment_ff(x, y)
-        else:
-            mask = self._segment_adaptive_cc(x, y)
+        # # Strategy 1: Try with current settings
+        # if self.method.get() == "Flood Fill":
+        #     mask = self._segment_ff(x, y)
+        # else:
+        #     mask = self._segment_adaptive_cc(x, y)
 
-        if mask is not None:
-            return mask
+        # if mask is not None:
+        #     return mask
 
-        # Strategy 2: Try nearby seed points (jittering)
-        offsets = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (2, 2), (-2, -2)]
-        for dx, dy in offsets[1:]:  # Skip (0,0) since we already tried it
-            new_x, new_y = x + dx, y + dy
-            if self.method.get() == "Flood Fill":
-                mask = self._segment_ff(new_x, new_y)
-            else:
-                mask = self._segment_adaptive_cc(new_x, new_y)
+        # # Strategy 2: Try nearby seed points (jittering)
+        # offsets = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (2, 2), (-2, -2)]
+        # for dx, dy in offsets[1:]:  # Skip (0,0) since we already tried it
+        #     new_x, new_y = x + dx, y + dy
+        #     if self.method.get() == "Flood Fill":
+        #         mask = self._segment_ff(new_x, new_y)
+        #     else:
+        #         mask = self._segment_adaptive_cc(new_x, new_y)
 
-            if mask is not None:
-                return mask
+        #     if mask is not None:
+        #         return mask
 
-        # Strategy 3: Try opposite method
-        if self.method.get() == "Flood Fill":
-            mask = self._segment_adaptive_cc(x, y)
-        else:
-            mask = self._segment_ff(x, y)
+        # # Strategy 3: Try opposite method
+        # if self.method.get() == "Flood Fill":
+        #     mask = self._segment_adaptive_cc(x, y)
+        # else:
+        #     mask = self._segment_ff(x, y)
 
-        if mask is not None:
-            return mask
+        # if mask is not None:
+        #     return mask
 
-        # Strategy 4: Try with relaxed sensitivity (more permissive)
-        original_sens = self.fill_sensitivity.get()
-        relaxed_sens = min(50, original_sens + 10)
-        self.fill_sensitivity.set(relaxed_sens)
+        # # Strategy 4: Try with relaxed sensitivity (more permissive)
+        # original_sens = self.fill_sensitivity.get()
+        # relaxed_sens = min(50, original_sens + 10)
+        # self.fill_sensitivity.set(relaxed_sens)
 
-        if self.method.get() == "Flood Fill":
-            mask = self._segment_ff(x, y)
-        else:
-            mask = self._segment_adaptive_cc(x, y)
+        # if self.method.get() == "Flood Fill":
+        #     mask = self._segment_ff(x, y)
+        # else:
+        #     mask = self._segment_adaptive_cc(x, y)
 
-        # Restore original
-        self.fill_sensitivity.set(original_sens)
+        # # Restore original
+        # self.fill_sensitivity.set(original_sens)
 
-        if mask is not None:
-            return mask
+        # if mask is not None:
+        #     return mask
 
-        # All strategies failed
+        # # All strategies failed
         return None
 
     # Converts image to preprocessed grayscale (CLAHE + blur).
