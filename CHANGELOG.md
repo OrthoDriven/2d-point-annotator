@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.3.0...v1.4.0) (2026-02-09)
+
+
+### Features
+
+* **ui:** changed the core UI engine to ttkbootstrap ([433e37d](https://github.com/OrthoDriven/2d-point-annotator/commit/433e37dbf446bfb6a28b0815425d3f97a27d4128))
+
+
+### Bug Fixes
+
+* **segmentation:** Don't run segmentation code ([56775c3](https://github.com/OrthoDriven/2d-point-annotator/commit/56775c35c11b97323acf0afdbaff2c00879264b9))
+
 ## [1.3.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.2.6...v1.3.0) (2026-02-06)
 
 
