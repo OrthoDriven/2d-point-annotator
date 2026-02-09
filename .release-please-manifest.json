@@ -6,4 +6,5 @@
         "path": "pixi.toml",
         "jsonpath": "$.workspace.version"
     }
+    ]
 }
