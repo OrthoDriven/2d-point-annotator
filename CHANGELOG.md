@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.4.0...v1.4.1) (2026-02-09)
+
+
+### Bug Fixes
+
+* Add version bump test to test.txt ([#31](https://github.com/OrthoDriven/2d-point-annotator/issues/31)) ([12e7dd3](https://github.com/OrthoDriven/2d-point-annotator/commit/12e7dd395870c3b9cf52537fe69acef6cd4503e5))
+* fixing release please code ([#33](https://github.com/OrthoDriven/2d-point-annotator/issues/33)) ([9d7b08d](https://github.com/OrthoDriven/2d-point-annotator/commit/9d7b08d9c2f988b25714b39743714be722ffb85c))
+
 ## [1.4.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.3.0...v1.4.0) (2026-02-09)
 
 
