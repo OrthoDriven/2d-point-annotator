@@ -1,10 +1,10 @@
 {
   ".": "1.4.1",
-    "extra-files": [
+  "extra-files": [
     {
-        "type": "toml",
-        "path": "pixi.toml",
-        "jsonpath": "$.workspace.version"
+      "type": "toml",
+      "path": "./pixi.toml",
+      "jsonpath": "$.workspace.version"
     }
-    ]
+  ]
 }
