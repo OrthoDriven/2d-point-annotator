@@ -4,9 +4,6 @@ import ast
 import datetime
 import json
 import logging
-import os
-import platform
-import shutil
 import sqlite3
 import threading
 import tkinter as tk
@@ -34,12 +31,9 @@ import pandas as pd
 from PIL import Image, ImageTk
 
 from auth import OneDriveBackup
-from dirs import APP_DIR, AUTH_DIR, BASE_DIR, BASE_DIR_PATH, PLATFORM
+from dirs import BASE_DIR, PLATFORM
 from path_utils import (
     extract_filename,
-    filenames_match,
-    normalize_path_string,
-    normalize_relative_path,
 )
 
 
