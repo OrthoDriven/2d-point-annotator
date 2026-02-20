@@ -10,10 +10,8 @@ import tkinter as tk
 import tkinter.font as tkfont
 from datetime import datetime
 from pathlib import Path, PurePath
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from typing import Dict, List, Optional, Set, Tuple, Union
-
-import ttkbootstrap as ttk
 
 # Configure logging - writes to file for debugging without disrupting users
 logging.basicConfig(
@@ -43,7 +41,6 @@ class AnnotationGUI(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.tk.call("tk", "scaling", 1.25)
-        self.theme_name = "minty"
 
         # Force Tk named fonts (for classic tk widgets)
         import tkinter.font as tkfont
@@ -251,7 +248,7 @@ class AnnotationGUI(tk.Tk):
             command=self.load_landmarks_from_csv,
             font=self.heading_font,
         ).pack(fill="x", pady=5)
-        img_frame = ttk.Labelframe(ctrl, text="Image + Quality")
+        img_frame = ttk.LabelFrame(ctrl, text="Image + Quality")
         img_frame.pack(fill="x", pady=(10, 10))
 
         row = ttk.Frame(img_frame)
@@ -358,7 +355,7 @@ class AnnotationGUI(tk.Tk):
             font=self.dialogue_font,
         ).pack(side="left", expand=True, fill="x")
         ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
-        hover_wrap = ttk.Labelframe(ctrl, text="Hover Circle Tool")
+        hover_wrap = ttk.LabelFrame(ctrl, text="Hover Circle Tool")
         hover_wrap.pack(fill="x")
         tk.Checkbutton(
             hover_wrap,
@@ -379,7 +376,7 @@ class AnnotationGUI(tk.Tk):
         )
         self.radius_scale.config(state="disabled")
         self.radius_scale.pack(fill="x", padx=6, pady=6)
-        seg_wrap = ttk.Labelframe(ctrl, text="Fill Tool (Obturator)")
+        seg_wrap = ttk.LabelFrame(ctrl, text="Fill Tool (Obturator)")
         seg_wrap.pack(fill="x", pady=(8, 0))
         row1 = tk.Frame(seg_wrap)
         row1.pack(fill="x", padx=6, pady=(6, 2))
@@ -2190,7 +2187,7 @@ class AnnotationGUI(tk.Tk):
             f.configure(family="Liberation Sans", size=12)
 
         # ttk styles
-        style = ttk.Style("minty")
+        style = ttk.Style(self)
         style.theme_use(style.theme_use())  # force theme init / refresh
 
         style.configure(".", font=self.dialogue_font)
