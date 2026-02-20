@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.3](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.4.2...v1.4.3) (2026-02-20)
+
+
+### Reverts
+
+* removing ttkbootstrap, since this breaks things on MacOS. ([025716c](https://github.com/OrthoDriven/2d-point-annotator/commit/025716c3ceb5e0aa37919c5c50934c9ae0909ce4))
+* removing ttkbootstrap, since this breaks things on MacOS. ([8c5485c](https://github.com/OrthoDriven/2d-point-annotator/commit/8c5485c0ee25d0ce6fd192a6f5baacefbfbd2209))
+
 ## [1.4.2](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.4.1...v1.4.2) (2026-02-09)
 
 
