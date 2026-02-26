@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.4](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.4.3...v1.4.4) (2026-02-26)
+
+
+### Bug Fixes
+
+* Add detached-environments setting to config.toml ([ce6f337](https://github.com/OrthoDriven/2d-point-annotator/commit/ce6f337cadf473740e90afbdb79bcbc9eec430d7))
+* fixing up windows loading and updating ([e0edbf4](https://github.com/OrthoDriven/2d-point-annotator/commit/e0edbf4c496fc39d6a8b0d5b61cabcc6655d93dc))
+* **windows:** fixing the way that windows creates updates. ([3d08340](https://github.com/OrthoDriven/2d-point-annotator/commit/3d083406c3e81f2e3b6b7067b619a28593070ba6))
+
 ## [1.4.3](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.4.2...v1.4.3) (2026-02-20)
 
 
