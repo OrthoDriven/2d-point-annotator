@@ -5,6 +5,7 @@ Cross-platform updater for 2D Point Annotator.
 Runs outside the app directory to safely replace it.
 """
 
+import contextlib
 import json
 import os
 import platform
@@ -192,9 +193,9 @@ def atomic_swap(new_dir, app_dir):
 
     # Clean up any leftover temp directories
     if new_path.exists():
-        shutil.rmtree(new_path)
+        shutil.rmtree(new_path, ignore_errors=True)
     if old_path.exists():
-        shutil.rmtree(old_path)
+        shutil.rmtree(old_path, ignore_errors=True)
 
     # Move new version to staging area
     shutil.move(str(new_dir), str(new_path))
@@ -207,7 +208,9 @@ def atomic_swap(new_dir, app_dir):
 
         # Clean up old version
         if old_path.exists():
-            shutil.rmtree(old_path)
+            if SYSTEM == "Windows":
+                pass
+            shutil.rmtree(old_path, ignore_errors=True)
     except Exception as e:
         # Rollback on failure
         print(f"[error] Swap failed: {e}")
@@ -263,6 +266,10 @@ def run_update():
     config = load_config()
     state_path = config["STATE_PATH"]
     app_dir = config["APP_DIR"]
+    [
+        contextlib.suppress(Exception)(shutil.rmtree(p))
+        for p in Path(app_dir).parent.glob("app.old*")
+    ]
 
     # Load state
     state = load_state(state_path)
