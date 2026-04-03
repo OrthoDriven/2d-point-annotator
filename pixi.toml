@@ -16,7 +16,7 @@ fc-cache = { cmd = "fc-cache -r", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/f
 # Quick check: prove the env can see DejaVu.
 fc-check = { cmd = "bash -lc 'fc-list | grep -i dejavu | head -n 20'", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/fonts", FC_CONFIG_FILE = "$CONDA_PREFIX/etc/fonts/fonts.conf" } }
 
-run = { cmd = "python ./main.py", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/fonts", FC_CONFIG_FILE = "$CONDA_PREFIX/etc/fonts/fonts.conf" } }
+run = { cmd = "python src/main.py", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/fonts", FC_CONFIG_FILE = "$CONDA_PREFIX/etc/fonts/fonts.conf" } }
 
 
 [dependencies]

@@ -106,8 +106,22 @@ class AnnotationGUI(tk.Tk):
         self.base_img_item: Optional[int] = None
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.csv_loaded = False
-        # Also adjust these if you want everything to match:
-        # Already configured above to match heading_font
+        self.extended_crosshair_enabled = tk.BooleanVar(value=False)
+        self.extended_crosshair_length = tk.IntVar(value=60)
+        self.extended_crosshair_ids: list[int] = []
+
+        self.right_mouse_held = False
+        self.mouse_crosshair_ids: list[int] = []
+        self.zoom_crosshair_ids: list[int] = []
+        self.last_mouse_canvas_pos: Optional[Tuple[float, float]] = None
+
+        self.zoom_canvas: Optional[tk.Canvas] = None
+        self.zoom_img_obj: Optional[ImageTk.PhotoImage] = None
+        self.zoom_base_item: Optional[int] = None
+        self.zoom_percent = tk.IntVar(value=10)
+
+        self.zoom_extended_crosshair_ids: list[int] = []
+
         self._setup_ui()
         self.after(0, self._lock_initial_minsize)
         self.landmarks = []
@@ -149,6 +163,7 @@ class AnnotationGUI(tk.Tk):
         # Trigger credential check at startup (will show auth dialog if needed)
         self.after(100, self._init_onedrive_credentials)
 
+
     # Builds the left image canvas, right control panel, and tool widgets.
     def focus_widget(self, event):
         event.widget.focus_set()
@@ -181,6 +196,63 @@ class AnnotationGUI(tk.Tk):
                     f"Failed to toggle verification status:\n{e}",
                 )
         return
+    
+    def _update_zoom_extended_crosshair(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        if not self.extended_crosshair_enabled.get():
+            self._hide_zoom_extended_crosshair()
+            return
+
+        size = self._get_zoom_canvas_size()
+        x = size / 2
+        y = size / 2
+
+        length = max(5, min(400, int(self.extended_crosshair_length.get())))
+
+        # Keep it inside the zoom canvas
+        max_len = max(1, int(size / 2) - 2)
+        length = min(length, max_len)
+
+        if not self.zoom_extended_crosshair_ids:
+            hline_id = self.zoom_canvas.create_line(
+                x - length,
+                y,
+                x + length,
+                y,
+                fill="lime",
+                width=1,
+                tags="zoom_extended_crosshair",
+            )
+            vline_id = self.zoom_canvas.create_line(
+                x,
+                y - length,
+                x,
+                y + length,
+                fill="lime",
+                width=1,
+                tags="zoom_extended_crosshair",
+            )
+            self.zoom_extended_crosshair_ids = [hline_id, vline_id]
+        else:
+            hline_id, vline_id = self.zoom_extended_crosshair_ids
+            self.zoom_canvas.coords(hline_id, x - length, y, x + length, y)
+            self.zoom_canvas.coords(vline_id, x, y - length, x, y + length)
+
+        for item_id in self.zoom_extended_crosshair_ids:
+            self.zoom_canvas.tag_raise(item_id)
+
+    def _hide_zoom_extended_crosshair(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        for item_id in self.zoom_extended_crosshair_ids:
+            try:
+                self.zoom_canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete zoom extended crosshair item: {e}")
+        self.zoom_extended_crosshair_ids = []
 
     def _is_current_image_verified(self) -> bool:
         if self.db_path is not None:
@@ -205,13 +277,36 @@ class AnnotationGUI(tk.Tk):
         return False
 
     def _setup_ui(self) -> None:
-        self.canvas = tk.Canvas(self, bg="grey", highlightthickness=0)
+        PANEL_WIDTH = 450
+        SCROLLBAR_WIDTH = 18
+        CANVAS_HEIGHT = 220
+
+        main = tk.Frame(self)
+        main.pack(fill="both", expand=True)
+
+        # Left tool column
+        left_tools = tk.Frame(main, width=PANEL_WIDTH)
+        left_tools.pack(side=tk.LEFT, fill="y", padx=(10, 5), pady=10)
+        left_tools.pack_propagate(False)
+        self._left_tools = left_tools
+
+        # Center canvas (keeps the same expansion policy)
+        self.canvas = tk.Canvas(main, bg="grey", highlightthickness=0)
         self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
-        # recompute transform & redraw on canvas size changes
         self.canvas.bind("<Configure>", self._on_canvas_resize)
         self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<Motion>", self._on_mouse_move)
-        self.canvas.bind("<Leave>", lambda e: self._hide_hover_circle())
+        self.canvas.bind("<ButtonPress-3>", self._on_right_button_press)
+        self.canvas.bind("<ButtonRelease-3>", self._on_right_button_release)
+        self.canvas.bind(
+            "<Leave>",
+            lambda e: (
+                self._hide_hover_circle(),
+                self._hide_mouse_crosshair(),
+                self._hide_extended_crosshair(),
+                self._update_zoom_view(None, None),
+            ),
+        )
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.canvas.bind("<Button-4>", lambda e: self._on_scroll_linux(1))
         self.canvas.bind("<Button-5>", lambda e: self._on_scroll_linux(-1))
@@ -221,9 +316,127 @@ class AnnotationGUI(tk.Tk):
         )
         self.shadow_font = tkfont.Font(family="Liberation Sans", size=20, weight="bold")
 
-        ctrl = tk.Frame(self)
-        ctrl.pack(side=tk.RIGHT, fill="y", padx=10, pady=10)
+        # Right control column
+        ctrl = tk.Frame(main, width=PANEL_WIDTH)
+        ctrl.pack(side=tk.RIGHT, fill="y", padx=(5, 10), pady=10)
+        ctrl.pack_propagate(False)
         self._ctrl = ctrl
+
+        # ---------- LEFT COLUMN: live zoom preview ----------
+        zoom_wrap = ttk.LabelFrame(left_tools, text="Zoom View")
+        zoom_wrap.pack(fill="x", pady=(0, 8))
+
+        self.zoom_canvas = tk.Canvas(
+            zoom_wrap,
+            width=PANEL_WIDTH,
+            height=PANEL_WIDTH,
+            bg="black",
+            highlightthickness=0,
+        )
+        self.zoom_canvas.pack(fill="x", padx=0, pady=0)
+        tk.Scale(
+            zoom_wrap,
+            from_=2,
+            to=40,
+            orient="horizontal",
+            label="Zoom (x)",
+            variable=self.zoom_percent,
+            command=self._on_zoom_change,
+            font=self.dialogue_font,
+        ).pack(fill="x", padx=6, pady=(6, 6))
+        # ---------- LEFT COLUMN: tools ----------
+        hover_wrap = ttk.LabelFrame(left_tools, text="Hover Circle Tool")
+        hover_wrap.pack(fill="x")
+        tk.Checkbutton(
+            hover_wrap,
+            text="Show Hover Circle",
+            variable=self.hover_enabled,
+            command=self._toggle_hover,
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(6, 0))
+        self.radius_scale = tk.Scale(
+            hover_wrap,
+            from_=1,
+            to=300,
+            orient="horizontal",
+            label="Hover Radius",
+            variable=self.hover_radius,
+            command=self._on_radius_change,
+            font=self.dialogue_font,
+        )
+        self.radius_scale.config(state="disabled")
+        self.radius_scale.pack(fill="x", padx=6, pady=6)
+
+        seg_wrap = ttk.LabelFrame(left_tools, text="Fill Tool (Obturator)")
+        seg_wrap.pack(fill="x", pady=(8, 0))
+        row1 = tk.Frame(seg_wrap)
+        row1.pack(fill="x", padx=6, pady=(6, 2))
+        tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
+
+        self.ff_button = tk.Checkbutton(
+            row1,
+            text="FF",
+            variable=self.use_ff,
+            font=self.dialogue_font,
+            command=self._change_method_to_ff,
+        )
+        self.ff_button.pack(side="left")
+
+        self.adap_cc_button = tk.Checkbutton(
+            row1,
+            text="ACC",
+            variable=self.use_adap_cc,
+            font=self.dialogue_font,
+            command=self._change_method_to_acc,
+        )
+        self.adap_cc_button.pack(side="left")
+
+        tk.Checkbutton(
+            row1,
+            text="CLAHE",
+            variable=self.use_clahe,
+            command=lambda: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
+        ).pack(side="left", padx=(10, 0))
+
+        tk.Scale(
+            seg_wrap,
+            from_=1,
+            to=50,
+            orient="horizontal",
+            label="Sensitivity",
+            variable=self.fill_sensitivity,
+            command=lambda _v: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
+        ).pack(fill="x", padx=6, pady=(6, 4))
+
+        tk.Checkbutton(
+            seg_wrap,
+            text="Edge lock (flood fill)",
+            variable=self.edge_lock,
+            command=lambda: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6)
+
+        tk.Scale(
+            seg_wrap,
+            from_=1,
+            to=5,
+            orient="horizontal",
+            label="Edge lock width",
+            variable=self.edge_lock_width,
+            command=lambda _v: self._resegment_selected_if_needed(),
+            font=self.dialogue_font,
+        ).pack(fill="x", padx=6, pady=(2, 6))
+
+        tk.Button(
+            seg_wrap,
+            text="Re-segment (use current sliders)",
+            command=lambda: self._resegment_for(self.selected_landmark.get()),
+            font=self.dialogue_font,
+        ).pack(fill="x", padx=6, pady=(0, 8))
+
+        # ---------- RIGHT COLUMN: existing controls ----------
         tk.Button(
             ctrl, text="Load Image", command=self.load_image, font=self.heading_font
         ).pack(fill="x", pady=5)
@@ -248,6 +461,7 @@ class AnnotationGUI(tk.Tk):
             command=self.load_landmarks_from_csv,
             font=self.heading_font,
         ).pack(fill="x", pady=5)
+
         img_frame = ttk.LabelFrame(ctrl, text="Image + Quality")
         img_frame.pack(fill="x", pady=(10, 10))
 
@@ -260,16 +474,16 @@ class AnnotationGUI(tk.Tk):
             command=self._find_unannotated_images,
         ).pack(fill="x", pady=5)
 
-        # Add status label (update the Image frame to show queue status)
         self.queue_status_var = tk.StringVar(value="")
         tk.Label(
             img_frame, textvariable=self.queue_status_var, fg="blue", font="16"
         ).pack(fill="x", padx=6, pady=(0, 6))
+
         self.exit_queue_btn = tk.Button(
             ctrl,
             text="Exit Queue Mode",
             command=self._exit_queue_mode,
-            state="disabled",  # Only enabled when in queue mode
+            state="disabled",
         )
         self.exit_queue_btn.pack(fill="x", pady=5)
 
@@ -308,9 +522,6 @@ class AnnotationGUI(tk.Tk):
         quality_entry.pack(side="right", padx=(6, 0))
 
         tk.Label(ctrl, text="Landmarks:", font=self.heading_font).pack(anchor="w")
-        PANEL_WIDTH = 300
-        SCROLLBAR_WIDTH = 18
-        CANVAS_HEIGHT = 220
         self.landmark_panel_container = tk.Frame(
             ctrl, bd=1, relief="sunken", width=PANEL_WIDTH, height=CANVAS_HEIGHT
         )
@@ -331,6 +542,7 @@ class AnnotationGUI(tk.Tk):
         )
         self.lp_scrollbar.pack(side=tk.RIGHT, fill="y")
         self.lp_canvas.configure(yscrollcommand=self.lp_scrollbar.set)
+
         self.lp_inner = tk.Frame(self.lp_canvas)
         self.lp_canvas.create_window((0, 0), window=self.lp_inner, anchor="nw")
         self.lp_inner.bind(
@@ -339,7 +551,9 @@ class AnnotationGUI(tk.Tk):
         )
         self.lp_inner.bind("<Enter>", lambda e: self._bind_landmark_scroll(True))
         self.lp_inner.bind("<Leave>", lambda e: self._bind_landmark_scroll(False))
+
         ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
+
         buttons_row = tk.Frame(ctrl)
         buttons_row.pack(fill="x", pady=(0, 6))
         tk.Button(
@@ -354,100 +568,106 @@ class AnnotationGUI(tk.Tk):
             command=lambda: self._set_all_visibility(False),
             font=self.dialogue_font,
         ).pack(side="left", expand=True, fill="x")
+
         ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
-        hover_wrap = ttk.LabelFrame(ctrl, text="Hover Circle Tool")
-        hover_wrap.pack(fill="x")
+
+        cross_wrap = ttk.LabelFrame(left_tools, text="Extended Crosshair Tool")
+        cross_wrap.pack(fill="x", pady=(8, 0))
+
         tk.Checkbutton(
-            hover_wrap,
-            text="Show Hover Circle",
-            variable=self.hover_enabled,
-            command=self._toggle_hover,
+            cross_wrap,
+            text="Show Extended Crosshair",
+            variable=self.extended_crosshair_enabled,
+            command=self._toggle_extended_crosshair,
             font=self.dialogue_font,
         ).pack(anchor="w", padx=6, pady=(6, 0))
-        self.radius_scale = tk.Scale(
-            hover_wrap,
-            from_=1,
-            to=300,
-            orient="horizontal",
-            label="Hover Radius",
-            variable=self.hover_radius,
-            command=self._on_radius_change,
-            font=self.dialogue_font,
-        )
-        self.radius_scale.config(state="disabled")
-        self.radius_scale.pack(fill="x", padx=6, pady=6)
-        seg_wrap = ttk.LabelFrame(ctrl, text="Fill Tool (Obturator)")
-        seg_wrap.pack(fill="x", pady=(8, 0))
-        row1 = tk.Frame(seg_wrap)
-        row1.pack(fill="x", padx=6, pady=(6, 2))
-        tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
-        # self.fill_box = ttk.Combobox(
-        #     row1,
-        #     textvariable=self.method,
-        #     values=["Flood Fill", "Adaptive CC"],
-        #     width=14,
-        #     state="readonly",
-        # )
-        # self.fill_box.pack(side="left", padx=(6, 0))
-        # self.fill_box.bind_class("ComboboxListbox", "<KeyRelease>", self.focus_set())
-        self.ff_button = tk.Checkbutton(
-            row1,
-            text="FF",
-            variable=self.use_ff,
-            font=self.dialogue_font,
-            command=self._change_method_to_ff,
-        )
 
-        self.ff_button.pack(side="left")
-        self.adap_cc_button = tk.Checkbutton(
-            row1,
-            text="ACC",
-            variable=self.use_adap_cc,
+        self.crosshair_length_scale = tk.Scale(
+            cross_wrap,
+            from_=5,
+            to=400,
+            orient="horizontal",
+            label="Crosshair Length",
+            variable=self.extended_crosshair_length,
+            command=self._on_extended_crosshair_length_change,
             font=self.dialogue_font,
-            command=self._change_method_to_acc,
         )
-        self.adap_cc_button.pack(side="left")
+        self.crosshair_length_scale.config(state="disabled")
+        self.crosshair_length_scale.pack(fill="x", padx=6, pady=6)
 
-        tk.Checkbutton(
-            row1,
-            text="CLAHE",
-            variable=self.use_clahe,
-            command=lambda: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(side="left", padx=(10, 0))
-        tk.Scale(
-            seg_wrap,
-            from_=1,
-            to=50,
-            orient="horizontal",
-            label="Sensitivity",
-            variable=self.fill_sensitivity,
-            command=lambda _v: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(fill="x", padx=6, pady=(6, 4))
-        tk.Checkbutton(
-            seg_wrap,
-            text="Edge lock (flood fill)",
-            variable=self.edge_lock,
-            command=lambda: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(anchor="w", padx=6)
-        tk.Scale(
-            seg_wrap,
-            from_=1,
-            to=5,
-            orient="horizontal",
-            label="Edge lock width",
-            variable=self.edge_lock_width,
-            command=lambda _v: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(fill="x", padx=6, pady=(2, 6))
-        tk.Button(
-            seg_wrap,
-            text="Re-segment (use current sliders)",
-            command=lambda: self._resegment_for(self.selected_landmark.get()),
-            font=self.dialogue_font,
-        ).pack(fill="x", padx=6, pady=(0, 8))
+        self.after(0, self._render_black_zoom_view)
+    
+    def _toggle_extended_crosshair(self) -> None:
+        enabled = self.extended_crosshair_enabled.get()
+        self.crosshair_length_scale.config(state="normal" if enabled else "disabled")
+
+        if not enabled:
+            self._hide_extended_crosshair()
+            self._hide_zoom_extended_crosshair()
+        else:
+            if self.last_mouse_canvas_pos is not None:
+                x, y = self.last_mouse_canvas_pos
+                self._update_extended_crosshair(x, y)
+            self._update_zoom_extended_crosshair()
+
+    def _on_extended_crosshair_length_change(self, _value: str) -> None:
+        if not self.extended_crosshair_enabled.get():
+            return
+
+        length = max(5, min(400, self.extended_crosshair_length.get()))
+        self.extended_crosshair_length.set(length)
+
+        if self.last_mouse_canvas_pos is not None:
+            x, y = self.last_mouse_canvas_pos
+            self._update_extended_crosshair(x, y)
+
+        self._update_zoom_extended_crosshair()
+
+    def _update_extended_crosshair(self, x: float, y: float) -> None:
+        length = self.extended_crosshair_length.get()
+
+        if not self.extended_crosshair_ids:
+            hline_id = self.canvas.create_line(
+                x - length,
+                y,
+                x + length,
+                y,
+                fill="lime",
+                width=1,
+                tags="extended_crosshair",
+            )
+            vline_id = self.canvas.create_line(
+                x,
+                y - length,
+                x,
+                y + length,
+                fill="lime",
+                width=1,
+                tags="extended_crosshair",
+            )
+            self.extended_crosshair_ids = [hline_id, vline_id]
+        else:
+            hline_id, vline_id = self.extended_crosshair_ids
+            self.canvas.coords(hline_id, x - length, y, x + length, y)
+            self.canvas.coords(vline_id, x, y - length, x, y + length)
+
+        for item_id in self.extended_crosshair_ids:
+            self.canvas.tag_raise(item_id)
+
+    def _hide_extended_crosshair(self) -> None:
+        for item_id in self.extended_crosshair_ids:
+            try:
+                self.canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete extended crosshair item: {e}")
+        self.extended_crosshair_ids = []
+
+    def _on_zoom_change(self, _value: str) -> None:
+        if self.last_mouse_canvas_pos is not None:
+            x, y = self.last_mouse_canvas_pos
+            self._update_zoom_view(x, y)
+        else:
+            self._update_zoom_view(None, None)
 
     def _detect_path_column(self, df: pd.DataFrame) -> str:
         """Detect which column contains image paths."""
@@ -464,6 +684,18 @@ class AnnotationGUI(tk.Tk):
 
         # Last resort default
         return "image_path"
+
+    def _on_right_button_press(self, event) -> None:
+        self.right_mouse_held = True
+
+    def _on_right_button_release(self, event) -> None:
+        self.right_mouse_held = False
+
+    def _change_zoom_percent(self, delta: int) -> None:
+        new_zoom = max(2, min(40, self.zoom_percent.get() + delta))
+        if new_zoom != self.zoom_percent.get():
+            self.zoom_percent.set(new_zoom)
+            self._on_zoom_change(str(new_zoom))
 
     def _recompute_transform(self) -> None:
         if not self.current_image:
@@ -494,8 +726,108 @@ class AnnotationGUI(tk.Tk):
         disp_w, disp_h = self.disp_size
         return off_x, off_y, off_x + disp_w, off_y + disp_h
 
-    # Builds the landmark selection table with visibility and status controls.
+    def _get_zoom_canvas_size(self) -> int:
+        if self.zoom_canvas is None:
+            return 1
 
+        w = self.zoom_canvas.winfo_width()
+        h = self.zoom_canvas.winfo_height()
+
+        if w <= 1 or h <= 1:
+            req_w = self.zoom_canvas.winfo_reqwidth()
+            req_h = self.zoom_canvas.winfo_reqheight()
+            w = max(w, req_w, 1)
+            h = max(h, req_h, 1)
+
+        return max(1, min(w, h))
+
+    def _render_black_zoom_view(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        size = self._get_zoom_canvas_size()
+        black_img = Image.new("RGB", (size, size), "black")
+        self.zoom_img_obj = ImageTk.PhotoImage(black_img)
+
+        if self.zoom_base_item is None:
+            self.zoom_base_item = self.zoom_canvas.create_image(
+                0, 0, anchor="nw", image=self.zoom_img_obj
+            )
+        else:
+            self.zoom_canvas.itemconfigure(self.zoom_base_item, image=self.zoom_img_obj)
+            self.zoom_canvas.coords(self.zoom_base_item, 0, 0)
+
+        self._update_zoom_crosshair()
+
+    def _update_zoom_view(
+        self, mouse_x: Optional[float] = None, mouse_y: Optional[float] = None
+    ) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        size = self._get_zoom_canvas_size()
+
+        if self.current_image is None:
+            self._render_black_zoom_view()
+            return
+
+        if mouse_x is None or mouse_y is None:
+            self._render_black_zoom_view()
+            return
+
+        x0, y0, x1, y1 = self._display_rect()
+        if not (x0 <= mouse_x < x1 and y0 <= mouse_y < y1):
+            self._render_black_zoom_view()
+            return
+
+        xi, yi = self._screen_to_img(mouse_x, mouse_y)
+
+        iw, ih = self.current_image.size
+
+        zoom_lev = max(2, min(40, int(self.zoom_percent.get())))
+        half_w = max(1, int(round(iw / (zoom_lev * 2.0))))
+        half_h = max(1, int(round(ih / (zoom_lev * 2.0))))
+
+        cx = int(round(xi))
+        cy = int(round(yi))
+
+        src_left = cx - half_w
+        src_top = cy - half_h
+        src_right = cx + half_w
+        src_bottom = cy + half_h
+
+        crop_w = max(1, src_right - src_left)
+        crop_h = max(1, src_bottom - src_top)
+
+        out = Image.new("RGB", (crop_w, crop_h), "black")
+
+        valid_left = max(0, src_left)
+        valid_top = max(0, src_top)
+        valid_right = min(iw, src_right)
+        valid_bottom = min(ih, src_bottom)
+
+        if valid_left < valid_right and valid_top < valid_bottom:
+            cropped = self.current_image.crop(
+                (valid_left, valid_top, valid_right, valid_bottom)
+            )
+            paste_x = valid_left - src_left
+            paste_y = valid_top - src_top
+            out.paste(cropped, (paste_x, paste_y))
+
+        out = out.resize((size, size), Image.Resampling.NEAREST)
+        self.zoom_img_obj = ImageTk.PhotoImage(out)
+
+        if self.zoom_base_item is None:
+            self.zoom_base_item = self.zoom_canvas.create_image(
+                0, 0, anchor="nw", image=self.zoom_img_obj
+            )
+        else:
+            self.zoom_canvas.itemconfigure(self.zoom_base_item, image=self.zoom_img_obj)
+            self.zoom_canvas.coords(self.zoom_base_item, 0, 0)
+
+        self._update_zoom_crosshair()
+
+    # Builds the landmark selection table with visibility and status controls.
     def _build_landmark_panel(self) -> None:
         for w in self.lp_inner.winfo_children():
             w.destroy()
@@ -572,11 +904,36 @@ class AnnotationGUI(tk.Tk):
     # (5) Handle canvas resize (add to class)
     def _on_canvas_resize(self, _event=None) -> None:
         if not self.current_image:
+            self._update_zoom_view(None, None)
             return
         self._render_base_image()
         self._draw_points()
         for lm in ("LOB", "ROB"):
             self._update_overlay_for(lm)
+
+        if self.last_mouse_canvas_pos is not None:
+            x, y = self.last_mouse_canvas_pos
+            x0, y0, x1, y1 = self._display_rect()
+            if x0 <= x < x1 and y0 <= y < y1:
+                self._update_mouse_crosshair(x, y)
+
+                if self.extended_crosshair_enabled.get():
+                    self._update_extended_crosshair(x, y)
+                else:
+                    self._hide_extended_crosshair()
+
+                self._update_zoom_view(x, y)
+                if self.hover_enabled.get():
+                    self._update_hover_circle(x, y)
+            else:
+                self._hide_mouse_crosshair()
+                self._hide_extended_crosshair()
+                self._hide_hover_circle()
+                self._update_zoom_view(None, None)
+        else:
+            self._hide_mouse_crosshair()
+            self._hide_extended_crosshair()
+            self._update_zoom_view(None, None)
 
     # Locks the initial window min-size after the first layout pass.
     def _lock_initial_minsize(self) -> None:
@@ -1027,7 +1384,7 @@ class AnnotationGUI(tk.Tk):
 
                 img = Image.fromarray(arr, mode="L").convert("RGB")
                 self.current_image = img
-            self.current_image.convert("RGB")
+            self.current_image = self.current_image.convert("RGB")
 
         except Exception as e:
             messagebox.showerror("Load Image", f"Failed to open image:\n{e}")
@@ -1050,6 +1407,9 @@ class AnnotationGUI(tk.Tk):
         self.load_points(show_message=False)
         self._render_base_image()
         self._hide_hover_circle()
+        self._hide_mouse_crosshair()
+        self._hide_extended_crosshair()
+        self._update_zoom_view(None, None)
         self.dirty = False
         self._update_path_var()
 
@@ -1680,6 +2040,9 @@ class AnnotationGUI(tk.Tk):
         self.radius_scale.config(state="normal" if enabled else "disabled")
         if not enabled:
             self._hide_hover_circle()
+        elif self.last_mouse_canvas_pos is not None:
+            x, y = self.last_mouse_canvas_pos
+            self._update_hover_circle(x, y)
 
     # Keeps the hover circle radius in range and updates it live.
     def _on_radius_change(self, _value: str) -> None:
@@ -1695,27 +2058,191 @@ class AnnotationGUI(tk.Tk):
 
     # Moves the hover circle with the mouse within image bounds.
     def _on_mouse_move(self, event) -> None:
-        if not self.hover_enabled.get() or not self.current_image:
+        if not self.current_image:
+            self.last_mouse_canvas_pos = None
+            self._hide_hover_circle()
+            self._hide_mouse_crosshair()
+            self._hide_extended_crosshair()
+            self._update_zoom_view(None, None)
             return
+
         x0, y0, x1, y1 = self._display_rect()
         if x0 <= event.x < x1 and y0 <= event.y < y1:
-            self._update_hover_circle(
-                event.x, event.y
-            )  # hover circle stays screen-space
+            self.last_mouse_canvas_pos = (event.x, event.y)
+            self._update_mouse_crosshair(event.x, event.y)
+
+            if self.extended_crosshair_enabled.get():
+                self._update_extended_crosshair(event.x, event.y)
+            else:
+                self._hide_extended_crosshair()
+
+            self._update_zoom_view(event.x, event.y)
+
+            if self.hover_enabled.get():
+                self._update_hover_circle(event.x, event.y)
+            else:
+                self._hide_hover_circle()
         else:
+            self.last_mouse_canvas_pos = None
             self._hide_hover_circle()
+            self._hide_mouse_crosshair()
+            self._hide_extended_crosshair()
+            self._update_zoom_view(None, None)
+   
+    def _update_zoom_crosshair(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        size = self._get_zoom_canvas_size()
+        x = size / 2
+        y = size / 2
+
+        circle_r = 16
+        cross_r = circle_r
+
+        circle_color = "blue"
+        crosshair_color = "orange"
+
+        if not self.zoom_crosshair_ids:
+            circle_id = self.zoom_canvas.create_oval(
+                x - circle_r,
+                y - circle_r,
+                x + circle_r,
+                y + circle_r,
+                outline=circle_color,
+                width=1,
+                tags="zoom_crosshair",
+            )
+            hline_id = self.zoom_canvas.create_line(
+                x - cross_r,
+                y,
+                x + cross_r,
+                y,
+                fill=crosshair_color,
+                width=1,
+                tags="zoom_crosshair",
+            )
+            vline_id = self.zoom_canvas.create_line(
+                x,
+                y - cross_r,
+                x,
+                y + cross_r,
+                fill=crosshair_color,
+                width=1,
+                tags="zoom_crosshair",
+            )
+            self.zoom_crosshair_ids = [circle_id, hline_id, vline_id]
+        else:
+            circle_id, hline_id, vline_id = self.zoom_crosshair_ids
+            self.zoom_canvas.coords(
+                circle_id,
+                x - circle_r,
+                y - circle_r,
+                x + circle_r,
+                y + circle_r,
+            )
+            self.zoom_canvas.coords(hline_id, x - cross_r, y, x + cross_r, y)
+            self.zoom_canvas.coords(vline_id, x, y - cross_r, x, y + cross_r)
+
+            self.zoom_canvas.itemconfigure(circle_id, outline=circle_color)
+            self.zoom_canvas.itemconfigure(hline_id, fill=crosshair_color)
+            self.zoom_canvas.itemconfigure(vline_id, fill=crosshair_color)
+
+        for item_id in self.zoom_crosshair_ids:
+            self.zoom_canvas.tag_raise(item_id)
+
+        self._update_zoom_extended_crosshair()
+
+    def _hide_zoom_crosshair(self) -> None:
+        if self.zoom_canvas is None:
+            return
+        for item_id in self.zoom_crosshair_ids:
+            try:
+                self.zoom_canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete zoom crosshair item: {e}")
+        self.zoom_crosshair_ids = []
+        self._hide_zoom_extended_crosshair()
+
+    def _update_mouse_crosshair(self, x: float, y: float) -> None:
+        circle_r = 8
+        cross_r = 4
+
+        if not self.mouse_crosshair_ids:
+            circle_id = self.canvas.create_oval(
+                x - circle_r,
+                y - circle_r,
+                x + circle_r,
+                y + circle_r,
+                outline="cyan",
+                width=1,
+                tags="mouse_crosshair",
+            )
+            hline_id = self.canvas.create_line(
+                x - cross_r,
+                y,
+                x + cross_r,
+                y,
+                fill="cyan",
+                width=1,
+                tags="mouse_crosshair",
+            )
+            vline_id = self.canvas.create_line(
+                x,
+                y - cross_r,
+                x,
+                y + cross_r,
+                fill="cyan",
+                width=1,
+                tags="mouse_crosshair",
+            )
+            self.mouse_crosshair_ids = [circle_id, hline_id, vline_id]
+        else:
+            circle_id, hline_id, vline_id = self.mouse_crosshair_ids
+            self.canvas.coords(
+                circle_id,
+                x - circle_r,
+                y - circle_r,
+                x + circle_r,
+                y + circle_r,
+            )
+            self.canvas.coords(hline_id, x - cross_r, y, x + cross_r, y)
+            self.canvas.coords(vline_id, x, y - cross_r, x, y + cross_r)
+
+        for item_id in self.mouse_crosshair_ids:
+            self.canvas.tag_raise(item_id)
+
+    def _hide_mouse_crosshair(self) -> None:
+        for item_id in self.mouse_crosshair_ids:
+            try:
+                self.canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete mouse crosshair item: {e}")
+        self.mouse_crosshair_ids = []
 
     # Adjusts hover radius via standard mouse wheel events.
     def _on_mousewheel(self, event) -> None:
+        if self.right_mouse_held:
+            step = 1 if event.delta > 0 else -1
+            self._change_zoom_percent(step)
+            return
+
         if not self.hover_enabled.get():
             return
+
         step = 2 if event.delta > 0 else -2
         self._change_radius(step)
 
     # Adjusts hover radius for Linux button-4/5 events.
-    def _on_scroll_linux(self, direction: int) -> None:
+    def _on_scroll_linux(self, direction: int, event=None) -> None:
+        if self.right_mouse_held:
+            step = 1 if direction > 0 else -1
+            self._change_zoom_percent(step)
+            return
+
         if not self.hover_enabled.get():
             return
+
         step = 2 if direction > 0 else -2
         self._change_radius(step)
 
