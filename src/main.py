@@ -82,6 +82,14 @@ class AnnotationGUI(tk.Tk):
         self.landmark_visibility: Dict[str, tk.BooleanVar] = {}
         self.landmark_found = {}
         self.annotations: Dict[str, Dict[str, Tuple[float, float]]] = {}
+        self.line_landmarks = {"LFA", "RFA"}
+        self.line_preview_id: Optional[int] = None
+        self.dragging_landmark: Optional[str] = None
+        self.dragging_point_index: Optional[int] = None
+        self.dragging_line_whole = False
+        self.dragging_line_last_img_pos: Optional[Tuple[float, float]] = None
+        self.drag_line_tolerance_px = 8
+        self.drag_tolerance_px = 10
         self.current_image: Image.Image | None = None
         self.current_image_path: Path | None = None
         self.current_image_quality: int = 0
@@ -119,6 +127,12 @@ class AnnotationGUI(tk.Tk):
         self.zoom_img_obj: Optional[ImageTk.PhotoImage] = None
         self.zoom_base_item: Optional[int] = None
         self.zoom_percent = tk.IntVar(value=10)
+
+        self.femoral_axis_enabled = tk.BooleanVar(value=False)
+        self.femoral_axis_count = tk.IntVar(value=5)
+        self.femoral_axis_proj_length = tk.IntVar(value=25)
+        self.femoral_axis_whisker_tip_length = tk.IntVar(value=15)
+        self.femoral_axis_item_ids: list[int] = []
 
         self.zoom_extended_crosshair_ids: list[int] = []
 
@@ -196,6 +210,52 @@ class AnnotationGUI(tk.Tk):
                     f"Failed to toggle verification status:\n{e}",
                 )
         return
+    
+    def _point_to_segment_distance_px(
+        self,
+        px: float,
+        py: float,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+    ) -> float:
+        vx = x2 - x1
+        vy = y2 - y1
+        seg_len2 = vx * vx + vy * vy
+
+        if seg_len2 <= 1e-12:
+            return ((px - x1) ** 2 + (py - y1) ** 2) ** 0.5
+
+        t = ((px - x1) * vx + (py - y1) * vy) / seg_len2
+        t = max(0.0, min(1.0, t))
+
+        proj_x = x1 + t * vx
+        proj_y = y1 + t * vy
+        return ((px - proj_x) ** 2 + (py - proj_y) ** 2) ** 0.5
+
+    def _is_line_hit(self, lm: str, screen_x: float, screen_y: float) -> bool:
+        pts = self._get_line_points(lm)
+        if len(pts) != 2:
+            return False
+
+        (x1i, y1i), (x2i, y2i) = pts
+        x1s, y1s = self._img_to_screen(x1i, y1i)
+        x2s, y2s = self._img_to_screen(x2i, y2i)
+
+        dist = self._point_to_segment_distance_px(
+            screen_x, screen_y, x1s, y1s, x2s, y2s
+        )
+        return dist <= float(self.drag_line_tolerance_px)
+    
+    def _change_femoral_axis_length(self, delta: int) -> None:
+        new_len = max(
+            2,
+            min(300, int(self.femoral_axis_proj_length.get()) + delta),
+        )
+        if new_len != self.femoral_axis_proj_length.get():
+            self.femoral_axis_proj_length.set(new_len)
+            self._update_femoral_axis_overlay()
     
     def _update_zoom_extended_crosshair(self) -> None:
         if self.zoom_canvas is None:
@@ -294,7 +354,9 @@ class AnnotationGUI(tk.Tk):
         self.canvas = tk.Canvas(main, bg="grey", highlightthickness=0)
         self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
         self.canvas.bind("<Configure>", self._on_canvas_resize)
-        self.canvas.bind("<Button-1>", self._on_click)
+        self.canvas.bind("<ButtonPress-1>", self._on_left_press)
+        self.canvas.bind("<B1-Motion>", self._on_left_drag)
+        self.canvas.bind("<ButtonRelease-1>", self._on_left_release)
         self.canvas.bind("<Motion>", self._on_mouse_move)
         self.canvas.bind("<ButtonPress-3>", self._on_right_button_press)
         self.canvas.bind("<ButtonRelease-3>", self._on_right_button_release)
@@ -304,6 +366,8 @@ class AnnotationGUI(tk.Tk):
                 self._hide_hover_circle(),
                 self._hide_mouse_crosshair(),
                 self._hide_extended_crosshair(),
+                self._clear_line_preview(),
+                self._clear_femoral_axis_overlay(),
                 self._update_zoom_view(None, None),
             ),
         )
@@ -435,6 +499,43 @@ class AnnotationGUI(tk.Tk):
             command=lambda: self._resegment_for(self.selected_landmark.get()),
             font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(0, 8))
+
+        axis_wrap = ttk.LabelFrame(left_tools, text="Femoral Axis Tool")
+        axis_wrap.pack(fill="x", pady=(8, 0))
+
+        tk.Checkbutton(
+            axis_wrap,
+            text="Show Femoral Axis",
+            variable=self.femoral_axis_enabled,
+            command=self._toggle_femoral_axis,
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(6, 0))
+
+        self.femoral_axis_count_scale = tk.Scale(
+            axis_wrap,
+            from_=1,
+            to=20,
+            orient="horizontal",
+            label="N Orthogonal Projections",
+            variable=self.femoral_axis_count,
+            command=self._on_femoral_axis_count_change,
+            font=self.dialogue_font,
+        )
+        self.femoral_axis_count_scale.config(state="disabled")
+        self.femoral_axis_count_scale.pack(fill="x", padx=6, pady=(6, 2))
+
+        self.femoral_axis_whisker_tip_length_scale = tk.Scale(
+            axis_wrap,
+            from_=1,
+            to=80,
+            orient="horizontal",
+            label="Whisker Tip Length",
+            variable=self.femoral_axis_whisker_tip_length,
+            command=self._on_femoral_axis_whisker_tip_length_change,
+            font=self.dialogue_font,
+        )
+        self.femoral_axis_whisker_tip_length_scale.config(state="disabled")
+        self.femoral_axis_whisker_tip_length_scale.pack(fill="x", padx=6, pady=(0, 6))
 
         # ---------- RIGHT COLUMN: existing controls ----------
         tk.Button(
@@ -597,6 +698,250 @@ class AnnotationGUI(tk.Tk):
 
         self.after(0, self._render_black_zoom_view)
     
+    def _toggle_femoral_axis(self) -> None:
+        enabled = self.femoral_axis_enabled.get()
+        self.femoral_axis_count_scale.config(state="normal" if enabled else "disabled")
+        self.femoral_axis_whisker_tip_length_scale.config(
+            state="normal" if enabled else "disabled"
+        )
+
+        # Femoral axis and hover circle are mutually exclusive
+        if enabled and self.hover_enabled.get():
+            self.hover_enabled.set(False)
+            self.radius_scale.config(state="disabled")
+            self._hide_hover_circle()
+
+        if not enabled:
+            self._clear_femoral_axis_overlay()
+        else:
+            self._update_femoral_axis_overlay()
+    
+    def _on_femoral_axis_whisker_tip_length_change(self, _value: str) -> None:
+        if not self.femoral_axis_enabled.get():
+            return
+        new_len = max(1, min(80, int(self.femoral_axis_whisker_tip_length.get())))
+        self.femoral_axis_whisker_tip_length.set(new_len)
+        self._update_femoral_axis_overlay()
+
+    def _on_femoral_axis_count_change(self, _value: str) -> None:
+        if not self.femoral_axis_enabled.get():
+            return
+        n = max(1, min(20, int(self.femoral_axis_count.get())))
+        self.femoral_axis_count.set(n)
+        self._update_femoral_axis_overlay()
+
+    def _clear_femoral_axis_overlay(self) -> None:
+        for item_id in self.femoral_axis_item_ids:
+            try:
+                self.canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete femoral axis item: {e}")
+        self.femoral_axis_item_ids = []
+
+    def _change_femoral_axis_whisker_tip_length(self, delta: int) -> None:
+        new_len = max(
+            1,
+            min(80, int(self.femoral_axis_whisker_tip_length.get()) + delta),
+        )
+        if new_len != self.femoral_axis_whisker_tip_length.get():
+            self.femoral_axis_whisker_tip_length.set(new_len)
+            self._update_femoral_axis_overlay()
+
+    def _get_active_femoral_axis_line_screen(self) -> Optional[Tuple[float, float, float, float]]:
+        if not self.current_image:
+            return None
+        if not self.femoral_axis_enabled.get():
+            return None
+
+        lm = self.selected_landmark.get()
+        if lm not in ("LFA", "RFA"):
+            return None
+
+        pts = self._get_line_points(lm)
+
+        if len(pts) >= 2:
+            x1, y1 = self._img_to_screen(*pts[0])
+            x2, y2 = self._img_to_screen(*pts[1])
+            return x1, y1, x2, y2
+
+        if len(pts) == 1 and self.last_mouse_canvas_pos is not None:
+            mx, my = self.last_mouse_canvas_pos
+            x0, y0, x1, y1 = self._display_rect()
+            if x0 <= mx < x1 and y0 <= my < y1:
+                sx, sy = self._img_to_screen(*pts[0])
+                return sx, sy, mx, my
+
+        return None
+
+    def _update_femoral_axis_overlay(self) -> None:
+        self._clear_femoral_axis_overlay()
+
+        line = self._get_active_femoral_axis_line_screen()
+        if line is None:
+            return
+
+        x1, y1, x2, y2 = line
+        vx = x2 - x1
+        vy = y2 - y1
+        mag = float((vx * vx + vy * vy) ** 0.5)
+        if mag < 1e-6:
+            return
+
+        tx = vx / mag
+        ty = vy / mag
+        nx = -ty
+        ny = tx
+
+        n_proj = max(1, int(self.femoral_axis_count.get()))
+        proj_len = float(self.femoral_axis_proj_length.get())
+        cap_half = float(self.femoral_axis_whisker_tip_length.get())
+
+        for i in range(1, n_proj + 1):
+            frac = i / (n_proj + 1.0)
+            cx = x1 + frac * vx
+            cy = y1 + frac * vy
+
+            ax = cx - proj_len * nx
+            ay = cy - proj_len * ny
+            bx = cx + proj_len * nx
+            by = cy + proj_len * ny
+
+            main_id = self.canvas.create_line(
+                ax, ay, bx, by,
+                fill="magenta",
+                width=2,
+                tags="femoral_axis",
+            )
+            cap1_id = self.canvas.create_line(
+                ax - cap_half * tx,
+                ay - cap_half * ty,
+                ax + cap_half * tx,
+                ay + cap_half * ty,
+                fill="magenta",
+                width=2,
+                tags="femoral_axis",
+            )
+            cap2_id = self.canvas.create_line(
+                bx - cap_half * tx,
+                by - cap_half * ty,
+                bx + cap_half * tx,
+                by + cap_half * ty,
+                fill="magenta",
+                width=2,
+                tags="femoral_axis",
+            )
+
+            self.femoral_axis_item_ids.extend([main_id, cap1_id, cap2_id])
+
+        for item_id in self.femoral_axis_item_ids:
+            try:
+                self.canvas.tag_raise(item_id)
+            except Exception:
+                pass
+        self.canvas.tag_raise("marker")
+
+    def _is_line_landmark(self, lm: str) -> bool:
+        return lm in self.line_landmarks
+
+    def _get_line_points(self, lm: str) -> List[Tuple[float, float]]:
+        pts, _quality = self._get_annotations()
+        val = pts.get(lm)
+        if val is None:
+            return []
+
+        out: List[Tuple[float, float]] = []
+
+        # Legacy/single-point fallback: (x, y)
+        if isinstance(val, tuple) and len(val) == 2 and all(
+            isinstance(v, (int, float)) for v in val
+        ):
+            return [(float(val[0]), float(val[1]))]
+
+        if isinstance(val, list):
+            for p in val:
+                if isinstance(p, (list, tuple)) and len(p) >= 2:
+                    try:
+                        out.append((float(p[0]), float(p[1])))
+                    except (TypeError, ValueError):
+                        pass
+
+        return out[:2]
+
+    def _set_line_points(self, lm: str, pts_list: List[Tuple[float, float]]) -> None:
+        self.annotations.setdefault(str(self.current_image_path), {})[lm] = [
+            (float(x), float(y)) for x, y in pts_list[:2]
+        ]
+        if lm in self.landmark_found:
+            self.landmark_found[lm].set(len(pts_list) > 0)
+
+    def _clamp_img_point(self, xi: float, yi: float) -> Tuple[float, float]:
+        if not self.current_image:
+            return xi, yi
+        w, h = self.current_image.size
+        xi = min(max(xi, 0.0), float(w - 1))
+        yi = min(max(yi, 0.0), float(h - 1))
+        return round(xi, 1), round(yi, 1)
+
+    def _find_line_point_hit(
+        self, lm: str, screen_x: float, screen_y: float
+    ) -> Optional[int]:
+        pts = self._get_line_points(lm)
+        if not pts:
+            return None
+
+        best_idx = None
+        best_dist2 = float("inf")
+        tol2 = float(self.drag_tolerance_px * self.drag_tolerance_px)
+
+        for i, (xi, yi) in enumerate(pts):
+            xs, ys = self._img_to_screen(xi, yi)
+            d2 = (xs - screen_x) ** 2 + (ys - screen_y) ** 2
+            if d2 <= tol2 and d2 < best_dist2:
+                best_dist2 = d2
+                best_idx = i
+
+        return best_idx
+
+    def _clear_line_preview(self) -> None:
+        if self.line_preview_id is not None:
+            try:
+                self.canvas.delete(self.line_preview_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete line preview: {e}")
+            self.line_preview_id = None
+
+    def _update_line_preview(self, mouse_x: float, mouse_y: float) -> None:
+        lm = self.selected_landmark.get()
+        if not lm or not self._is_line_landmark(lm):
+            self._clear_line_preview()
+            return
+
+        pts = self._get_line_points(lm)
+        if len(pts) != 1:
+            self._clear_line_preview()
+            return
+
+        x0, y0 = self._img_to_screen(*pts[0])
+
+        if self.line_preview_id is None:
+            self.line_preview_id = self.canvas.create_line(
+                x0,
+                y0,
+                mouse_x,
+                mouse_y,
+                fill="cyan",
+                width=2,
+                dash=(4, 2),
+                tags="line_preview",
+            )
+        else:
+            self.canvas.coords(self.line_preview_id, x0, y0, mouse_x, mouse_y)
+
+        try:
+            self.canvas.tag_lower(self.line_preview_id, "marker")
+        except Exception:
+            pass
+
     def _toggle_extended_crosshair(self) -> None:
         enabled = self.extended_crosshair_enabled.get()
         self.crosshair_length_scale.config(state="normal" if enabled else "disabled")
@@ -925,14 +1270,20 @@ class AnnotationGUI(tk.Tk):
                 self._update_zoom_view(x, y)
                 if self.hover_enabled.get():
                     self._update_hover_circle(x, y)
+                self._update_line_preview(x, y)
+                self._update_femoral_axis_overlay()
             else:
                 self._hide_mouse_crosshair()
                 self._hide_extended_crosshair()
                 self._hide_hover_circle()
+                self._clear_line_preview()
+                self._clear_femoral_axis_overlay()
                 self._update_zoom_view(None, None)
         else:
             self._hide_mouse_crosshair()
             self._hide_extended_crosshair()
+            self._clear_line_preview()
+            self._clear_femoral_axis_overlay()
             self._update_zoom_view(None, None)
 
     # Locks the initial window min-size after the first layout pass.
@@ -995,6 +1346,7 @@ class AnnotationGUI(tk.Tk):
         lm = self.selected_landmark.get()
         self._apply_settings_to_ui_for(lm)
         self._draw_points()
+        self._update_femoral_axis_overlay()
         self.after_idle(self._scroll_landmark_into_view, lm)
 
     def _change_selected_landmark(self, step: int) -> None:
@@ -1425,23 +1777,31 @@ class AnnotationGUI(tk.Tk):
 
         landmark_data = {}
         for lm in self.landmarks:
-            if lm in pts:
-                x, y = pts[lm]
-                if lm in ("LOB", "ROB"):
-                    st = per_img_settings.get(lm, self._current_settings_dict())
-                    method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
-                    landmark_data[lm] = [
-                        float(x),
-                        float(y),
-                        method_code,
-                        int(st["sens"]),
-                        int(st["edge_lock"]),
-                        int(st["edge_width"]),
-                        int(st["clahe"]),
-                        int(st["grow"]),
-                    ]
-                else:
-                    landmark_data[lm] = [float(x), float(y)]
+            if lm not in pts:
+                continue
+
+            if self._is_line_landmark(lm):
+                line_pts = self._get_line_points(lm)
+                if line_pts:
+                    landmark_data[lm] = [[float(x), float(y)] for x, y in line_pts]
+                continue
+
+            x, y = pts[lm]
+            if lm in ("LOB", "ROB"):
+                st = per_img_settings.get(lm, self._current_settings_dict())
+                method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
+                landmark_data[lm] = [
+                    float(x),
+                    float(y),
+                    method_code,
+                    int(st["sens"]),
+                    int(st["edge_lock"]),
+                    int(st["edge_width"]),
+                    int(st["clahe"]),
+                    int(st["grow"]),
+                ]
+            else:
+                landmark_data[lm] = [float(x), float(y)]
 
         return landmark_data
 
@@ -1830,33 +2190,52 @@ class AnnotationGUI(tk.Tk):
         per_img_settings = self.lm_settings.setdefault(str(self.current_image_path), {})
         for lm in self.landmarks:
             val = row.get(lm, "")
-            if isinstance(val, str) and val.startswith("[") and val.endswith("]"):
-                try:
-                    arr = ast.literal_eval(val)
-                except Exception:
-                    continue
-                try:
-                    x, y = float(arr[0]), float(arr[1])
-                    pts[lm] = (x, y)
-                except Exception:
-                    continue
-                if (
-                    lm in ("LOB", "ROB")
-                    and isinstance(arr, (list, tuple))
-                    and len(arr) >= 8
-                ):
-                    method_code = str(arr[2])
-                    st = {
-                        "method": "Flood Fill"
-                        if method_code in ("FF", "Flood Fill")
-                        else "Adaptive CC",
-                        "sens": int(arr[3]),
-                        "edge_lock": int(arr[4]),
-                        "edge_width": int(arr[5]),
-                        "clahe": int(arr[6]),
-                        "grow": int(arr[7]),
-                    }
-                    per_img_settings[lm] = st
+            if not (isinstance(val, str) and val.startswith("[") and val.endswith("]")):
+                continue
+
+            try:
+                arr = ast.literal_eval(val)
+            except Exception:
+                continue
+
+            # LFA / RFA -> list of one or two points
+            if self._is_line_landmark(lm):
+                line_pts = []
+                if isinstance(arr, (list, tuple)):
+                    for p in arr:
+                        if isinstance(p, (list, tuple)) and len(p) >= 2:
+                            try:
+                                line_pts.append((float(p[0]), float(p[1])))
+                            except Exception:
+                                pass
+                if line_pts:
+                    pts[lm] = line_pts[:2]
+                continue
+
+            # Normal single-point landmarks
+            try:
+                x, y = float(arr[0]), float(arr[1])
+                pts[lm] = (x, y)
+            except Exception:
+                continue
+
+            if (
+                lm in ("LOB", "ROB")
+                and isinstance(arr, (list, tuple))
+                and len(arr) >= 8
+            ):
+                method_code = str(arr[2])
+                st = {
+                    "method": "Flood Fill"
+                    if method_code in ("FF", "Flood Fill")
+                    else "Adaptive CC",
+                    "sens": int(arr[3]),
+                    "edge_lock": int(arr[4]),
+                    "edge_width": int(arr[5]),
+                    "clahe": int(arr[6]),
+                    "grow": int(arr[7]),
+                }
+                per_img_settings[lm] = st
         self.annotations[str(self.current_image_path)] = pts
         try:
             self.current_image_quality = int(row.get("image_quality", 0))
@@ -1896,44 +2275,117 @@ class AnnotationGUI(tk.Tk):
     def _draw_points(self) -> None:
         self.canvas.delete("marker")
         if not self.current_image_path:
+            self._clear_line_preview()
             return
-        # pts = self.annotations.get(self.current_image_path, {})
+
         pts, quality = self._get_annotations()
         self._update_found_checks(pts)
         current_image_verified = self._is_current_image_verified()
         x_curr, y_curr = self._img_to_screen(0, 0)
+
         label_font = self.landmark_font.copy()
         label_font.configure(size=30)
 
-        landmark_is_labeled = self.selected_landmark.get() in pts.keys()
+        selected_lm = self.selected_landmark.get()
+        if self._is_line_landmark(selected_lm):
+            landmark_is_labeled = len(self._get_line_points(selected_lm)) > 0
+        else:
+            landmark_is_labeled = selected_lm in pts.keys()
 
         self.canvas.create_text(
             x_curr,
             y_curr,
-            text=self.selected_landmark.get(),
+            text=selected_lm,
             fill=("#FFCC66" if landmark_is_labeled else "#FF8066"),
             font=label_font,
             tags="marker",
             anchor="nw",
         )
 
-        for lm, (x, y) in pts.items():
-            drawing_current_selected = lm == self.selected_landmark.get()
-            y_offset_label = 16 if drawing_current_selected else 12
+        for lm, val in pts.items():
+            vis_var = self.landmark_visibility.get(lm)
+            if vis_var is not None and not vis_var.get():
+                continue
+
+            drawing_current_selected = lm == selected_lm
             oval_color = (
                 "blue"
                 if drawing_current_selected
                 else ("red" if not current_image_verified else "green")
             )
             text_color = "orange" if drawing_current_selected else "yellow"
-            font = (
-                self.landmark_font if drawing_current_selected else self.dialogue_font
-            )
+            font = self.landmark_font if drawing_current_selected else self.dialogue_font
             shadow_font = font.copy()
             shadow_font.configure(size=font.cget("size") + 1)
-            vis_var = self.landmark_visibility.get(lm)
-            if vis_var is not None and not vis_var.get():
+
+            if self._is_line_landmark(lm):
+                line_pts = self._get_line_points(lm)
+                if not line_pts:
+                    continue
+
+                screen_pts = [self._img_to_screen(x, y) for x, y in line_pts]
+
+                if len(screen_pts) == 2:
+                    xs1, ys1 = screen_pts[0]
+                    xs2, ys2 = screen_pts[1]
+                    self.canvas.create_line(
+                        xs1,
+                        ys1,
+                        xs2,
+                        ys2,
+                        fill=oval_color,
+                        width=2,
+                        tags="marker",
+                    )
+                    label_x = (xs1 + xs2) / 2
+                    label_y = (ys1 + ys2) / 2 - 14
+                else:
+                    label_x, label_y = screen_pts[0][0], screen_pts[0][1] - 14
+
+                for xs, ys in screen_pts:
+                    r = 5
+                    self.canvas.create_oval(
+                        xs - r,
+                        ys - r,
+                        xs + r,
+                        ys + r,
+                        outline=oval_color,
+                        width=2,
+                        tags="marker",
+                    )
+
+                    if self.check_csv_mode and drawing_current_selected:
+                        self.canvas.create_oval(
+                            xs - 50,
+                            ys - 50,
+                            xs + 50,
+                            ys + 50,
+                            outline=oval_color,
+                            width=4,
+                            tags="marker",
+                        )
+
+                self.canvas.create_text(
+                    label_x - 1,
+                    label_y - 1,
+                    text=lm,
+                    fill="black",
+                    font=shadow_font,
+                    tags="marker",
+                )
+                self.canvas.create_text(
+                    label_x,
+                    label_y,
+                    text=lm,
+                    fill=text_color,
+                    font=font,
+                    tags="marker",
+                )
                 continue
+
+            # Normal single-point landmarks
+            x, y = val
+            y_offset_label = 16 if drawing_current_selected else 12
             xs, ys = self._img_to_screen(x, y)
 
             r = 5
@@ -1973,9 +2425,19 @@ class AnnotationGUI(tk.Tk):
                 font=font,
                 tags="marker",
             )
+
         for lm in ("LOB", "ROB"):
             self._update_overlay_for(lm)
         self._update_pair_lines()
+
+        # Restore live preview if selected line landmark currently has only 1 point
+        if self.last_mouse_canvas_pos is not None:
+            mx, my = self.last_mouse_canvas_pos
+            self._update_line_preview(mx, my)
+        else:
+            self._clear_line_preview()
+
+        self._update_femoral_axis_overlay()
 
     # Removes any connector lines between paired landmarks.
     def _remove_pair_lines(self):
@@ -2038,6 +2500,13 @@ class AnnotationGUI(tk.Tk):
     def _toggle_hover(self) -> None:
         enabled = self.hover_enabled.get()
         self.radius_scale.config(state="normal" if enabled else "disabled")
+
+        # Hover circle and femoral axis are mutually exclusive
+        if enabled and self.femoral_axis_enabled.get():
+            self.femoral_axis_enabled.set(False)
+            self.femoral_axis_count_scale.config(state="disabled")
+            self._clear_femoral_axis_overlay()
+
         if not enabled:
             self._hide_hover_circle()
         elif self.last_mouse_canvas_pos is not None:
@@ -2056,13 +2525,14 @@ class AnnotationGUI(tk.Tk):
             cy = (y0 + y1) / 2
             self._update_hover_circle(cx, cy)
 
-    # Moves the hover circle with the mouse within image bounds.
     def _on_mouse_move(self, event) -> None:
         if not self.current_image:
             self.last_mouse_canvas_pos = None
             self._hide_hover_circle()
             self._hide_mouse_crosshair()
             self._hide_extended_crosshair()
+            self._clear_line_preview()
+            self._clear_femoral_axis_overlay()
             self._update_zoom_view(None, None)
             return
 
@@ -2082,13 +2552,18 @@ class AnnotationGUI(tk.Tk):
                 self._update_hover_circle(event.x, event.y)
             else:
                 self._hide_hover_circle()
+
+            self._update_line_preview(event.x, event.y)
+            self._update_femoral_axis_overlay()
         else:
             self.last_mouse_canvas_pos = None
             self._hide_hover_circle()
             self._hide_mouse_crosshair()
             self._hide_extended_crosshair()
+            self._clear_line_preview()
+            self._clear_femoral_axis_overlay()
             self._update_zoom_view(None, None)
-   
+
     def _update_zoom_crosshair(self) -> None:
         if self.zoom_canvas is None:
             return
@@ -2227,6 +2702,11 @@ class AnnotationGUI(tk.Tk):
             self._change_zoom_percent(step)
             return
 
+        if self.femoral_axis_enabled.get() and self.selected_landmark.get() in ("LFA", "RFA"):
+            step = 2 if event.delta > 0 else -2
+            self._change_femoral_axis_length(step)
+            return
+
         if not self.hover_enabled.get():
             return
 
@@ -2238,6 +2718,11 @@ class AnnotationGUI(tk.Tk):
         if self.right_mouse_held:
             step = 1 if direction > 0 else -1
             self._change_zoom_percent(step)
+            return
+
+        if self.femoral_axis_enabled.get() and self.selected_landmark.get() in ("LFA", "RFA"):
+            step = 2 if direction > 0 else -2
+            self._change_femoral_axis_length(step)
             return
 
         if not self.hover_enabled.get():
@@ -2351,27 +2836,64 @@ class AnnotationGUI(tk.Tk):
         self.canvas.tag_lower(self.seg_item_ids[lm], "marker")
         self.canvas.tag_raise("marker")
 
-    # Handles click to place a landmark and optionally run LOB/ROB segmentation.
-    def _on_click(self, event) -> None:
+    def _on_left_press(self, event) -> None:
         x0, y0, x1, y1 = self._display_rect()
         if not self.current_image:
             return
-        w, h = self.current_image.size
         if not (x0 <= event.x < x1 and y0 <= event.y < y1):
             return
-        xi, yi = self._screen_to_img(event.x, event.y)
-        x, y = round(xi, 1), round(yi, 1)  # or clamp if you want
+
         lm = self.selected_landmark.get()
         if not lm:
             messagebox.showwarning(
                 "No Landmark", "Please select a landmark in the list."
             )
             return
+
+        xi, yi = self._screen_to_img(event.x, event.y)
+        x, y = self._clamp_img_point(xi, yi)
+
+        # Line landmarks: LFA / RFA
+        if self._is_line_landmark(lm):
+            hit_idx = self._find_line_point_hit(lm, event.x, event.y)
+            if hit_idx is not None:
+                self.dragging_landmark = lm
+                self.dragging_point_index = hit_idx
+                self.dragging_line_whole = False
+                self.dragging_line_last_img_pos = None
+                return
+
+            pts = self._get_line_points(lm)
+
+            if len(pts) == 2 and self._is_line_hit(lm, event.x, event.y):
+                self.dragging_landmark = lm
+                self.dragging_point_index = None
+                self.dragging_line_whole = True
+                self.dragging_line_last_img_pos = (x, y)
+                return
+
+            if len(pts) == 0:
+                self._set_line_points(lm, [(x, y)])
+            elif len(pts) == 1:
+                self._set_line_points(lm, [pts[0], (x, y)])
+                self._clear_line_preview()
+            else:
+                # Restart the line if both points already exist and user clicks elsewhere
+                self._set_line_points(lm, [(x, y)])
+                self._clear_line_preview()
+
+            self._draw_points()
+            self.dirty = True
+            self._auto_save_to_db()
+            return
+
+        # Normal single-point landmarks
         self.annotations.setdefault(str(self.current_image_path), {})[lm] = (x, y)
         if lm in self.landmark_found:
             self.landmark_found[lm].set(True)
         self._draw_points()
         self.dirty = True
+
         if lm in ("LOB", "ROB"):
             if cv2 is None:
                 messagebox.showerror(
@@ -2382,14 +2904,97 @@ class AnnotationGUI(tk.Tk):
             self.last_seed[lm] = (int(x), int(y))
             self._store_current_settings_for(lm)
             self._resegment_for(lm)
-        # Auto-save to database immediately after placing landmark
+
         self._auto_save_to_db()
-        return
+
+    def _on_left_drag(self, event) -> None:
+        if not self.current_image:
+            return
+
+        # keep all mouse-follow UI updated while dragging
+        self.last_mouse_canvas_pos = (event.x, event.y)
+        self._update_mouse_crosshair(event.x, event.y)
+
+        if self.extended_crosshair_enabled.get():
+            self._update_extended_crosshair(event.x, event.y)
+        else:
+            self._hide_extended_crosshair()
+
+        self._update_zoom_view(event.x, event.y)
+
+        if self.hover_enabled.get():
+            self._update_hover_circle(event.x, event.y)
+        else:
+            self._hide_hover_circle()
+
+        x0, y0, x1, y1 = self._display_rect()
+        if not (x0 <= event.x < x1 and y0 <= event.y < y1):
+            return
+
+        xi, yi = self._screen_to_img(event.x, event.y)
+        x, y = self._clamp_img_point(xi, yi)
+
+        if self.dragging_landmark is None:
+            return
+
+        pts = self._get_line_points(self.dragging_landmark)
+        if not pts:
+            return
+
+        # Drag a single endpoint
+        if self.dragging_point_index is not None:
+            if self.dragging_point_index >= len(pts):
+                return
+
+            pts[self.dragging_point_index] = (x, y)
+            self._set_line_points(self.dragging_landmark, pts)
+            self._draw_points()
+            self.dirty = True
+            return
+
+        # Drag the whole line
+        if self.dragging_line_whole:
+            if len(pts) != 2:
+                return
+
+            if self.dragging_line_last_img_pos is None:
+                self.dragging_line_last_img_pos = (x, y)
+                return
+
+            last_x, last_y = self.dragging_line_last_img_pos
+            dx = x - last_x
+            dy = y - last_y
+
+            if abs(dx) < 1e-12 and abs(dy) < 1e-12:
+                return
+
+            new_pts = []
+            for px, py in pts:
+                nx, ny = self._clamp_img_point(px + dx, py + dy)
+                new_pts.append((nx, ny))
+
+            # If clamping changed one end more than the other, preserve translation
+            # by recomputing based on the actual motion of the first point.
+            actual_dx = new_pts[0][0] - pts[0][0]
+            actual_dy = new_pts[0][1] - pts[0][1]
+            new_pts = [
+                self._clamp_img_point(px + actual_dx, py + actual_dy) for px, py in pts
+            ]
+
+            self._set_line_points(self.dragging_landmark, new_pts)
+            self.dragging_line_last_img_pos = (x, y)
+            self._draw_points()
+            self.dirty = True
+
+    def _on_left_release(self, event) -> None:
+        if self.dragging_landmark is not None:
+            self.dragging_landmark = None
+            self.dragging_point_index = None
+            self.dragging_line_whole = False
+            self.dragging_line_last_img_pos = None
+            self._auto_save_to_db()
 
     def _delete_current_landmark(self) -> None:
-        """
-        The goal of this function is to remove the annotation from the current landmark. When saving. I'm going to make.
-        """
         lm = self.selected_landmark.get()
         if not lm:
             messagebox.showwarning(
@@ -2397,13 +3002,18 @@ class AnnotationGUI(tk.Tk):
             )
             return
 
-        # Check if that annotation exists already
-        if lm in self.annotations[str(self.current_image_path)].keys():
-            # Delete it if it does
-            del self.annotations[str(self.current_image_path)][lm]
+        current_pts = self.annotations.get(str(self.current_image_path), {})
+        if lm in current_pts:
+            del current_pts[lm]
+
+        if self._is_line_landmark(lm):
+            self._clear_line_preview()
+
+        self._clear_femoral_axis_overlay()
 
         self._draw_points()
         self.dirty = True
+
         if lm in ("LOB", "ROB"):
             if cv2 is None:
                 messagebox.showerror(
@@ -2413,7 +3023,7 @@ class AnnotationGUI(tk.Tk):
                 return
             self._store_current_settings_for(lm)
             self._resegment_for(lm)
-        # Auto-save to database immediately after deleting landmark
+
         self._auto_save_to_db()
         return
 
