@@ -1,361 +1,195 @@
 #!/usr/bin/env python3
+"""Branch-aware updater for 2D Point Annotator."""
 
-"""
-Cross-platform updater for 2D Point Annotator.
-Runs outside the app directory to safely replace it.
-"""
-
-import contextlib
 import json
 import os
-import platform
 import shutil
 import sys
 import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
-import platformdirs
 import requests
-from packaging.version import Version as V
-from requests import ConnectionError, HTTPError, JSONDecodeError
 
-# ============================================================================
-# Configuration (loaded from app.env or defaults)
-# ============================================================================
+DEFAULT_INSTALL_ROOT = Path.home() / "2d-point-annotator"
+DEFAULT_ENV_PATH = DEFAULT_INSTALL_ROOT / "app.env"
 
 
-REPO_URL = "https://api.github.com/repos/OrthoDriven/2d-point-annotator/releases"
-SYSTEM = platform.system()
-APP_DIR_NAME_UNIX = "2d-point-annotator"
-APP_DIR_NAME_WINDOWS = "2D-Point-Annotator"
+def utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
 
 
-def get_install_root() -> Path:
-    if SYSTEM == "Windows":
-        return Path(platformdirs.user_documents_dir()) / APP_DIR_NAME_WINDOWS
-    else:
-        return Path().home() / APP_DIR_NAME_UNIX
+def load_env_file(env_path: Path) -> dict:
+    data = {}
+    if not env_path.exists():
+        return data
+    for line in env_path.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        data[key.strip()] = value
+    return data
 
 
-def get_releases(url: str):
-    r = requests.get(url)
-    print(r.content)
-    return r.json()
-
-
-def download_release_zip(zip_url: str, download_path: Path, timeout: int = 20) -> None:
-    with requests.get(zip_url, stream=True, timeout=timeout) as r:
-        with open(download_path, "wb") as f:
-            f.write(r.content)
-
-
-def load_config():
-    install_root = get_install_root()
-
-    config = {
-        "INSTALL_ROOT": str(install_root),
-        "APP_DIR": str(install_root / "app"),
-        "STATE_PATH": str(install_root / "update_state.json"),
-        "USER_AGENT": "2d-point-annotator-updater",
-        "MIN_CHECK_INTERVAL_SECONDS": 15,
-        "REQUEST_TIMEOUT_SEC": 15,
+def load_config() -> dict:
+    env_path = Path(os.environ.get('APP_ENV_FILE', DEFAULT_ENV_PATH))
+    env = load_env_file(env_path)
+    install_root = Path(env.get('INSTALL_ROOT', str(DEFAULT_INSTALL_ROOT)))
+    app_dir = Path(env.get('APP_DIR', str(install_root / 'app')))
+    return {
+        'ENV_PATH': env_path,
+        'INSTALL_ROOT': install_root,
+        'APP_DIR': app_dir,
+        'STATE_PATH': Path(env.get('STATE_PATH', str(install_root / 'update_state.json'))),
+        'USER_AGENT': env.get('USER_AGENT', '2d-point-annotator-updater'),
+        'MIN_CHECK_INTERVAL_SECONDS': int(env.get('MIN_CHECK_INTERVAL_SECONDS', '15')),
+        'REQUEST_TIMEOUT_SEC': int(env.get('REQUEST_TIMEOUT_SEC', '15')),
+        'API_URL': env.get('API_URL', 'https://api.github.com/repos/OrthoDriven/2d-point-annotator/commits/prototype-tools'),
+        'REPO_ZIP_URL': env.get('REPO_ZIP_URL', 'https://github.com/OrthoDriven/2d-point-annotator/archive/refs/heads/prototype-tools.zip'),
     }
 
-    return config
 
-
-# ============================================================================
-# State Management
-# ============================================================================
-
-
-def load_state(state_path):
-    """Load update state from JSON file."""
-    if not Path(state_path).exists():
-        return {
-            "sha": "",
-            "etag": "",
-            "updatedUtc": datetime.now(timezone.utc).isoformat(),
-            "lastCheckUtc": "1970-01-01T00:00:00Z",
-            "version": "0.0.0",
-        }
-
+def load_state(state_path: Path) -> dict:
+    if not state_path.exists():
+        return {'sha': '', 'etag': '', 'updatedUtc': utc_now(), 'lastCheckUtc': '1970-01-01T00:00:00Z'}
     try:
-        with open(state_path, "r") as f:
-            state = json.load(f)
-            if "version" not in state.keys():
-                state["version"] = "0.0.0"
-            return state
+        return json.loads(state_path.read_text(encoding='utf-8'))
     except Exception:
-        return {
-            "sha": "",
-            "etag": "",
-            "updatedUtc": datetime.now(timezone.utc).isoformat(),
-            "lastCheckUtc": "1970-01-01T00:00:00Z",
-            "version": "0.0.0",
-        }
+        return {'sha': '', 'etag': '', 'updatedUtc': utc_now(), 'lastCheckUtc': '1970-01-01T00:00:00Z'}
 
 
-def save_state(
-    state_path,
-    sha="",
-    etag="",
-    new_version: Optional[str] = None,
-    update_last_check=True,
-):
-    """Save update state to JSON file."""
-    state = load_state(state_path)
-
-    if sha:
-        state["sha"] = sha
-    if etag:
-        state["etag"] = etag
-    if update_last_check:
-        state["lastCheckUtc"] = datetime.now(timezone.utc).isoformat()
-    if sha or etag:
-        state["updatedUtc"] = datetime.now(timezone.utc).isoformat()
-    if new_version is not None:
-        state["version"] = new_version
-
-    with open(state_path, "w") as f:
-        json.dump(state, f, indent=2)
+def save_state(state_path: Path, state: dict) -> None:
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state, indent=2), encoding='utf-8')
 
 
-# ============================================================================
-# GitHub API
-# ============================================================================
-
-
-def check_for_updates(api_url, state, user_agent, timeout):
-    """Check GitHub API for new commits."""
-    headers = {"User-Agent": user_agent}
-
-    if state.get("etag"):
-        headers["If-None-Match"] = state["etag"]
-
+def should_check_for_updates(state: dict, min_interval: int):
     try:
-        with requests.get(api_url, timeout=timeout) as response:
-            response.raise_for_status()
-            etag = response.headers.get("ETag", "")
-            # data = json.loads(response.read().decode())
-            data = response.json()
-
-            # Handle both single commit and array responses
-            if isinstance(data, list):
-                data = data[0] if data else {}
-
-            response.raise_for_status()
-            return {
-                "status": "new",
-                "sha": data.get("sha", ""),
-                "etag": etag,
-                "version": data.get("tag_name"),
-                "version_zip_url": data.get("zipball_url"),
-            }
-    except HTTPError as e:
-        print(f"[warn] GitHub API error: HTTP {e}")
-        print(e.response.status_code)
-        return {"status": "error"}
-    except Exception as e:
-        print(f"[warn] Unexpected error: {e}")
-        return {"status": "error"}
+        last_check = datetime.fromisoformat(state.get('lastCheckUtc', '1970-01-01T00:00:00+00:00').replace('Z', '+00:00'))
+    except Exception:
+        return True
+    delta = (datetime.now(timezone.utc) - last_check).total_seconds()
+    if delta < 0:
+        return True
+    return delta >= min_interval
 
 
-# ============================================================================
-# Download & Extract
-# ============================================================================
+def check_for_updates(config: dict, state: dict) -> dict:
+    headers = {'User-Agent': config['USER_AGENT']}
+    if state.get('etag'):
+        headers['If-None-Match'] = state['etag']
+    response = requests.get(config['API_URL'], headers=headers, timeout=config['REQUEST_TIMEOUT_SEC'])
+    if response.status_code == 304:
+        return {'status': 'unchanged', 'etag': state.get('etag', ''), 'sha': state.get('sha', '')}
+    response.raise_for_status()
+    data = response.json()
+    if isinstance(data, list):
+        data = data[0] if data else {}
+    return {
+        'status': 'new',
+        'sha': data.get('sha', ''),
+        'etag': response.headers.get('ETag', ''),
+    }
 
 
-def find_project_root(extract_dir):
-    """Find the directory containing pixi.toml in extracted archive."""
-    for root, dirs, files in os.walk(extract_dir):
-        if "pixi.toml" in files:
-            return Path(root)
+def download_repo_zip(zip_url: str, download_path: Path, timeout: int) -> None:
+    with requests.get(zip_url, stream=True, timeout=timeout) as response:
+        response.raise_for_status()
+        with open(download_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
+
+def find_project_root(extract_dir: Path):
+    for path in extract_dir.rglob('pixi.toml'):
+        return path.parent
     return None
 
 
-# ============================================================================
-# Atomic Swap
-# ============================================================================
-
-
-def atomic_swap(new_dir, app_dir):
-    """
-    Atomically replace app directory with new version.
-    Uses rename operations for atomicity on same filesystem.
-    """
-    app_path = Path(app_dir)
-    new_path = app_path.parent / "app.new"
-    old_path = app_path.parent / "app.old"
-
-    # Clean up any leftover temp directories
+def atomic_swap(new_dir: Path, app_dir: Path) -> None:
+    app_dir = Path(app_dir)
+    install_root = app_dir.parent
+    new_path = install_root / 'app.new'
+    old_path = install_root / 'app.old'
     if new_path.exists():
         shutil.rmtree(new_path, ignore_errors=True)
     if old_path.exists():
         shutil.rmtree(old_path, ignore_errors=True)
-
-    # Move new version to staging area
     shutil.move(str(new_dir), str(new_path))
-
     try:
-        # Atomic swap using rename
-        if app_path.exists():
-            app_path.rename(old_path)
-        new_path.rename(app_path)
-
-        # Clean up old version
+        if app_dir.exists():
+            app_dir.rename(old_path)
+        new_path.rename(app_dir)
         if old_path.exists():
-            if SYSTEM == "Windows":
-                pass
             shutil.rmtree(old_path, ignore_errors=True)
-    except Exception as e:
-        # Rollback on failure
-        print(f"[error] Swap failed: {e}")
-        if not app_path.exists() and old_path.exists():
-            try:
-                old_path.rename(app_path)
-            except Exception:
-                pass
+    except Exception:
+        if not app_dir.exists() and old_path.exists():
+            old_path.rename(app_dir)
         if new_path.exists():
-            shutil.rmtree(new_path)
+            shutil.rmtree(new_path, ignore_errors=True)
         raise
 
 
-# ============================================================================
-# Main Update Logic
-# ============================================================================
-
-
-def should_check_for_updates(state, min_interval):
-    """Determine if enough time has passed since last check."""
-    try:
-        last_check = datetime.fromisoformat(
-            state["lastCheckUtc"].replace("Z", "+00:00")
-        )
-        now = datetime.now(timezone.utc)
-        delta = (now - last_check).total_seconds()
-
-        print(f"[debug] lastCheckUtc = {state['lastCheckUtc']}")
-        print(f"[debug] now          = {now.isoformat()}")
-        print(f"[debug] delta        = {delta:.1f} seconds")
-        print(f"[debug] min interval = {min_interval} seconds")
-        print(f"[debug] version      = {state['version']}")
-
-        if delta < 0:
-            print("[warn] lastCheckUtc is in the future; resetting")
-            return True, 0
-
-        if delta < min_interval:
-            remaining = min_interval - delta
-            print(
-                f"[info] Skipping update check ({delta:.1f}s since last, {remaining:.1f}s remaining)"
-            )
-            return False, delta
-
-        return True, delta
-    except Exception as e:
-        print(f"[warn] Could not parse lastCheckUtc: {e}")
-        return True, 0
-
-
-def run_update():
-    """Main update routine."""
+def run_update() -> None:
     config = load_config()
-    state_path = config["STATE_PATH"]
-    app_dir = config["APP_DIR"]
-    [
-        contextlib.suppress(Exception)(shutil.rmtree(p))
-        for p in Path(app_dir).parent.glob("app.old*")
-    ]
+    state = load_state(config['STATE_PATH'])
+    if not should_check_for_updates(state, config['MIN_CHECK_INTERVAL_SECONDS']):
+        return
 
-    # Load state
-    state = load_state(state_path)
+    state['lastCheckUtc'] = utc_now()
+    save_state(config['STATE_PATH'], state)
 
-    # Check if we should run
-    # should_check, delta = should_check_for_updates(
-    #     state, int(config["MIN_CHECK_INTERVAL_SECONDS"])
-    # )
-
-    # if not should_check:
-    #     return
-
-    # Always update lastCheckUtc from here on
     try:
-        # Check for updates
-        result = check_for_updates(
-            # config["API_URL"],
-            REPO_URL,
-            state,
-            config["USER_AGENT"],
-            int(config["REQUEST_TIMEOUT_SEC"]),
-        )
+        result = check_for_updates(config, state)
+    except Exception as exc:
+        print(f'[warn] Update check failed: {exc}')
+        return
 
-        save_state(state_path, update_last_check=True)
+    if result['status'] == 'unchanged':
+        return
 
-        if result["status"] == "error":
+    new_sha = result.get('sha', '')
+    if not new_sha:
+        print('[warn] GitHub response did not include a commit sha')
+        return
+    if state.get('sha') == new_sha:
+        state['etag'] = result.get('etag', state.get('etag', ''))
+        save_state(config['STATE_PATH'], state)
+        return
+
+    print(f'[info] New version detected ({new_sha}). Updating...')
+
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+        zip_path = temp_dir / 'annotator.zip'
+        download_repo_zip(config['REPO_ZIP_URL'], zip_path, config['REQUEST_TIMEOUT_SEC'] * 6)
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        project_root = find_project_root(temp_dir)
+        if not project_root:
+            print('[error] Cannot find project root in downloaded archive')
             return
+        atomic_swap(project_root, config['APP_DIR'])
 
-        if result["status"] == "unchanged":
-            print(f"[info] Already up-to-date ({state.get('sha', 'unknown')})")
-            return
-
-        current_version = V(state.get("version", "0.0.0"))
-        new_version = V(result.get("version", "0.0.0"))
-
-        if current_version == new_version:
-            print(f"[info] Already up-to-date (on version {new_version})")
-            save_state(state_path, etag=result.get("etag", state.get("etag", "")))
-            return
-
-        print(
-            f"[info] New version detected ({new_version}). Updating {current_version} →→ {new_version}"
-        )
-
-        new_zip_url = result["version_zip_url"]
-
-        # Download and extract
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            zip_path = temp_path / "annotator.zip"
-
-            download_release_zip(
-                zip_url=new_zip_url,
-                download_path=zip_path,
-                timeout=int(config["REQUEST_TIMEOUT_SEC"]) * 6,
-            )
-
-            with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                zip_ref.extractall(temp_path)
-
-            project_root = find_project_root(temp_path)
-            if not project_root:
-                print("[error] Cannot find project root in downloaded archive")
-                return
-
-            # Atomic swap
-            atomic_swap(project_root, app_dir)
-
-        # Update state
-        save_state(
-            state_path, new_version=str(new_version), etag=result.get("etag", "")
-        )
-        print(f"[info] Update complete -> {new_version}")
-
-    except Exception as e:
-        print(f"[error] Update failed: {e}")
-        save_state(state_path, update_last_check=True)
-        raise
+    state['sha'] = new_sha
+    state['etag'] = result.get('etag', state.get('etag', ''))
+    state['updatedUtc'] = utc_now()
+    save_state(config['STATE_PATH'], state)
+    print(f'[info] Update complete -> {new_sha}')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         run_update()
     except KeyboardInterrupt:
-        print("\n[info] Update cancelled by user")
+        print('\n[info] Update cancelled by user')
         sys.exit(1)
-    except Exception as e:
-        print(f"[error] {e}")
+    except Exception as exc:
+        print(f'[error] {exc}')
         sys.exit(1)
