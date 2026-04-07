@@ -1308,19 +1308,24 @@ class AnnotationGUI(tk.Tk):
         self.after_idle(self._scroll_landmark_into_view, lm)
 
     def _change_selected_landmark(self, step: int) -> None:
-        if not getattr(self, "landmarks", None):
+        allowed = self._get_allowed_landmarks_for_current_view()
+        visible_landmarks = [lm for lm in self.landmarks if lm in allowed]
+
+        if not visible_landmarks:
+            self.selected_landmark.set("")
             return
-        if not self.landmarks:
-            return
+
         current = self.selected_landmark.get()
-        if current in self.landmarks:
-            idx = self.landmarks.index(current)
+        if current in visible_landmarks:
+            idx = visible_landmarks.index(current)
         else:
-            idx = 0
-        idx = idx + step
-        if idx < 0 or idx >= len(self.landmarks):
+            idx = 0 if step >= 0 else len(visible_landmarks) - 1
+
+        new_idx = idx + step
+        if new_idx < 0 or new_idx >= len(visible_landmarks):
             return
-        new_lm = self.landmarks[idx]
+
+        new_lm = visible_landmarks[new_idx]
         if new_lm != current:
             self.selected_landmark.set(new_lm)
             self._on_landmark_selected()
