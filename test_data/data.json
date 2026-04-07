@@ -1,0 +1,129 @@
+{
+  "landmarks": [
+    "LASIS",
+    "RASIS",
+    "LPOD",
+    "RPOD",
+    "LPT",
+    "RPT",
+    "LIT",
+    "RIT",
+    "SMPS",
+    "LAC",
+    "RAC",
+    "LFA",
+    "RFA",
+    "LLSIAS",
+    "RLSIAS",
+    "LMDIAS",
+    "RMDIAS",
+    "LSGT",
+    "RSGT",
+    "LLGT",
+    "RLGT",
+    "LLT",
+    "RLT",
+    "LFHC",
+    "RFHC",
+    "LLFH",
+    "RLFH"
+  ],
+  "views": {
+    "AP Bilateral": [
+      "LASIS",
+      "RASIS",
+      "LPOD",
+      "RPOD",
+      "LPT",
+      "RPT",
+      "LIT",
+      "RIT",
+      "SMPS",
+      "LAC",
+      "RAC",
+      "LFA",
+      "RFA",
+      "LLSIAS",
+      "RLSIAS",
+      "LMDIAS",
+      "RMDIAS",
+      "LSGT",
+      "RSGT",
+      "LLGT",
+      "RLGT",
+      "LLT",
+      "RLT",
+      "LFHC",
+      "RFHC",
+      "LLFH",
+      "RLFH"
+    ],
+    "AP Unilateral (Left)": [
+      "LASIS",
+      "LPOD",
+      "LPT",
+      "LIT",
+      "SMPS",
+      "LAC",
+      "LFA",
+      "LLSIAS",
+      "LMDIAS",
+      "LSGT",
+      "LLGT",
+      "LLT",
+      "LFHC",
+      "LLFH"
+    ],
+    "AP Unilateral (Right)": [
+      "RASIS",
+      "RPOD",
+      "RPT",
+      "RIT",
+      "SMPS",
+      "RAC",
+      "RFA",
+      "RLSIAS",
+      "RMDIAS",
+      "RSGT",
+      "RLGT",
+      "RLT",
+      "RFHC",
+      "RLFH"
+    ]
+  },
+  "images": [
+    {
+      "image_path": "test_image.tif",
+      "image_quality": 0,
+      "view": "AP Bilateral",
+      "annotations": {
+        "LFA": [
+          [
+            441.8,
+            305.1
+          ],
+          [
+            449.9,
+            507.5
+          ]
+        ],
+        "RFA": [
+          [
+            77.9,
+            330.3
+          ],
+          [
+            93.2,
+            508.8
+          ]
+        ]
+      }
+    },
+    {
+      "image_path": "test_image2.tif",
+      "image_quality": 0,
+      "view": "AP Unilateral (Left)",
+      "annotations": {}
+    }
+  ]
+}
