@@ -56,7 +56,7 @@ class AnnotationGUI(tk.Tk):
         self.landmark_found: Dict[str, tk.BooleanVar] = {}
         self.landmark_flagged: Dict[str, tk.BooleanVar] = {}
         self.annotations: Dict[str, Dict[str, Union[Tuple[float, float], List[Tuple[float, float]]]]] = {}
-        self.line_landmarks = {"LFA", "RFA"}
+        self.line_landmarks = {"L-FA", "R-FA"}
         self.line_preview_id: Optional[int] = None
         self.dragging_landmark: Optional[str] = None
         self.dragging_point_index: Optional[int] = None
@@ -511,58 +511,58 @@ class AnnotationGUI(tk.Tk):
         self.radius_scale.config(state="disabled")
         self.radius_scale.pack(fill="x", padx=6, pady=6)
 
-        seg_wrap = ttk.LabelFrame(left_tools, text="Fill Tool (Obturator)")
-        seg_wrap.pack(fill="x", pady=(8, 0))
-
-        row1 = tk.Frame(seg_wrap)
-        row1.pack(fill="x", padx=6, pady=(6, 2))
-
-        tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
-
-        self.ff_button = tk.Checkbutton(
-            row1, text="FF", variable=self.use_ff,
-            font=self.dialogue_font, command=self._change_method_to_ff,
-        )
-        self.ff_button.pack(side="left")
-
-        self.adap_cc_button = tk.Checkbutton(
-            row1, text="ACC", variable=self.use_adap_cc,
-            font=self.dialogue_font, command=self._change_method_to_acc,
-        )
-        self.adap_cc_button.pack(side="left")
-
-        tk.Checkbutton(
-            row1, text="CLAHE", variable=self.use_clahe,
-            command=lambda: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(side="left", padx=(10, 0))
-
-        tk.Scale(
-            seg_wrap, from_=1, to=50, orient="horizontal",
-            label="Sensitivity", variable=self.fill_sensitivity,
-            command=lambda _v: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(fill="x", padx=6, pady=(6, 4))
-
-        tk.Checkbutton(
-            seg_wrap, text="Edge lock (flood fill)", variable=self.edge_lock,
-            command=lambda: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(anchor="w", padx=6)
-
-        tk.Scale(
-            seg_wrap, from_=1, to=5, orient="horizontal",
-            label="Edge lock width", variable=self.edge_lock_width,
-            command=lambda _v: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(fill="x", padx=6, pady=(2, 6))
-
-        tk.Button(
-            seg_wrap,
-            text="Re-segment (use current sliders)",
-            command=lambda: self._resegment_for(self.selected_landmark.get()),
-            font=self.dialogue_font,
-        ).pack(fill="x", padx=6, pady=(0, 8))
+        # seg_wrap = ttk.LabelFrame(left_tools, text="Fill Tool (Obturator)")
+        # seg_wrap.pack(fill="x", pady=(8, 0))
+        #
+        # row1 = tk.Frame(seg_wrap)
+        # row1.pack(fill="x", padx=6, pady=(6, 2))
+        #
+        # tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
+        #
+        # self.ff_button = tk.Checkbutton(
+        #     row1, text="FF", variable=self.use_ff,
+        #     font=self.dialogue_font, command=self._change_method_to_ff,
+        # )
+        # self.ff_button.pack(side="left")
+        #
+        # self.adap_cc_button = tk.Checkbutton(
+        #     row1, text="ACC", variable=self.use_adap_cc,
+        #     font=self.dialogue_font, command=self._change_method_to_acc,
+        # )
+        # self.adap_cc_button.pack(side="left")
+        #
+        # tk.Checkbutton(
+        #     row1, text="CLAHE", variable=self.use_clahe,
+        #     command=lambda: self._resegment_selected_if_needed(),
+        #     font=self.dialogue_font,
+        # ).pack(side="left", padx=(10, 0))
+        #
+        # tk.Scale(
+        #     seg_wrap, from_=1, to=50, orient="horizontal",
+        #     label="Sensitivity", variable=self.fill_sensitivity,
+        #     command=lambda _v: self._resegment_selected_if_needed(),
+        #     font=self.dialogue_font,
+        # ).pack(fill="x", padx=6, pady=(6, 4))
+        #
+        # tk.Checkbutton(
+        #     seg_wrap, text="Edge lock (flood fill)", variable=self.edge_lock,
+        #     command=lambda: self._resegment_selected_if_needed(),
+        #     font=self.dialogue_font,
+        # ).pack(anchor="w", padx=6)
+        #
+        # tk.Scale(
+        #     seg_wrap, from_=1, to=5, orient="horizontal",
+        #     label="Edge lock width", variable=self.edge_lock_width,
+        #     command=lambda _v: self._resegment_selected_if_needed(),
+        #     font=self.dialogue_font,
+        # ).pack(fill="x", padx=6, pady=(2, 6))
+        #
+        # tk.Button(
+        #     seg_wrap,
+        #     text="Re-segment (use current sliders)",
+        #     command=lambda: self._resegment_for(self.selected_landmark.get()),
+        #     font=self.dialogue_font,
+        # ).pack(fill="x", padx=6, pady=(0, 8))
 
         axis_wrap = ttk.LabelFrame(left_tools, text="Femoral Axis Tool")
         axis_wrap.pack(fill="x", pady=(8, 0))
@@ -1199,8 +1199,8 @@ class AnnotationGUI(tk.Tk):
     # Locks the initial window min-size after the first layout pass.
     def _lock_initial_minsize(self) -> None:
         self.update_idletasks()
-        self._start_min_w = self.winfo_width() + 1024
-        self._start_min_h = self.winfo_height() + 1024
+        self._start_min_w = self.winfo_width() + 750
+        self._start_min_h = self.winfo_height() + 750
         self.minsize(self._start_min_w, self._start_min_h)
 
     # Fits the window to required size and updates the minimum size.
@@ -1481,7 +1481,7 @@ class AnnotationGUI(tk.Tk):
             return None
 
         lm = self.selected_landmark.get()
-        if lm not in ("LFA", "RFA"):
+        if lm not in ("L-FA", "R-FA"):
             return None
 
         pts = self._get_line_points(lm)
@@ -2284,7 +2284,7 @@ class AnnotationGUI(tk.Tk):
             self._change_zoom_percent(step)
             return
 
-        if self.femoral_axis_enabled.get() and self.selected_landmark.get() in ("LFA", "RFA"):
+        if self.femoral_axis_enabled.get() and self.selected_landmark.get() in ("L-FA", "R-FA"):
             step = 2 if event.delta > 0 else -2
             self._change_femoral_axis_length(step)
             return
@@ -2302,7 +2302,7 @@ class AnnotationGUI(tk.Tk):
             self._change_zoom_percent(step)
             return
 
-        if self.femoral_axis_enabled.get() and self.selected_landmark.get() in ("LFA", "RFA"):
+        if self.femoral_axis_enabled.get() and self.selected_landmark.get() in ("L-FA", "R-FA"):
             step = 2 if direction > 0 else -2
             self._change_femoral_axis_length(step)
             return
@@ -2442,7 +2442,10 @@ class AnnotationGUI(tk.Tk):
         xi, yi = self._screen_to_img(event.x, event.y)
         x, y = self._clamp_img_point(xi, yi)
 
-        # Line landmarks: LFA / RFA
+        if not self._check_left_right_order_for_landmark(lm, x, y):
+            return
+
+        # Line landmarks: L-FA / R-FA
         if self._is_line_landmark(lm):
             hit_idx = self._find_line_point_hit(lm, event.x, event.y)
             if hit_idx is not None:
@@ -3404,6 +3407,66 @@ class AnnotationGUI(tk.Tk):
             if ok:
                 self.dirty = False
             return ok
+
+        return True
+    
+    def _check_left_right_order_for_landmark(
+        self,
+        lm: str,
+        new_x: float,
+        new_y: float,
+    ) -> bool:
+        allowed = self._get_allowed_landmarks_for_current_view()
+        if lm not in allowed:
+            return True
+
+        if lm.startswith("L-"):
+            other_lm = "R-" + lm[2:]
+            is_left_landmark = True
+        elif lm.startswith("R-"):
+            other_lm = "L-" + lm[2:]
+            is_left_landmark = False
+        else:
+            return True
+
+        if other_lm not in allowed:
+            return True
+
+        pts, _quality = self._get_annotations()
+        if other_lm not in pts:
+            return True
+
+        # Use x-position of the already-placed corresponding landmark.
+        # For line landmarks, use the mean x of the existing line points.
+        if self._is_line_landmark(other_lm):
+            other_pts = self._get_line_points(other_lm)
+            if not other_pts:
+                return True
+            other_x = sum(px for px, _py in other_pts) / len(other_pts)
+        else:
+            other_x = float(pts[other_lm][0])
+
+        # Convention requested:
+        # L-* must be to the RIGHT of the corresponding R-* landmark.
+        if is_left_landmark:
+            is_valid = new_x > other_x
+            bad_msg = (
+                f'"{lm}" must be to the RIGHT of "{other_lm}".\n\n'
+                f"Current click x = {new_x:.1f}\n"
+                f'{other_lm} x = {other_x:.1f}'
+            )
+        else:
+            is_valid = new_x < other_x
+            bad_msg = (
+                f'"{lm}" must be to the LEFT of "{other_lm}" because '
+                f'"L-" landmarks must be to the RIGHT of their matching "R-" landmarks.\n\n'
+                f"Current click x = {new_x:.1f}\n"
+                f'{other_lm} x = {other_x:.1f}'
+            )
+
+        if not is_valid:
+            messagebox.showwarning("Left/Right Landmark Order", bad_msg)
+            return False
 
         return True
 
