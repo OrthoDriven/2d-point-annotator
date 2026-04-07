@@ -48,6 +48,7 @@ class AnnotationGUI(tk.Tk):
 
         self.window_close_flag = False
         self.dirty = False
+        self._suspend_image_tree_select = False
         self.path_var = tk.StringVar(value="No data loaded")
         self.image_flag_var = tk.BooleanVar(value=False)
         self.autosave_var = tk.BooleanVar(value=True)
@@ -775,29 +776,36 @@ class AnnotationGUI(tk.Tk):
         if not hasattr(self, "image_tree"):
             return
 
-        for item in self.image_tree.get_children():
-            self.image_tree.delete(item)
+        self._suspend_image_tree_select = True
+        try:
+            for item in self.image_tree.get_children():
+                self.image_tree.delete(item)
 
-        for idx, path in enumerate(self.images):
-            progress = self._image_progress_text(path)
-            item_id = self.image_tree.insert(
-                "",
-                "end",
-                iid=str(idx),
-                values=(extract_filename(path), progress),
-                tags=("done",) if self._image_progress_done(path) else (),
-            )
+            for idx, path in enumerate(self.images):
+                progress = self._image_progress_text(path)
+                self.image_tree.insert(
+                    "",
+                    "end",
+                    iid=str(idx),
+                    values=(extract_filename(path), progress),
+                    tags=("done",) if self._image_progress_done(path) else (),
+                )
 
-        self.image_tree.tag_configure("done", foreground="green")
+            self.image_tree.tag_configure("done", foreground="green")
 
-        if 0 <= self.current_image_index < len(self.images):
-            iid = str(self.current_image_index)
-            if self.image_tree.exists(iid):
-                self.image_tree.selection_set(iid)
-                self.image_tree.focus(iid)
-                self.image_tree.see(iid)
+            if 0 <= self.current_image_index < len(self.images):
+                iid = str(self.current_image_index)
+                if self.image_tree.exists(iid):
+                    self.image_tree.selection_set(iid)
+                    self.image_tree.focus(iid)
+                    self.image_tree.see(iid)
+        finally:
+            self.after_idle(lambda: setattr(self, "_suspend_image_tree_select", False))
 
     def _on_image_list_select(self, _event=None) -> None:
+        if getattr(self, "_suspend_image_tree_select", False):
+            return
+
         if not self.image_tree.selection():
             return
 
