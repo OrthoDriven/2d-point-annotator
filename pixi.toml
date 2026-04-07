@@ -1,5 +1,5 @@
 [workspace]
-authors = ["Andrew Jensen <contact@ajensen.org>"]
+authors = ["Andrew Jensen <contact@ajensen.org>", "Paris Flood <paris@orthodriven.com>"]
 channels = ["conda-forge"]
 name = "2d-point-annotator"
 platforms = ["linux-64", "win-64", "osx-arm64"]
