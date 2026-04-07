@@ -105,6 +105,14 @@
           "flag": false,
           "note": ""
         },
+        "RPOD": {
+          "value": [
+            352.2,
+            172.8
+          ],
+          "flag": false,
+          "note": ""
+        },
         "LFA": {
           "value": [
             [

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class AnnotationGUI(tk.Tk):
+
     def __init__(self) -> None:
         super().__init__()
         self.tk.call("tk", "scaling", 1.25)
@@ -49,6 +50,7 @@ class AnnotationGUI(tk.Tk):
         self.dirty = False
         self.path_var = tk.StringVar(value="No data loaded")
         self.image_flag_var = tk.BooleanVar(value=False)
+        self.autosave_var = tk.BooleanVar(value=True)
         self.selected_landmark = tk.StringVar(value="")
         self.landmark_visibility: Dict[str, tk.BooleanVar] = {}
         self.landmark_found: Dict[str, tk.BooleanVar] = {}
@@ -73,6 +75,7 @@ class AnnotationGUI(tk.Tk):
         self.last_seed: Dict[str, Optional[Tuple[int, int]]] = {}
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.landmark_meta: Dict[str, Dict[str, Dict[str, Union[bool, str]]]] = {}
+        self.saved_image_snapshots: Dict[str, str] = {}
 
         self.disp_scale: float = 1.0
         self.disp_off: Tuple[int, int] = (0, 0)
@@ -173,8 +176,11 @@ class AnnotationGUI(tk.Tk):
         record = self._get_current_image_record()
         if record is None or self.current_image_path is None:
             return
+
         record["image_flag"] = bool(self.current_image_flag)
+        record["view"] = self.current_view_var.get().strip() or None
         record["annotations"] = self._prepare_landmark_data()
+
         key = self._path_key(self.current_image_path)
         record["resolved_image_path"] = key
         self.annotations[key] = self._parse_annotations_for_record(record)
@@ -183,22 +189,29 @@ class AnnotationGUI(tk.Tk):
         if self.json_path is None:
             messagebox.showwarning("Save", "No JSON data file loaded.")
             return False
+
         try:
             self._sync_current_state_to_json_record()
+
             save_data = {
                 "landmarks": list(self.json_data.get("landmarks", [])),
                 "views": dict(self.allowed_views),
                 "images": [],
             }
+
             for record in self.json_data.get("images", []):
                 clean = dict(record)
                 clean.pop("resolved_image_path", None)
                 save_data["images"].append(clean)
+
             tmp_path = self.json_path.with_suffix(self.json_path.suffix + ".tmp")
             with tmp_path.open("w", encoding="utf-8") as f:
                 json.dump(save_data, f, indent=2)
             tmp_path.replace(self.json_path)
+
+            self._refresh_saved_snapshot_for_current_image()
             self.dirty = False
+
             if show_success:
                 messagebox.showinfo("Saved", "Annotations saved to JSON.")
             return True
@@ -385,6 +398,9 @@ class AnnotationGUI(tk.Tk):
                     self.selected_landmark.set(lm)
                     break
             self._on_landmark_selected()
+
+        for path in self.images:
+            self.saved_image_snapshots[self._path_key(path)] = self._canonical_image_state_for_path(path)
 
     # ------------------------------------------------------------------
     # UI changes
@@ -581,6 +597,14 @@ class AnnotationGUI(tk.Tk):
         tk.Button(ctrl, text="Next Image", command=self._next_image, font=self.heading_font).pack(fill="x", pady=5)
         tk.Button(ctrl, text="Previous Image", command=self._prev_image, font=self.heading_font).pack(fill="x", pady=5)
         tk.Button(ctrl, text="Save Annotations", command=self.save_annotations, font=self.heading_font).pack(fill="x", pady=5)
+
+        self.autosave_check = tk.Checkbutton(
+            ctrl,
+            text="Autosave",
+            variable=self.autosave_var,
+            font=self.dialogue_font,
+        )
+        self.autosave_check.pack(anchor="w", pady=(0, 6))
 
         img_frame = ttk.LabelFrame(ctrl, text="Image Metadata")
         img_frame.pack(fill="x", pady=(10, 10))
@@ -780,27 +804,38 @@ class AnnotationGUI(tk.Tk):
         if idx == self.current_image_index:
             return
 
-        self._maybe_save_before_destructive_action("switch images")
+        if not self._maybe_save_before_destructive_action("switch images"):
+            self._refresh_image_listbox()
+            return
+
         self.current_image_index = idx
         self.load_image_from_path(self.images[idx])
 
     # ------------------------------------------------------------------
     # Navigation / save / load
     # ------------------------------------------------------------------
-    def _maybe_save_before_destructive_action(self, why: str = "continue") -> None:
-        if not self.current_image_path or not self.dirty:
-            return
-        if messagebox.askyesno(
+    def _maybe_save_before_destructive_action(self, why: str = "continue") -> bool:
+        if not self.current_image_path:
+            return True
+
+        if self.autosave_var.get():
+            return True
+
+        if not self._current_image_has_unsaved_changes():
+            return True
+
+        should_save = messagebox.askyesno(
             "Unsaved annotations",
-            "You have unsaved annotation changes for this image.\n"
+            "You have unsaved changes for this image.\n"
             f"Do you want to save before you {why}?",
-        ):
-            self.save_annotations()
-        else:
-            self.dirty = False
+        )
+        if should_save:
+            return self.save_annotations()
+        return True
 
     def _on_close(self) -> None:
-        self._maybe_save_before_destructive_action("exit")
+        if not self._maybe_save_before_destructive_action("exit"):
+            return
         self.window_close_flag = True
         self.destroy()
 
@@ -869,15 +904,20 @@ class AnnotationGUI(tk.Tk):
         self._draw_points()
         self._refresh_image_listbox()
         self._load_note_for_selected_landmark()
+        self._refresh_saved_snapshot_for_current_image()
 
     def _next_image(self) -> None:
         if not self.images:
             messagebox.showwarning("Next Image", "No data loaded.")
             return
-        self.save_annotations()
+
         if self.current_image_index >= len(self.images) - 1:
             messagebox.showwarning("End of List", "You have reached the last image in the JSON.")
             return
+
+        if not self._maybe_save_before_destructive_action("switch images"):
+            return
+
         self.current_image_index += 1
         self.load_image_from_path(self.images[self.current_image_index])
 
@@ -885,10 +925,14 @@ class AnnotationGUI(tk.Tk):
         if not self.images:
             messagebox.showwarning("Previous Image", "No data loaded.")
             return
-        self.save_annotations()
+
         if self.current_image_index <= 0:
             messagebox.showwarning("Beginning of List", "You are at the first image in the JSON.")
             return
+
+        if not self._maybe_save_before_destructive_action("switch images"):
+            return
+
         self.current_image_index -= 1
         self.load_image_from_path(self.images[self.current_image_index])
 
@@ -902,14 +946,11 @@ class AnnotationGUI(tk.Tk):
         key = self._path_key(self.current_image_path)
         return self.annotations.setdefault(key, {}), 0
 
-    def save_annotations(self) -> None:
+    def save_annotations(self) -> bool:
         if not self.current_image_path:
             messagebox.showwarning("Save", "No image loaded.")
-            return
-        self._save_json_file(show_success=(PLATFORM == "Windows"))
-
-    def _auto_save_to_db(self) -> bool:
-        return self._save_json_file(show_success=False)
+            return False
+        return self._save_json_file(show_success=(PLATFORM == "Windows"))
 
     # ------------------------------------------------------------------
     # Annotation preparation/parsing
@@ -1105,7 +1146,7 @@ class AnnotationGUI(tk.Tk):
 
             self._clear_femoral_axis_overlay()
             self.dirty = True
-            self._auto_save_to_db()
+            self._maybe_autosave_current_image()
             self._draw_points()
             self._refresh_image_listbox()
             self._load_note_for_selected_landmark()
@@ -1158,8 +1199,8 @@ class AnnotationGUI(tk.Tk):
     # Locks the initial window min-size after the first layout pass.
     def _lock_initial_minsize(self) -> None:
         self.update_idletasks()
-        self._start_min_w = self.winfo_width()
-        self._start_min_h = self.winfo_height()
+        self._start_min_w = self.winfo_width() + 1024
+        self._start_min_h = self.winfo_height() + 1024
         self.minsize(self._start_min_w, self._start_min_h)
 
     # Fits the window to required size and updates the minimum size.
@@ -2432,7 +2473,7 @@ class AnnotationGUI(tk.Tk):
 
             self._draw_points()
             self.dirty = True
-            self._auto_save_to_db()
+            self._maybe_autosave_current_image()
             return
 
         # Normal single-point landmarks
@@ -2453,7 +2494,7 @@ class AnnotationGUI(tk.Tk):
             self._store_current_settings_for(lm)
             self._resegment_for(lm)
 
-        self._auto_save_to_db()
+        self._maybe_autosave_current_image()
 
     def _on_left_drag(self, event) -> None:
         if not self.current_image:
@@ -2540,7 +2581,7 @@ class AnnotationGUI(tk.Tk):
             self.dragging_point_index = None
             self.dragging_line_whole = False
             self.dragging_line_last_img_pos = None
-            self._auto_save_to_db()
+            self._maybe_autosave_current_image()
 
     def _delete_current_landmark(self) -> None:
         lm = self.selected_landmark.get()
@@ -2572,7 +2613,7 @@ class AnnotationGUI(tk.Tk):
             self._store_current_settings_for(lm)
             self._resegment_for(lm)
 
-        self._auto_save_to_db()
+        self._maybe_autosave_current_image()
         return
 
     # Triggers re-segmentation if the selected landmark is LOB/ROB.
@@ -3005,7 +3046,7 @@ class AnnotationGUI(tk.Tk):
             self._set_current_view(choice_var.get())
             self.current_view_var.set(choice_var.get())
             popup.destroy()
-            self._auto_save_to_db()
+            self._maybe_autosave_current_image()
 
         popup.protocol("WM_DELETE_WINDOW", confirm)
 
@@ -3022,7 +3063,7 @@ class AnnotationGUI(tk.Tk):
         if new_view not in self.allowed_views:
             return
         self._set_current_view(new_view)
-        self._auto_save_to_db()
+        self._maybe_autosave_current_image()
 
     def _on_image_flag_widget_changed(self) -> None:
         self.current_image_flag = bool(self.image_flag_var.get())
@@ -3033,7 +3074,7 @@ class AnnotationGUI(tk.Tk):
         self._refresh_image_flag_checkbox_style()
 
         self.dirty = True
-        self._auto_save_to_db()
+        self._maybe_autosave_current_image()
 
     def _bind_image_list_scroll(self, bind: bool) -> None:
         widgets = [self.image_tree]
@@ -3191,7 +3232,7 @@ class AnnotationGUI(tk.Tk):
             self._load_note_for_selected_landmark()
 
         self.dirty = True
-        self._auto_save_to_db()
+        self._maybe_autosave_current_image()
         self._update_found_checks(pts)
         self._draw_points()
 
@@ -3249,7 +3290,7 @@ class AnnotationGUI(tk.Tk):
         self._save_note_for_selected_landmark()
         self.note_text.edit_modified(False)
         self.dirty = True
-        self._auto_save_to_db()
+        self._maybe_autosave_current_image()
 
     def _bind_shortcut(self, sequence: str, callback) -> None:
         def wrapper(event):
@@ -3302,6 +3343,69 @@ class AnnotationGUI(tk.Tk):
             )
         except Exception:
             pass
+
+    def _canonical_image_state_for_path(self, image_path: Path) -> str:
+        key = self._path_key(image_path)
+        idx = self.image_index_map.get(key)
+        if idx is None:
+            return ""
+
+        record = self.json_data["images"][idx]
+
+        state = {
+            "image_path": record.get("image_path"),
+            "image_flag": bool(record.get("image_flag", False)),
+            "view": record.get("view"),
+            "annotations": record.get("annotations", {}) or {},
+        }
+        return json.dumps(state, sort_keys=True, separators=(",", ":"))
+
+
+    def _current_image_state_string(self) -> str:
+        if self.current_image_path is None:
+            return ""
+
+        state = {
+            "image_path": self._get_current_image_record().get("image_path") if self._get_current_image_record() else str(self.current_image_path),
+            "image_flag": bool(self.current_image_flag),
+            "view": self.current_view_var.get().strip() or None,
+            "annotations": self._prepare_landmark_data(),
+        }
+        return json.dumps(state, sort_keys=True, separators=(",", ":"))
+
+
+    def _refresh_saved_snapshot_for_current_image(self) -> None:
+        if self.current_image_path is None:
+            return
+        key = self._path_key(self.current_image_path)
+        self.saved_image_snapshots[key] = self._canonical_image_state_for_path(self.current_image_path)
+
+
+    def _current_image_has_unsaved_changes(self) -> bool:
+        if self.current_image_path is None:
+            return False
+
+        key = self._path_key(self.current_image_path)
+        current_state = self._current_image_state_string()
+        saved_state = self.saved_image_snapshots.get(key)
+
+        if saved_state is None:
+            saved_state = self._canonical_image_state_for_path(self.current_image_path)
+            self.saved_image_snapshots[key] = saved_state
+
+        return current_state != saved_state
+
+
+    def _maybe_autosave_current_image(self) -> bool:
+        self.dirty = True
+
+        if self.autosave_var.get():
+            ok = self._save_json_file(show_success=False)
+            if ok:
+                self.dirty = False
+            return ok
+
+        return True
 
 if __name__ == "__main__":
     app = AnnotationGUI()
