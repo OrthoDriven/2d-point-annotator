@@ -94,34 +94,58 @@
   "images": [
     {
       "image_path": "test_image.tif",
-      "image_quality": 0,
+      "image_flag": false,
       "view": "AP Bilateral",
       "annotations": {
-        "LFA": [
-          [
-            441.8,
-            305.1
+        "LASIS": {
+          "value": [
+            458.7,
+            85.2
           ],
-          [
-            449.9,
-            507.5
-          ]
-        ],
-        "RFA": [
-          [
-            77.9,
-            330.3
+          "flag": false,
+          "note": ""
+        },
+        "LFA": {
+          "value": [
+            [
+              441.8,
+              305.1
+            ],
+            [
+              449.9,
+              507.5
+            ]
           ],
-          [
-            93.2,
-            508.8
-          ]
-        ]
+          "flag": false,
+          "note": ""
+        },
+        "RFA": {
+          "value": [
+            [
+              77.9,
+              330.3
+            ],
+            [
+              93.2,
+              508.8
+            ]
+          ],
+          "flag": false,
+          "note": ""
+        },
+        "RMDIAS": {
+          "value": [
+            168.5,
+            119.5
+          ],
+          "flag": false,
+          "note": ""
+        }
       }
     },
     {
       "image_path": "test_image2.tif",
-      "image_quality": 0,
+      "image_flag": false,
       "view": "AP Unilateral (Left)",
       "annotations": {}
     }
