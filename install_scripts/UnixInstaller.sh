@@ -3,7 +3,7 @@ set -euo pipefail
 
 OWNER="OrthoDriven"
 REPO="2d-point-annotator"
-BRANCH="prototype-tools"
+BRANCH="new-prototype"
 
 REPO_ZIP_URL="https://github.com/$OWNER/$REPO/archive/refs/heads/$BRANCH.zip"
 API_URL="https://api.github.com/repos/$OWNER/$REPO/commits/$BRANCH"

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import requests
 
-API_URL = 'https://api.github.com/repos/OrthoDriven/2d-point-annotator/commits/prototype-tools'
-REPO_ZIP_URL = 'https://github.com/OrthoDriven/2d-point-annotator/archive/refs/heads/prototype-tools.zip'
+API_URL = 'https://api.github.com/repos/OrthoDriven/2d-point-annotator/commits/new-prototype'
+REPO_ZIP_URL = 'https://github.com/OrthoDriven/2d-point-annotator/archive/refs/heads/new-prototype.zip'
 
 print('API URL:', API_URL)
 print('ZIP URL:', REPO_ZIP_URL)

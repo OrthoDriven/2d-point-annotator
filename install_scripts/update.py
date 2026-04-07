@@ -49,8 +49,8 @@ def load_config() -> dict:
         'USER_AGENT': env.get('USER_AGENT', '2d-point-annotator-updater'),
         'MIN_CHECK_INTERVAL_SECONDS': int(env.get('MIN_CHECK_INTERVAL_SECONDS', '15')),
         'REQUEST_TIMEOUT_SEC': int(env.get('REQUEST_TIMEOUT_SEC', '15')),
-        'API_URL': env.get('API_URL', 'https://api.github.com/repos/OrthoDriven/2d-point-annotator/commits/prototype-tools'),
-        'REPO_ZIP_URL': env.get('REPO_ZIP_URL', 'https://github.com/OrthoDriven/2d-point-annotator/archive/refs/heads/prototype-tools.zip'),
+        'API_URL': env.get('API_URL', 'https://api.github.com/repos/OrthoDriven/2d-point-annotator/commits/new-prototype'),
+        'REPO_ZIP_URL': env.get('REPO_ZIP_URL', 'https://github.com/OrthoDriven/2d-point-annotator/archive/refs/heads/new-prototype.zip'),
     }
 
 
