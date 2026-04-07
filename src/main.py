@@ -955,6 +955,7 @@ class AnnotationGUI(tk.Tk):
     # ------------------------------------------------------------------
     # Annotation preparation/parsing
     # ------------------------------------------------------------------
+
     def _prepare_landmark_data(self) -> dict:
         pts, _quality = self._get_annotations()
         key = self._path_key(self.current_image_path) if self.current_image_path else ""
@@ -962,36 +963,42 @@ class AnnotationGUI(tk.Tk):
         per_img_meta = self.landmark_meta.get(key, {})
         landmark_data = {}
 
+        all_landmarks = set(pts.keys()) | set(per_img_meta.keys())
+
         for lm in self.landmarks:
-            if lm not in pts:
-                continue
-
-            value = None
-            if self._is_line_landmark(lm):
-                line_pts = self._get_line_points(lm)
-                if line_pts:
-                    value = [[float(x), float(y)] for x, y in line_pts]
-            else:
-                x, y = pts[lm]
-                if lm in ("LOB", "ROB"):
-                    st = per_img_settings.get(lm, self._current_settings_dict())
-                    method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
-                    value = [
-                        float(x), float(y), method_code,
-                        int(st["sens"]), int(st["edge_lock"]), int(st["edge_width"]),
-                        int(st["clahe"]), int(st["grow"]),
-                    ]
-                else:
-                    value = [float(x), float(y)]
-
-            if value is None:
+            if lm not in all_landmarks:
                 continue
 
             meta = per_img_meta.get(lm, {})
+            is_flagged = bool(meta.get("flag", False))
+            note = str(meta.get("note", ""))
+
+            value = None
+            if lm in pts:
+                if self._is_line_landmark(lm):
+                    line_pts = self._get_line_points(lm)
+                    if line_pts:
+                        value = [[float(x), float(y)] for x, y in line_pts]
+                else:
+                    x, y = pts[lm]
+                    if lm in ("LOB", "ROB"):
+                        st = per_img_settings.get(lm, self._current_settings_dict())
+                        method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
+                        value = [
+                            float(x), float(y), method_code,
+                            int(st["sens"]), int(st["edge_lock"]), int(st["edge_width"]),
+                            int(st["clahe"]), int(st["grow"]),
+                        ]
+                    else:
+                        value = [float(x), float(y)]
+
+            if value is None and not is_flagged and not note.strip():
+                continue
+
             landmark_data[lm] = {
                 "value": value,
-                "flag": bool(meta.get("flag", False)),
-                "note": str(meta.get("note", "")),
+                "flag": is_flagged,
+                "note": note,
             }
 
         return landmark_data
@@ -3139,11 +3146,26 @@ class AnnotationGUI(tk.Tk):
         view = record.get("view")
         annotations = record.get("annotations", {}) or {}
 
-        if not view or view not in self.allowed_views:
-            return len(annotations)
+        if view and view in self.allowed_views:
+            allowed = set(self.allowed_views.get(view, []))
+        else:
+            allowed = set(annotations.keys())
 
-        allowed = set(self.allowed_views.get(view, []))
-        return sum(1 for lm in annotations if lm in allowed and annotations.get(lm) is not None)
+        done = 0
+        for lm in allowed:
+            raw = annotations.get(lm)
+            if raw is None:
+                continue
+
+            if isinstance(raw, dict):
+                value = raw.get("value")
+            else:
+                value = raw
+
+            if value is not None:
+                done += 1
+
+        return done
 
     def _image_progress_text(self, image_path: Path) -> str:
         key = self._path_key(image_path)
@@ -3213,17 +3235,6 @@ class AnnotationGUI(tk.Tk):
         if self.current_image_path is None:
             return
 
-        pts, _quality = self._get_annotations()
-        if lm not in pts:
-            if lm in self.landmark_flagged:
-                self.landmark_flagged[lm].set(False)
-            self._set_landmark_flag(lm, False)
-            self._set_landmark_note(lm, "")
-            self._update_found_checks(pts)
-            self._set_note_editor_enabled(False)
-            self._load_note_for_selected_landmark()
-            return
-
         is_flagged = self.landmark_flagged.get(lm).get() if lm in self.landmark_flagged else False
         self._set_landmark_flag(lm, is_flagged)
 
@@ -3231,27 +3242,40 @@ class AnnotationGUI(tk.Tk):
             self._set_landmark_note(lm, "")
 
         if self.selected_landmark.get() == lm:
-            self._set_note_editor_enabled(is_flagged)
             self._load_note_for_selected_landmark()
 
         self.dirty = True
         self._maybe_autosave_current_image()
+
+        pts, _quality = self._get_annotations()
         self._update_found_checks(pts)
         self._draw_points()
 
     def _set_note_editor_enabled(self, enabled: bool) -> None:
         if self.note_text is None:
             return
-        self.note_text.configure(state="normal" if enabled else "disabled")
+
+        if enabled:
+            self.note_text.configure(
+                state="normal",
+                bg="white",
+                fg="black",
+                insertbackground="black",
+            )
+        else:
+            self.note_text.configure(
+                state="disabled",
+                bg="#E6E6E6",
+                fg="#666666",
+                insertbackground="#666666",
+            )
 
     def _load_note_for_selected_landmark(self) -> None:
         if self.note_text is None:
             return
 
         lm = self.selected_landmark.get()
-        pts, _quality = self._get_annotations()
-
-        can_edit = bool(lm) and (lm in pts) and self._get_landmark_flag(lm)
+        can_edit = bool(lm) and self._get_landmark_flag(lm)
         note = self._get_landmark_note(lm) if can_edit else ""
 
         self.note_text_internal_update = True
@@ -3259,8 +3283,9 @@ class AnnotationGUI(tk.Tk):
         self.note_text.delete("1.0", "end")
         self.note_text.insert("1.0", note)
         self.note_text.edit_modified(False)
-        self.note_text.configure(state="normal" if can_edit else "disabled")
         self.note_text_internal_update = False
+
+        self._set_note_editor_enabled(can_edit)
 
     def _save_note_for_selected_landmark(self) -> None:
         if self.note_text is None or self.current_image_path is None:
@@ -3268,10 +3293,6 @@ class AnnotationGUI(tk.Tk):
 
         lm = self.selected_landmark.get()
         if not lm:
-            return
-
-        pts, _quality = self._get_annotations()
-        if lm not in pts:
             return
 
         if not self._get_landmark_flag(lm):
