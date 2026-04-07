@@ -49,6 +49,7 @@ class AnnotationGUI(tk.Tk):
         self.window_close_flag = False
         self.dirty = False
         self._suspend_image_tree_select = False
+        self._navigation_in_progress = False
         self.path_var = tk.StringVar(value="No data loaded")
         self.image_flag_var = tk.BooleanVar(value=False)
         self.autosave_var = tk.BooleanVar(value=True)
@@ -800,7 +801,8 @@ class AnnotationGUI(tk.Tk):
                     self.image_tree.focus(iid)
                     self.image_tree.see(iid)
         finally:
-            self.after_idle(lambda: setattr(self, "_suspend_image_tree_select", False))
+            if not getattr(self, "_navigation_in_progress", False):
+                self._suspend_image_tree_select = False
 
     def _on_image_list_select(self, _event=None) -> None:
         if getattr(self, "_suspend_image_tree_select", False):
@@ -815,12 +817,18 @@ class AnnotationGUI(tk.Tk):
         if idx == self.current_image_index:
             return
 
-        if not self._maybe_save_before_destructive_action("switch images"):
-            self._refresh_image_listbox()
-            return
+        self._navigation_in_progress = True
+        self._suspend_image_tree_select = True
+        try:
+            if not self._maybe_save_before_destructive_action("switch images"):
+                self._refresh_image_listbox()
+                return
 
-        self.current_image_index = idx
-        self.load_image_from_path(self.images[idx])
+            self.current_image_index = idx
+            self.load_image_from_path(self.images[idx])
+        finally:
+            self._navigation_in_progress = False
+            self._suspend_image_tree_select = False
 
     # ------------------------------------------------------------------
     # Navigation / save / load
@@ -926,11 +934,17 @@ class AnnotationGUI(tk.Tk):
             messagebox.showwarning("End of List", "You have reached the last image in the JSON.")
             return
 
-        if not self._maybe_save_before_destructive_action("switch images"):
-            return
+        self._navigation_in_progress = True
+        self._suspend_image_tree_select = True
+        try:
+            if not self._maybe_save_before_destructive_action("switch images"):
+                return
 
-        self.current_image_index += 1
-        self.load_image_from_path(self.images[self.current_image_index])
+            self.current_image_index += 1
+            self.load_image_from_path(self.images[self.current_image_index])
+        finally:
+            self._navigation_in_progress = False
+            self._suspend_image_tree_select = False
 
     def _prev_image(self) -> None:
         if not self.images:
@@ -941,11 +955,17 @@ class AnnotationGUI(tk.Tk):
             messagebox.showwarning("Beginning of List", "You are at the first image in the JSON.")
             return
 
-        if not self._maybe_save_before_destructive_action("switch images"):
-            return
+        self._navigation_in_progress = True
+        self._suspend_image_tree_select = True
+        try:
+            if not self._maybe_save_before_destructive_action("switch images"):
+                return
 
-        self.current_image_index -= 1
-        self.load_image_from_path(self.images[self.current_image_index])
+            self.current_image_index -= 1
+            self.load_image_from_path(self.images[self.current_image_index])
+        finally:
+            self._navigation_in_progress = False
+            self._suspend_image_tree_select = False
 
     def _update_path_var(self) -> None:
         if self.current_image_path:
