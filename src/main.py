@@ -212,6 +212,9 @@ class AnnotationGUI(tk.Tk):
             self._refresh_saved_snapshot_for_current_image()
             self.dirty = False
 
+            # Keep the image progress column in sync with the saved state
+            self._refresh_image_listbox()
+
             if show_success:
                 messagebox.showinfo("Saved", "Annotations saved to JSON.")
             return True
@@ -3418,7 +3421,6 @@ class AnnotationGUI(tk.Tk):
             self.saved_image_snapshots[key] = saved_state
 
         return current_state != saved_state
-
 
     def _maybe_autosave_current_image(self) -> bool:
         self.dirty = True
