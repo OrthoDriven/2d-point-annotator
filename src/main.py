@@ -1318,10 +1318,10 @@ class AnnotationGUI(tk.Tk):
             new_top = max(y1, new_top)
             self.lp_canvas.yview_moveto((new_top - y1) / total)
 
-    # Applies stored per-landmark settings when a landmark is selected.
     def _on_landmark_selected(self) -> None:
         lm = self.selected_landmark.get()
         self._apply_settings_to_ui_for(lm)
+        self._sync_auto_tools_for_selected_landmark()
         self._draw_points()
         self._update_femoral_axis_overlay()
         self._load_note_for_selected_landmark()
@@ -3525,6 +3525,50 @@ class AnnotationGUI(tk.Tk):
             return False
 
         return True
+    
+    def _sync_auto_tools_for_selected_landmark(self) -> None:
+        lm = self.selected_landmark.get().strip()
+
+        hover_landmarks = {"L-FHC", "R-FHC", "L-AC", "R-AC"}
+        femoral_axis_landmarks = {"L-FA", "R-FA"}
+
+        want_hover = lm in hover_landmarks
+        want_femoral_axis = lm in femoral_axis_landmarks
+
+        if want_hover:
+            if not self.hover_enabled.get():
+                self.hover_enabled.set(True)
+            if self.femoral_axis_enabled.get():
+                self.femoral_axis_enabled.set(False)
+            self._toggle_hover()
+            self._toggle_femoral_axis()
+            return
+
+        if want_femoral_axis:
+            if not self.femoral_axis_enabled.get():
+                self.femoral_axis_enabled.set(True)
+            if self.hover_enabled.get():
+                self.hover_enabled.set(False)
+            self._toggle_femoral_axis()
+            self._toggle_hover()
+            return
+
+        changed = False
+
+        if self.hover_enabled.get():
+            self.hover_enabled.set(False)
+            changed = True
+
+        if self.femoral_axis_enabled.get():
+            self.femoral_axis_enabled.set(False)
+            changed = True
+
+        if changed:
+            self._toggle_hover()
+            self._toggle_femoral_axis()
+        else:
+            self._hide_hover_circle()
+            self._clear_femoral_axis_overlay()
 
 if __name__ == "__main__":
     app = AnnotationGUI()
