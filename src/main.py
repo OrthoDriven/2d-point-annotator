@@ -109,12 +109,9 @@ class AnnotationGUI(tk.Tk):
         self.zoom_img_obj: Optional[ImageTk.PhotoImage] = None
         self.zoom_base_item: Optional[int] = None
         self.zoom_percent = tk.IntVar(value=10)
-        self.zoom_extended_crosshair_ids: list[int] = []
-        self.zoom_percent = tk.IntVar(value=10)
-        self.show_selected_landmark_in_zoom = tk.BooleanVar(value=False)
-        self.zoom_landmark_item_ids: list[int] = []
-        self.zoom_extended_crosshair_ids: list[int] = []
+        self.show_selected_landmark_in_zoom = tk.BooleanVar(value=True)
         self.zoom_landmark_overlay_ids: list[int] = []
+        self.zoom_extended_crosshair_ids: list[int] = []
 
         self.femoral_axis_enabled = tk.BooleanVar(value=False)
         self.femoral_axis_count = tk.IntVar(value=5)
@@ -1976,14 +1973,13 @@ class AnnotationGUI(tk.Tk):
         except Exception:
             return []
 
-
     def _refresh_zoom_landmark_overlay(self) -> None:
         self._clear_zoom_landmark_overlay()
 
         if self.zoom_canvas is None:
             return
 
-        if not getattr(self, "zoom_show_selected_landmark_var", tk.BooleanVar(value=False)).get():
+        if not self.show_selected_landmark_in_zoom.get():
             return
 
         if self.current_image is None or self.current_image_path is None:
