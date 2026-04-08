@@ -1893,37 +1893,44 @@ class AnnotationGUI(tk.Tk):
             return
 
         xi, yi = self._screen_to_img(mouse_x, mouse_y)
-
         iw, ih = self.current_image.size
 
-        zoom_lev = max(2, min(40, int(self.zoom_percent.get())))
-        half_w = max(1, int(round(iw / (zoom_lev * 2.0))))
-        half_h = max(1, int(round(ih / (zoom_lev * 2.0))))
+        zoom_lev = max(2, min(40, float(self.zoom_percent.get())))
 
-        cx = int(round(xi))
-        cy = int(round(yi))
+        # Keep crop bounds in float space for subpixel precision
+        half_w = max(0.5, iw / (zoom_lev * 2.0))
+        half_h = max(0.5, ih / (zoom_lev * 2.0))
 
-        src_left = cx - half_w
-        src_top = cy - half_h
-        src_right = cx + half_w
-        src_bottom = cy + half_h
+        src_left = xi - half_w
+        src_top = yi - half_h
+        src_right = xi + half_w
+        src_bottom = yi + half_h
 
-        crop_w = max(1, src_right - src_left)
-        crop_h = max(1, src_bottom - src_top)
+        crop_w = max(1e-6, src_right - src_left)
+        crop_h = max(1e-6, src_bottom - src_top)
 
-        out = Image.new("RGB", (crop_w, crop_h), "black")
+        # Integer crop used only for extracting pixels
+        int_left = int(np.floor(src_left))
+        int_top = int(np.floor(src_top))
+        int_right = int(np.ceil(src_right))
+        int_bottom = int(np.ceil(src_bottom))
 
-        valid_left = max(0, src_left)
-        valid_top = max(0, src_top)
-        valid_right = min(iw, src_right)
-        valid_bottom = min(ih, src_bottom)
+        out_w = max(1, int_right - int_left)
+        out_h = max(1, int_bottom - int_top)
+
+        out = Image.new("RGB", (out_w, out_h), "black")
+
+        valid_left = max(0, int_left)
+        valid_top = max(0, int_top)
+        valid_right = min(iw, int_right)
+        valid_bottom = min(ih, int_bottom)
 
         if valid_left < valid_right and valid_top < valid_bottom:
             cropped = self.current_image.crop(
                 (valid_left, valid_top, valid_right, valid_bottom)
             )
-            paste_x = valid_left - src_left
-            paste_y = valid_top - src_top
+            paste_x = valid_left - int_left
+            paste_y = valid_top - int_top
             out.paste(cropped, (paste_x, paste_y))
 
         out = out.resize((size, size), Image.Resampling.NEAREST)
@@ -2004,20 +2011,19 @@ class AnnotationGUI(tk.Tk):
         xi, yi = self._screen_to_img(mouse_x, mouse_y)
         iw, ih = self.current_image.size
 
-        zoom_lev = max(2, min(40, int(self.zoom_percent.get())))
-        half_w = max(1, int(round(iw / (zoom_lev * 2.0))))
-        half_h = max(1, int(round(ih / (zoom_lev * 2.0))))
+        zoom_lev = max(2, min(40, float(self.zoom_percent.get())))
 
-        cx = int(round(xi))
-        cy = int(round(yi))
+        # Match _update_zoom_view exactly, using float crop bounds
+        half_w = max(0.5, iw / (zoom_lev * 2.0))
+        half_h = max(0.5, ih / (zoom_lev * 2.0))
 
-        src_left = cx - half_w
-        src_top = cy - half_h
-        src_right = cx + half_w
-        src_bottom = cy + half_h
+        src_left = xi - half_w
+        src_top = yi - half_h
+        src_right = xi + half_w
+        src_bottom = yi + half_h
 
-        crop_w = max(1, src_right - src_left)
-        crop_h = max(1, src_bottom - src_top)
+        crop_w = max(1e-6, src_right - src_left)
+        crop_h = max(1e-6, src_bottom - src_top)
 
         pts, _quality = self._get_annotations()
 
@@ -2041,12 +2047,12 @@ class AnnotationGUI(tk.Tk):
                 line_id = self.zoom_canvas.create_line(
                     zx1, zy1, zx2, zy2,
                     fill="cyan",
-                    width=2,
+                    width=3,
                     tags="zoom_landmark_overlay",
                 )
                 overlay_ids.append(line_id)
 
-            r = 5
+            r = 8
             for zx, zy in zoom_pts:
                 pt_id = self.zoom_canvas.create_oval(
                     zx - r, zy - r, zx + r, zy + r,
@@ -2063,7 +2069,7 @@ class AnnotationGUI(tk.Tk):
             px, py = pts[lm]
             zx, zy = img_to_zoom(float(px), float(py))
 
-            r = 5
+            r = 8
             circle_id = self.zoom_canvas.create_oval(
                 zx - r, zy - r, zx + r, zy + r,
                 outline="cyan",
@@ -2071,15 +2077,15 @@ class AnnotationGUI(tk.Tk):
                 tags="zoom_landmark_overlay",
             )
             hline_id = self.zoom_canvas.create_line(
-                zx - r, zy, zx + r, zy,
+                zx - r - 2, zy, zx + r + 2, zy,
                 fill="cyan",
-                width=1,
+                width=2,
                 tags="zoom_landmark_overlay",
             )
             vline_id = self.zoom_canvas.create_line(
-                zx, zy - r, zx, zy + r,
+                zx, zy - r - 2, zx, zy + r + 2,
                 fill="cyan",
-                width=1,
+                width=2,
                 tags="zoom_landmark_overlay",
             )
             overlay_ids.extend([circle_id, hline_id, vline_id])
@@ -2646,6 +2652,11 @@ class AnnotationGUI(tk.Tk):
         if not (x0 <= event.x < x1 and y0 <= event.y < y1):
             return
 
+        # Keep zoom view live even if there is no subsequent mouse-move event
+        self.last_mouse_canvas_pos = (event.x, event.y)
+        self._update_mouse_crosshair(event.x, event.y)
+        self._update_zoom_view(event.x, event.y)
+
         lm = self.selected_landmark.get()
         allowed = self._get_allowed_landmarks_for_current_view()
         if lm not in allowed:
@@ -2666,7 +2677,6 @@ class AnnotationGUI(tk.Tk):
         if not self._check_left_right_order_for_landmark(lm, x, y):
             return
 
-        # Line landmarks: L-FA / R-FA
         if self._is_line_landmark(lm):
             hit_idx = self._find_line_point_hit(lm, event.x, event.y)
             if hit_idx is not None:
@@ -2691,7 +2701,6 @@ class AnnotationGUI(tk.Tk):
                 self._set_line_points(lm, [pts[0], (x, y)])
                 self._clear_line_preview()
             else:
-                # Restart the line if both points already exist and user clicks elsewhere
                 self._set_line_points(lm, [(x, y)])
                 self._clear_line_preview()
 
@@ -2701,7 +2710,6 @@ class AnnotationGUI(tk.Tk):
             self._maybe_autosave_current_image()
             return
 
-        # Normal single-point landmarks
         self.annotations.setdefault(str(self.current_image_path), {})[lm] = (x, y)
         if lm in self.landmark_found:
             self.landmark_found[lm].set(True)
@@ -2804,6 +2812,11 @@ class AnnotationGUI(tk.Tk):
             self.dirty = True
 
     def _on_left_release(self, event) -> None:
+        if self.current_image and self._display_rect()[0] <= event.x < self._display_rect()[2] and self._display_rect()[1] <= event.y < self._display_rect()[3]:
+            self.last_mouse_canvas_pos = (event.x, event.y)
+            self._update_mouse_crosshair(event.x, event.y)
+            self._update_zoom_view(event.x, event.y)
+
         if self.dragging_landmark is not None:
             self.dragging_landmark = None
             self.dragging_point_index = None
