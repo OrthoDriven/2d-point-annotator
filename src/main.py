@@ -114,6 +114,7 @@ class AnnotationGUI(tk.Tk):
         self.show_selected_landmark_in_zoom = tk.BooleanVar(value=False)
         self.zoom_landmark_item_ids: list[int] = []
         self.zoom_extended_crosshair_ids: list[int] = []
+        self.zoom_landmark_overlay_ids: list[int] = []
 
         self.femoral_axis_enabled = tk.BooleanVar(value=False)
         self.femoral_axis_count = tk.IntVar(value=5)
@@ -1946,12 +1947,13 @@ class AnnotationGUI(tk.Tk):
         if self.zoom_canvas is None:
             return
 
-        for item_id in self.zoom_landmark_item_ids:
+        ids = getattr(self, "zoom_landmark_overlay_ids", [])
+        for item_id in ids:
             try:
                 self.zoom_canvas.delete(item_id)
             except Exception as e:
                 logger.warning(f"Failed to delete zoom landmark overlay item: {e}")
-        self.zoom_landmark_item_ids = []
+        self.zoom_landmark_overlay_ids = []
 
 
     def _get_selected_landmark_points_for_zoom(self) -> List[Tuple[float, float]]:
@@ -1978,14 +1980,13 @@ class AnnotationGUI(tk.Tk):
     def _refresh_zoom_landmark_overlay(self) -> None:
         self._clear_zoom_landmark_overlay()
 
-        if self.zoom_canvas is None or self.current_image is None:
+        if self.zoom_canvas is None:
             return
 
-        if not self.show_selected_landmark_in_zoom.get():
+        if not getattr(self, "zoom_show_selected_landmark_var", tk.BooleanVar(value=False)).get():
             return
 
-        points = self._get_selected_landmark_points_for_zoom()
-        if not points:
+        if self.current_image is None or self.current_image_path is None:
             return
 
         if self.last_mouse_canvas_pos is None:
@@ -1996,10 +1997,17 @@ class AnnotationGUI(tk.Tk):
         if not (x0 <= mouse_x < x1 and y0 <= mouse_y < y1):
             return
 
-        xi, yi = self._screen_to_img(mouse_x, mouse_y)
+        lm = self.selected_landmark.get().strip()
+        if not lm:
+            return
 
-        iw, ih = self.current_image.size
         size = self._get_zoom_canvas_size()
+        if size <= 1:
+            return
+
+        xi, yi = self._screen_to_img(mouse_x, mouse_y)
+        iw, ih = self.current_image.size
+
         zoom_lev = max(2, min(40, int(self.zoom_percent.get())))
         half_w = max(1, int(round(iw / (zoom_lev * 2.0))))
         half_h = max(1, int(round(ih / (zoom_lev * 2.0))))
@@ -2015,70 +2023,90 @@ class AnnotationGUI(tk.Tk):
         crop_w = max(1, src_right - src_left)
         crop_h = max(1, src_bottom - src_top)
 
-        lm_name = self.selected_landmark.get().strip()
-        is_line = self._is_line_landmark(lm_name)
+        pts, _quality = self._get_annotations()
 
-        screen_pts: List[Tuple[float, float]] = []
-        for px, py in points:
+        def img_to_zoom(px: float, py: float) -> Tuple[float, float]:
             zx = ((px - src_left) / crop_w) * size
             zy = ((py - src_top) / crop_h) * size
-            screen_pts.append((zx, zy))
+            return zx, zy
 
-        if is_line and len(screen_pts) >= 2:
-            x1z, y1z = screen_pts[0]
-            x2z, y2z = screen_pts[1]
-            line_id = self.zoom_canvas.create_line(
-                x1z, y1z, x2z, y2z,
-                fill="blue",
-                width=2,
-                tags="zoom_landmark",
-            )
-            self.zoom_landmark_item_ids.append(line_id)
+        overlay_ids: list[int] = []
 
-        for zx, zy in screen_pts:
+        if self._is_line_landmark(lm):
+            line_pts = self._get_line_points(lm)
+            if not line_pts:
+                self.zoom_landmark_overlay_ids = []
+                return
+
+            zoom_pts = [img_to_zoom(px, py) for px, py in line_pts]
+
+            if len(zoom_pts) == 2:
+                (zx1, zy1), (zx2, zy2) = zoom_pts
+                line_id = self.zoom_canvas.create_line(
+                    zx1, zy1, zx2, zy2,
+                    fill="cyan",
+                    width=2,
+                    tags="zoom_landmark_overlay",
+                )
+                overlay_ids.append(line_id)
+
             r = 5
-            oval_id = self.zoom_canvas.create_oval(
+            for zx, zy in zoom_pts:
+                pt_id = self.zoom_canvas.create_oval(
+                    zx - r, zy - r, zx + r, zy + r,
+                    outline="cyan",
+                    width=2,
+                    tags="zoom_landmark_overlay",
+                )
+                overlay_ids.append(pt_id)
+        else:
+            if lm not in pts:
+                self.zoom_landmark_overlay_ids = []
+                return
+
+            px, py = pts[lm]
+            zx, zy = img_to_zoom(float(px), float(py))
+
+            r = 5
+            circle_id = self.zoom_canvas.create_oval(
                 zx - r, zy - r, zx + r, zy + r,
-                outline="blue",
+                outline="cyan",
                 width=2,
-                tags="zoom_landmark",
+                tags="zoom_landmark_overlay",
             )
-            self.zoom_landmark_item_ids.append(oval_id)
-
-        if screen_pts:
-            if is_line and len(screen_pts) >= 2:
-                label_x = (screen_pts[0][0] + screen_pts[1][0]) / 2.0
-                label_y = (screen_pts[0][1] + screen_pts[1][1]) / 2.0 - 12
-            else:
-                label_x = screen_pts[0][0]
-                label_y = screen_pts[0][1] - 12
-
-            text_shadow_id = self.zoom_canvas.create_text(
-                label_x - 1,
-                label_y - 1,
-                text=lm_name,
-                fill="black",
-                font=self.dialogue_font,
-                tags="zoom_landmark",
+            hline_id = self.zoom_canvas.create_line(
+                zx - r, zy, zx + r, zy,
+                fill="cyan",
+                width=1,
+                tags="zoom_landmark_overlay",
             )
-            text_id = self.zoom_canvas.create_text(
-                label_x,
-                label_y,
-                text=lm_name,
-                fill="orange",
-                font=self.dialogue_font,
-                tags="zoom_landmark",
+            vline_id = self.zoom_canvas.create_line(
+                zx, zy - r, zx, zy + r,
+                fill="cyan",
+                width=1,
+                tags="zoom_landmark_overlay",
             )
-            self.zoom_landmark_item_ids.extend([text_shadow_id, text_id])
+            overlay_ids.extend([circle_id, hline_id, vline_id])
 
-        for item_id in self.zoom_landmark_item_ids:
-            self.zoom_canvas.tag_raise(item_id)
+        self.zoom_landmark_overlay_ids = overlay_ids
 
-        for item_id in self.zoom_crosshair_ids:
-            self.zoom_canvas.tag_raise(item_id)
+        for item_id in self.zoom_landmark_overlay_ids:
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
 
-        for item_id in self.zoom_extended_crosshair_ids:
-            self.zoom_canvas.tag_raise(item_id)
+        for item_id in getattr(self, "zoom_crosshair_ids", []):
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
+
+        for item_id in getattr(self, "zoom_extended_crosshair_ids", []):
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
 
     def _set_all_visibility(self, value: bool) -> None:
         for var in self.landmark_visibility.values():
