@@ -110,6 +110,10 @@ class AnnotationGUI(tk.Tk):
         self.zoom_base_item: Optional[int] = None
         self.zoom_percent = tk.IntVar(value=10)
         self.zoom_extended_crosshair_ids: list[int] = []
+        self.zoom_percent = tk.IntVar(value=10)
+        self.show_selected_landmark_in_zoom = tk.BooleanVar(value=False)
+        self.zoom_landmark_item_ids: list[int] = []
+        self.zoom_extended_crosshair_ids: list[int] = []
 
         self.femoral_axis_enabled = tk.BooleanVar(value=False)
         self.femoral_axis_count = tk.IntVar(value=5)
@@ -491,6 +495,14 @@ class AnnotationGUI(tk.Tk):
             command=self._on_zoom_change,
             font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(6, 6))
+
+        tk.Checkbutton(
+            zoom_wrap,
+            text="Show selected landmark in zoom view",
+            variable=self.show_selected_landmark_in_zoom,
+            command=self._refresh_zoom_landmark_overlay,
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(0, 6))
 
         hover_wrap = ttk.LabelFrame(left_tools, text="Hover Circle Tool")
         hover_wrap.pack(fill="x")
@@ -1186,6 +1198,7 @@ class AnnotationGUI(tk.Tk):
             self.dirty = True
             self._maybe_autosave_current_image()
             self._draw_points()
+            self._refresh_zoom_landmark_overlay()
             self._refresh_image_listbox()
             self._load_note_for_selected_landmark()
             return
@@ -1325,6 +1338,7 @@ class AnnotationGUI(tk.Tk):
         self._draw_points()
         self._update_femoral_axis_overlay()
         self._load_note_for_selected_landmark()
+        self._refresh_zoom_landmark_overlay()
         self.after_idle(self._scroll_landmark_into_view, lm)
 
     def _change_selected_landmark(self, step: int) -> None:
@@ -1857,6 +1871,7 @@ class AnnotationGUI(tk.Tk):
             self.zoom_canvas.coords(self.zoom_base_item, 0, 0)
 
         self._update_zoom_crosshair()
+        self._clear_zoom_landmark_overlay()
 
     def _update_zoom_view(
         self, mouse_x: Optional[float] = None, mouse_y: Optional[float] = None
@@ -1925,6 +1940,145 @@ class AnnotationGUI(tk.Tk):
             self.zoom_canvas.coords(self.zoom_base_item, 0, 0)
 
         self._update_zoom_crosshair()
+        self._refresh_zoom_landmark_overlay()
+
+    def _clear_zoom_landmark_overlay(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        for item_id in self.zoom_landmark_item_ids:
+            try:
+                self.zoom_canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete zoom landmark overlay item: {e}")
+        self.zoom_landmark_item_ids = []
+
+
+    def _get_selected_landmark_points_for_zoom(self) -> List[Tuple[float, float]]:
+        lm = self.selected_landmark.get().strip()
+        if not lm:
+            return []
+
+        pts, _quality = self._get_annotations()
+
+        if self._is_line_landmark(lm):
+            return self._get_line_points(lm)
+
+        val = pts.get(lm)
+        if val is None:
+            return []
+
+        try:
+            x, y = val
+            return [(float(x), float(y))]
+        except Exception:
+            return []
+
+
+    def _refresh_zoom_landmark_overlay(self) -> None:
+        self._clear_zoom_landmark_overlay()
+
+        if self.zoom_canvas is None or self.current_image is None:
+            return
+
+        if not self.show_selected_landmark_in_zoom.get():
+            return
+
+        points = self._get_selected_landmark_points_for_zoom()
+        if not points:
+            return
+
+        if self.last_mouse_canvas_pos is None:
+            return
+
+        mouse_x, mouse_y = self.last_mouse_canvas_pos
+        x0, y0, x1, y1 = self._display_rect()
+        if not (x0 <= mouse_x < x1 and y0 <= mouse_y < y1):
+            return
+
+        xi, yi = self._screen_to_img(mouse_x, mouse_y)
+
+        iw, ih = self.current_image.size
+        size = self._get_zoom_canvas_size()
+        zoom_lev = max(2, min(40, int(self.zoom_percent.get())))
+        half_w = max(1, int(round(iw / (zoom_lev * 2.0))))
+        half_h = max(1, int(round(ih / (zoom_lev * 2.0))))
+
+        cx = int(round(xi))
+        cy = int(round(yi))
+
+        src_left = cx - half_w
+        src_top = cy - half_h
+        src_right = cx + half_w
+        src_bottom = cy + half_h
+
+        crop_w = max(1, src_right - src_left)
+        crop_h = max(1, src_bottom - src_top)
+
+        lm_name = self.selected_landmark.get().strip()
+        is_line = self._is_line_landmark(lm_name)
+
+        screen_pts: List[Tuple[float, float]] = []
+        for px, py in points:
+            zx = ((px - src_left) / crop_w) * size
+            zy = ((py - src_top) / crop_h) * size
+            screen_pts.append((zx, zy))
+
+        if is_line and len(screen_pts) >= 2:
+            x1z, y1z = screen_pts[0]
+            x2z, y2z = screen_pts[1]
+            line_id = self.zoom_canvas.create_line(
+                x1z, y1z, x2z, y2z,
+                fill="blue",
+                width=2,
+                tags="zoom_landmark",
+            )
+            self.zoom_landmark_item_ids.append(line_id)
+
+        for zx, zy in screen_pts:
+            r = 5
+            oval_id = self.zoom_canvas.create_oval(
+                zx - r, zy - r, zx + r, zy + r,
+                outline="blue",
+                width=2,
+                tags="zoom_landmark",
+            )
+            self.zoom_landmark_item_ids.append(oval_id)
+
+        if screen_pts:
+            if is_line and len(screen_pts) >= 2:
+                label_x = (screen_pts[0][0] + screen_pts[1][0]) / 2.0
+                label_y = (screen_pts[0][1] + screen_pts[1][1]) / 2.0 - 12
+            else:
+                label_x = screen_pts[0][0]
+                label_y = screen_pts[0][1] - 12
+
+            text_shadow_id = self.zoom_canvas.create_text(
+                label_x - 1,
+                label_y - 1,
+                text=lm_name,
+                fill="black",
+                font=self.dialogue_font,
+                tags="zoom_landmark",
+            )
+            text_id = self.zoom_canvas.create_text(
+                label_x,
+                label_y,
+                text=lm_name,
+                fill="orange",
+                font=self.dialogue_font,
+                tags="zoom_landmark",
+            )
+            self.zoom_landmark_item_ids.extend([text_shadow_id, text_id])
+
+        for item_id in self.zoom_landmark_item_ids:
+            self.zoom_canvas.tag_raise(item_id)
+
+        for item_id in self.zoom_crosshair_ids:
+            self.zoom_canvas.tag_raise(item_id)
+
+        for item_id in self.zoom_extended_crosshair_ids:
+            self.zoom_canvas.tag_raise(item_id)
 
     def _set_all_visibility(self, value: bool) -> None:
         for var in self.landmark_visibility.values():
@@ -2518,6 +2672,7 @@ class AnnotationGUI(tk.Tk):
                 self._clear_line_preview()
 
             self._draw_points()
+            self._refresh_zoom_landmark_overlay()
             self.dirty = True
             self._maybe_autosave_current_image()
             return
@@ -2527,6 +2682,7 @@ class AnnotationGUI(tk.Tk):
         if lm in self.landmark_found:
             self.landmark_found[lm].set(True)
         self._draw_points()
+        self._refresh_zoom_landmark_overlay()
         self.dirty = True
 
         if lm in ("LOB", "ROB"):
@@ -2584,6 +2740,7 @@ class AnnotationGUI(tk.Tk):
             pts[self.dragging_point_index] = (x, y)
             self._set_line_points(self.dragging_landmark, pts)
             self._draw_points()
+            self._refresh_zoom_landmark_overlay()
             self.dirty = True
             return
 
@@ -2619,6 +2776,7 @@ class AnnotationGUI(tk.Tk):
             self._set_line_points(self.dragging_landmark, new_pts)
             self.dragging_line_last_img_pos = (x, y)
             self._draw_points()
+            self._refresh_zoom_landmark_overlay()
             self.dirty = True
 
     def _on_left_release(self, event) -> None:
@@ -2647,6 +2805,7 @@ class AnnotationGUI(tk.Tk):
         self._clear_femoral_axis_overlay()
 
         self._draw_points()
+        self._refresh_zoom_landmark_overlay()
         self.dirty = True
 
         if lm in ("LOB", "ROB"):
