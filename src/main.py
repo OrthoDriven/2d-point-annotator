@@ -111,6 +111,7 @@ class AnnotationGUI(tk.Tk):
         self.zoom_percent = tk.IntVar(value=10)
         self.show_selected_landmark_in_zoom = tk.BooleanVar(value=True)
         self.zoom_landmark_overlay_ids: list[int] = []
+        self.zoom_src_rect: Optional[Tuple[float, float, float, float]] = None
         self.zoom_extended_crosshair_ids: list[int] = []
 
         self.femoral_axis_enabled = tk.BooleanVar(value=False)
@@ -288,7 +289,8 @@ class AnnotationGUI(tk.Tk):
         return pts
 
     def load_data(self) -> None:
-        self._maybe_save_before_destructive_action("load another data file")
+        if not self._maybe_save_before_destructive_action("load another data file"):
+            return
         json_file = filedialog.askopenfilename(
             initialdir=BASE_DIR,
             filetypes=[("JSON File", "*.json")],
@@ -525,59 +527,6 @@ class AnnotationGUI(tk.Tk):
         )
         self.radius_scale.config(state="disabled")
         self.radius_scale.pack(fill="x", padx=6, pady=6)
-
-        # seg_wrap = ttk.LabelFrame(left_tools, text="Fill Tool (Obturator)")
-        # seg_wrap.pack(fill="x", pady=(8, 0))
-        #
-        # row1 = tk.Frame(seg_wrap)
-        # row1.pack(fill="x", padx=6, pady=(6, 2))
-        #
-        # tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
-        #
-        # self.ff_button = tk.Checkbutton(
-        #     row1, text="FF", variable=self.use_ff,
-        #     font=self.dialogue_font, command=self._change_method_to_ff,
-        # )
-        # self.ff_button.pack(side="left")
-        #
-        # self.adap_cc_button = tk.Checkbutton(
-        #     row1, text="ACC", variable=self.use_adap_cc,
-        #     font=self.dialogue_font, command=self._change_method_to_acc,
-        # )
-        # self.adap_cc_button.pack(side="left")
-        #
-        # tk.Checkbutton(
-        #     row1, text="CLAHE", variable=self.use_clahe,
-        #     command=lambda: self._resegment_selected_if_needed(),
-        #     font=self.dialogue_font,
-        # ).pack(side="left", padx=(10, 0))
-        #
-        # tk.Scale(
-        #     seg_wrap, from_=1, to=50, orient="horizontal",
-        #     label="Sensitivity", variable=self.fill_sensitivity,
-        #     command=lambda _v: self._resegment_selected_if_needed(),
-        #     font=self.dialogue_font,
-        # ).pack(fill="x", padx=6, pady=(6, 4))
-        #
-        # tk.Checkbutton(
-        #     seg_wrap, text="Edge lock (flood fill)", variable=self.edge_lock,
-        #     command=lambda: self._resegment_selected_if_needed(),
-        #     font=self.dialogue_font,
-        # ).pack(anchor="w", padx=6)
-        #
-        # tk.Scale(
-        #     seg_wrap, from_=1, to=5, orient="horizontal",
-        #     label="Edge lock width", variable=self.edge_lock_width,
-        #     command=lambda _v: self._resegment_selected_if_needed(),
-        #     font=self.dialogue_font,
-        # ).pack(fill="x", padx=6, pady=(2, 6))
-        #
-        # tk.Button(
-        #     seg_wrap,
-        #     text="Re-segment (use current sliders)",
-        #     command=lambda: self._resegment_for(self.selected_landmark.get()),
-        #     font=self.dialogue_font,
-        # ).pack(fill="x", padx=6, pady=(0, 8))
 
         axis_wrap = ttk.LabelFrame(left_tools, text="Femoral Axis Tool")
         axis_wrap.pack(fill="x", pady=(8, 0))
@@ -1868,6 +1817,7 @@ class AnnotationGUI(tk.Tk):
             self.zoom_canvas.itemconfigure(self.zoom_base_item, image=self.zoom_img_obj)
             self.zoom_canvas.coords(self.zoom_base_item, 0, 0)
 
+        self.zoom_src_rect = None
         self._update_zoom_crosshair()
         self._clear_zoom_landmark_overlay()
 
@@ -1896,44 +1846,32 @@ class AnnotationGUI(tk.Tk):
         iw, ih = self.current_image.size
 
         zoom_lev = max(2, min(40, float(self.zoom_percent.get())))
+        half_w = max(1.0, iw / (zoom_lev * 2.0))
+        half_h = max(1.0, ih / (zoom_lev * 2.0))
 
-        # Keep crop bounds in float space for subpixel precision
-        half_w = max(0.5, iw / (zoom_lev * 2.0))
-        half_h = max(0.5, ih / (zoom_lev * 2.0))
+        src_left = float(xi) - half_w
+        src_top = float(yi) - half_h
+        src_right = float(xi) + half_w
+        src_bottom = float(yi) + half_h
 
-        src_left = xi - half_w
-        src_top = yi - half_h
-        src_right = xi + half_w
-        src_bottom = yi + half_h
+        self.zoom_src_rect = (src_left, src_top, src_right, src_bottom)
 
-        crop_w = max(1e-6, src_right - src_left)
-        crop_h = max(1e-6, src_bottom - src_top)
-
-        # Integer crop used only for extracting pixels
-        int_left = int(np.floor(src_left))
-        int_top = int(np.floor(src_top))
-        int_right = int(np.ceil(src_right))
-        int_bottom = int(np.ceil(src_bottom))
-
-        out_w = max(1, int_right - int_left)
-        out_h = max(1, int_bottom - int_top)
-
-        out = Image.new("RGB", (out_w, out_h), "black")
-
-        valid_left = max(0, int_left)
-        valid_top = max(0, int_top)
-        valid_right = min(iw, int_right)
-        valid_bottom = min(ih, int_bottom)
-
-        if valid_left < valid_right and valid_top < valid_bottom:
-            cropped = self.current_image.crop(
-                (valid_left, valid_top, valid_right, valid_bottom)
+        try:
+            out = self.current_image.transform(
+                (size, size),
+                Image.Transform.EXTENT,
+                self.zoom_src_rect,
+                resample=Image.Resampling.BILINEAR,
+                fill=0,
             )
-            paste_x = valid_left - int_left
-            paste_y = valid_top - int_top
-            out.paste(cropped, (paste_x, paste_y))
+        except TypeError:
+            out = self.current_image.transform(
+                (size, size),
+                Image.Transform.EXTENT,
+                self.zoom_src_rect,
+                resample=Image.Resampling.BILINEAR,
+            )
 
-        out = out.resize((size, size), Image.Resampling.NEAREST)
         self.zoom_img_obj = ImageTk.PhotoImage(out)
 
         if self.zoom_base_item is None:
@@ -1951,85 +1889,43 @@ class AnnotationGUI(tk.Tk):
         if self.zoom_canvas is None:
             return
 
-        ids = getattr(self, "zoom_landmark_overlay_ids", [])
-        for item_id in ids:
+        for item_id in getattr(self, "zoom_landmark_overlay_ids", []):
             try:
                 self.zoom_canvas.delete(item_id)
             except Exception as e:
                 logger.warning(f"Failed to delete zoom landmark overlay item: {e}")
         self.zoom_landmark_overlay_ids = []
 
-
-    def _get_selected_landmark_points_for_zoom(self) -> List[Tuple[float, float]]:
-        lm = self.selected_landmark.get().strip()
-        if not lm:
-            return []
-
-        pts, _quality = self._get_annotations()
-
-        if self._is_line_landmark(lm):
-            return self._get_line_points(lm)
-
-        val = pts.get(lm)
-        if val is None:
-            return []
-
-        try:
-            x, y = val
-            return [(float(x), float(y))]
-        except Exception:
-            return []
-
     def _refresh_zoom_landmark_overlay(self) -> None:
         self._clear_zoom_landmark_overlay()
 
         if self.zoom_canvas is None:
             return
-
         if not self.show_selected_landmark_in_zoom.get():
             return
-
         if self.current_image is None or self.current_image_path is None:
             return
-
-        if self.last_mouse_canvas_pos is None:
-            return
-
-        mouse_x, mouse_y = self.last_mouse_canvas_pos
-        x0, y0, x1, y1 = self._display_rect()
-        if not (x0 <= mouse_x < x1 and y0 <= mouse_y < y1):
+        if self.zoom_src_rect is None:
             return
 
         lm = self.selected_landmark.get().strip()
         if not lm:
             return
 
+        pts, _quality = self._get_annotations()
         size = self._get_zoom_canvas_size()
         if size <= 1:
             return
 
-        xi, yi = self._screen_to_img(mouse_x, mouse_y)
-        iw, ih = self.current_image.size
-
-        zoom_lev = max(2, min(40, float(self.zoom_percent.get())))
-
-        # Match _update_zoom_view exactly, using float crop bounds
-        half_w = max(0.5, iw / (zoom_lev * 2.0))
-        half_h = max(0.5, ih / (zoom_lev * 2.0))
-
-        src_left = xi - half_w
-        src_top = yi - half_h
-        src_right = xi + half_w
-        src_bottom = yi + half_h
-
-        crop_w = max(1e-6, src_right - src_left)
-        crop_h = max(1e-6, src_bottom - src_top)
-
-        pts, _quality = self._get_annotations()
+        src_left, src_top, src_right, src_bottom = self.zoom_src_rect
+        src_w = src_right - src_left
+        src_h = src_bottom - src_top
+        if abs(src_w) < 1e-12 or abs(src_h) < 1e-12:
+            return
 
         def img_to_zoom(px: float, py: float) -> Tuple[float, float]:
-            zx = ((px - src_left) / crop_w) * size
-            zy = ((py - src_top) / crop_h) * size
+            zx = ((float(px) - src_left) / src_w) * size
+            zy = ((float(py) - src_top) / src_h) * size
             return zx, zy
 
         overlay_ids: list[int] = []
@@ -2037,7 +1933,6 @@ class AnnotationGUI(tk.Tk):
         if self._is_line_landmark(lm):
             line_pts = self._get_line_points(lm)
             if not line_pts:
-                self.zoom_landmark_overlay_ids = []
                 return
 
             zoom_pts = [img_to_zoom(px, py) for px, py in line_pts]
@@ -2052,24 +1947,36 @@ class AnnotationGUI(tk.Tk):
                 )
                 overlay_ids.append(line_id)
 
-            r = 8
+            r = 7
             for zx, zy in zoom_pts:
-                pt_id = self.zoom_canvas.create_oval(
+                circle_id = self.zoom_canvas.create_oval(
                     zx - r, zy - r, zx + r, zy + r,
                     outline="cyan",
                     width=2,
                     tags="zoom_landmark_overlay",
                 )
-                overlay_ids.append(pt_id)
+                hline_id = self.zoom_canvas.create_line(
+                    zx - r, zy, zx + r, zy,
+                    fill="cyan",
+                    width=1,
+                    tags="zoom_landmark_overlay",
+                )
+                vline_id = self.zoom_canvas.create_line(
+                    zx, zy - r, zx, zy + r,
+                    fill="cyan",
+                    width=1,
+                    tags="zoom_landmark_overlay",
+                )
+                overlay_ids.extend([circle_id, hline_id, vline_id])
+
         else:
             if lm not in pts:
-                self.zoom_landmark_overlay_ids = []
                 return
 
             px, py = pts[lm]
-            zx, zy = img_to_zoom(float(px), float(py))
+            zx, zy = img_to_zoom(px, py)
 
-            r = 8
+            r = 7
             circle_id = self.zoom_canvas.create_oval(
                 zx - r, zy - r, zx + r, zy + r,
                 outline="cyan",
@@ -2077,15 +1984,15 @@ class AnnotationGUI(tk.Tk):
                 tags="zoom_landmark_overlay",
             )
             hline_id = self.zoom_canvas.create_line(
-                zx - r - 2, zy, zx + r + 2, zy,
+                zx - r, zy, zx + r, zy,
                 fill="cyan",
-                width=2,
+                width=1,
                 tags="zoom_landmark_overlay",
             )
             vline_id = self.zoom_canvas.create_line(
-                zx, zy - r - 2, zx, zy + r + 2,
+                zx, zy - r, zx, zy + r,
                 fill="cyan",
-                width=2,
+                width=1,
                 tags="zoom_landmark_overlay",
             )
             overlay_ids.extend([circle_id, hline_id, vline_id])
