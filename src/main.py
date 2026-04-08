@@ -498,7 +498,7 @@ class AnnotationGUI(tk.Tk):
 
         tk.Checkbutton(
             zoom_wrap,
-            text="Show selected landmark in zoom view",
+            text="Show Selected Landmark",
             variable=self.show_selected_landmark_in_zoom,
             command=self._refresh_zoom_landmark_overlay,
             font=self.dialogue_font,
