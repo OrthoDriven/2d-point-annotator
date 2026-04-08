@@ -1861,7 +1861,7 @@ class AnnotationGUI(tk.Tk):
                 (size, size),
                 Image.Transform.EXTENT,
                 self.zoom_src_rect,
-                resample=Image.Resampling.BILINEAR,
+                resample=Image.Resampling.BICUBIC,
                 fill=0,
             )
         except TypeError:
@@ -1869,7 +1869,7 @@ class AnnotationGUI(tk.Tk):
                 (size, size),
                 Image.Transform.EXTENT,
                 self.zoom_src_rect,
-                resample=Image.Resampling.BILINEAR,
+                resample=Image.Resampling.BICUBIC,
             )
 
         self.zoom_img_obj = ImageTk.PhotoImage(out)
