@@ -113,6 +113,7 @@ class AnnotationGUI(tk.Tk):
         self.zoom_landmark_overlay_ids: list[int] = []
         self.zoom_src_rect: Optional[Tuple[float, float, float, float]] = None
         self.zoom_extended_crosshair_ids: list[int] = []
+        self.zoom_hover_overlay_ids: list[int] = []
 
         self.femoral_axis_enabled = tk.BooleanVar(value=False)
         self.femoral_axis_count = tk.IntVar(value=5)
@@ -1840,6 +1841,7 @@ class AnnotationGUI(tk.Tk):
         self.zoom_src_rect = None
         self._update_zoom_crosshair()
         self._clear_zoom_landmark_overlay()
+        self._refresh_zoom_hover_overlay()
 
     def _update_zoom_view(
         self, mouse_x: Optional[float] = None, mouse_y: Optional[float] = None
@@ -1903,6 +1905,7 @@ class AnnotationGUI(tk.Tk):
             self.zoom_canvas.coords(self.zoom_base_item, 0, 0)
 
         self._update_zoom_crosshair()
+        self._refresh_zoom_hover_overlay()
         self._refresh_zoom_landmark_overlay()
 
     def _clear_zoom_landmark_overlay(self) -> None:
@@ -2249,6 +2252,8 @@ class AnnotationGUI(tk.Tk):
             x, y = self.last_mouse_canvas_pos
             self._update_hover_circle(x, y)
 
+        self._refresh_zoom_hover_overlay()
+
     # Keeps the hover circle radius in range and updates it live.
     def _on_radius_change(self, _value: str) -> None:
         if not self.hover_enabled.get():
@@ -2260,6 +2265,8 @@ class AnnotationGUI(tk.Tk):
             cx = (x0 + x1) / 2
             cy = (y0 + y1) / 2
             self._update_hover_circle(cx, cy)
+
+        self._refresh_zoom_hover_overlay()
 
     def _on_mouse_move(self, event) -> None:
         if not self.current_image:
@@ -2485,11 +2492,102 @@ class AnnotationGUI(tk.Tk):
         else:
             self.canvas.coords(self.hover_circle_id, x0, y0, x1, y1)
 
+        self._refresh_zoom_hover_overlay()
+
     # Deletes the hover circle if present.
     def _hide_hover_circle(self) -> None:
         if self.hover_circle_id is not None:
             self.canvas.delete(self.hover_circle_id)
             self.hover_circle_id = None
+
+        self._refresh_zoom_hover_overlay()
+
+    def _clear_zoom_hover_overlay(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        for item_id in getattr(self, "zoom_hover_overlay_ids", []):
+            try:
+                self.zoom_canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete zoom hover overlay item: {e}")
+        self.zoom_hover_overlay_ids = []
+
+    def _refresh_zoom_hover_overlay(self) -> None:
+        self._clear_zoom_hover_overlay()
+
+        if self.zoom_canvas is None:
+            return
+        if not self.hover_enabled.get():
+            return
+        if self.current_image is None:
+            return
+        if self.zoom_src_rect is None:
+            return
+        if self.last_mouse_canvas_pos is None:
+            return
+
+        x0, y0, x1, y1 = self._display_rect()
+        mx, my = self.last_mouse_canvas_pos
+        if not (x0 <= mx < x1 and y0 <= my < y1):
+            return
+
+        size = self._get_zoom_canvas_size()
+        if size <= 1:
+            return
+
+        src_left, src_top, src_right, src_bottom = self.zoom_src_rect
+        src_w = src_right - src_left
+        src_h = src_bottom - src_top
+        if abs(src_w) < 1e-12 or abs(src_h) < 1e-12:
+            return
+
+        def img_to_zoom(px: float, py: float) -> Tuple[float, float]:
+            zx = ((float(px) - src_left) / src_w) * size
+            zy = ((float(py) - src_top) / src_h) * size
+            return zx, zy
+
+        xi, yi = self._screen_to_img(mx, my)
+        zx, zy = img_to_zoom(xi, yi)
+
+        zoom_radius_x = self.hover_radius.get() * (size / src_w)
+        zoom_radius_y = self.hover_radius.get() * (size / src_h)
+
+        circle_id = self.zoom_canvas.create_oval(
+            zx - zoom_radius_x,
+            zy - zoom_radius_y,
+            zx + zoom_radius_x,
+            zy + zoom_radius_y,
+            outline="cyan",
+            width=1,
+            tags="zoom_hover_overlay",
+        )
+
+        self.zoom_hover_overlay_ids = [circle_id]
+
+        for item_id in self.zoom_hover_overlay_ids:
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
+
+        for item_id in getattr(self, "zoom_landmark_overlay_ids", []):
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
+
+        for item_id in getattr(self, "zoom_crosshair_ids", []):
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
+
+        for item_id in getattr(self, "zoom_extended_crosshair_ids", []):
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
 
     # Clears all segmentation overlays and connector lines.
     def _remove_all_overlays(self):
