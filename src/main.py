@@ -647,16 +647,41 @@ class AnnotationGUI(tk.Tk):
         self.landmark_panel_container.pack(fill="x", pady=(2, 0))
         self.landmark_panel_container.pack_propagate(False)
 
+        # Fixed header row
+        self.lp_header = tk.Frame(self.landmark_panel_container)
+        self.lp_header.pack(side=tk.TOP, fill="x")
+        self.lp_header.grid_columnconfigure(0, minsize=55)
+        self.lp_header.grid_columnconfigure(1, minsize=140)
+        self.lp_header.grid_columnconfigure(2, minsize=80)
+        self.lp_header.grid_columnconfigure(3, minsize=60)
+
+        tk.Label(self.lp_header, text="View", anchor="w", font=self.heading_font).grid(
+            row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2)
+        )
+        tk.Label(self.lp_header, text="Name", anchor="w", font=self.heading_font).grid(
+            row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2)
+        )
+        tk.Label(self.lp_header, text="Ann.", anchor="w", font=self.heading_font).grid(
+            row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2)
+        )
+        tk.Label(self.lp_header, text="Flag", anchor="w", font=self.heading_font).grid(
+            row=0, column=3, sticky="w", padx=(2, 4), pady=(0, 2)
+        )
+
+        # Scrollable rows area
+        self.lp_body = tk.Frame(self.landmark_panel_container)
+        self.lp_body.pack(side=tk.TOP, fill="both", expand=True)
+
         self.lp_canvas = tk.Canvas(
-            self.landmark_panel_container,
+            self.lp_body,
             height=CANVAS_HEIGHT,
             width=PANEL_WIDTH - SCROLLBAR_WIDTH,
             highlightthickness=0,
         )
-        self.lp_canvas.pack(side=tk.LEFT, fill="both")
+        self.lp_canvas.pack(side=tk.LEFT, fill="both", expand=True)
 
         self.lp_scrollbar = tk.Scrollbar(
-            self.landmark_panel_container,
+            self.lp_body,
             orient="vertical",
             command=self.lp_canvas.yview,
         )
@@ -1013,17 +1038,12 @@ class AnnotationGUI(tk.Tk):
         self.landmark_table.grid_columnconfigure(2, minsize=80)
         self.landmark_table.grid_columnconfigure(3, minsize=60)
 
-        tk.Label(self.landmark_table, text="View", anchor="w", font=self.heading_font).grid(row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2))
-        tk.Label(self.landmark_table, text="Name", anchor="w", font=self.heading_font).grid(row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2))
-        tk.Label(self.landmark_table, text="Ann.", anchor="w", font=self.heading_font).grid(row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2))
-        tk.Label(self.landmark_table, text="Flag", anchor="w", font=self.heading_font).grid(row=0, column=3, sticky="w", padx=(2, 4), pady=(0, 2))
-
         visible_landmarks = [lm for lm in getattr(self, "landmarks", []) if lm in allowed]
 
         key = self._path_key(self.current_image_path) if self.current_image_path else ""
         meta = self.landmark_meta.get(key, {})
 
-        for i, lm in enumerate(visible_landmarks, start=1):
+        for i, lm in enumerate(visible_landmarks):
             vis_var = tk.BooleanVar(value=True)
             found_var = tk.BooleanVar(value=False)
             flag_var = tk.BooleanVar(value=bool(meta.get(lm, {}).get("flag", False)))
