@@ -1,13 +1,13 @@
 # 2D Point Annotator App
 
-To install the windows version:
+To install the Windows version:
 
 ``` powershell
-powershell -ExecutionPolicy Bypass -c "irm https://is.gd/mS0yFr | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/OrthoDriven/2d-point-annotator/new-prototype/windows_install_scripts/WindowsInstaller.ps1 | iex"
 ```
 
-And the unix version:
+And the Unix version:
 
 ``` shell
-curl -fsSL https://is.gd/XsFkW8 | bash
+curl -fsSL https://raw.githubusercontent.com/OrthoDriven/2d-point-annotator/new-prototype/install_scripts/UnixInstaller.sh| bash
 ```
