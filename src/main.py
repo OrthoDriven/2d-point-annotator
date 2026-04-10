@@ -1175,90 +1175,6 @@ class AnnotationGUI(tk.Tk):
             self.landmark_found[lm].set(False)
             self._update_found_checks(pts)
 
-    def _clear_zoom_hover_overlay(self) -> None:
-        if self.zoom_canvas is None:
-            return
-
-        for item_id in getattr(self, "zoom_hover_overlay_ids", []):
-            try:
-                self.zoom_canvas.delete(item_id)
-            except Exception as e:
-                logger.warning(f"Failed to delete zoom hover overlay item: {e}")
-        self.zoom_hover_overlay_ids = []
-
-
-    def _refresh_zoom_hover_overlay(self) -> None:
-        self._clear_zoom_hover_overlay()
-
-        if self.zoom_canvas is None:
-            return
-        if not self.hover_enabled.get():
-            return
-        if self.current_image is None:
-            return
-        if self.zoom_src_rect is None:
-            return
-        if self.last_mouse_canvas_pos is None:
-            return
-
-        size = self._get_zoom_canvas_size()
-        if size <= 1:
-            return
-
-        src_left, src_top, src_right, src_bottom = self.zoom_src_rect
-        src_w = src_right - src_left
-        src_h = src_bottom - src_top
-        if abs(src_w) < 1e-12 or abs(src_h) < 1e-12:
-            return
-
-        mouse_x, mouse_y = self.last_mouse_canvas_pos
-        x0, y0, x1, y1 = self._display_rect()
-        if not (x0 <= mouse_x < x1 and y0 <= mouse_y < y1):
-            return
-
-        xi, yi = self._screen_to_img(mouse_x, mouse_y)
-
-        zx = ((float(xi) - src_left) / src_w) * size
-        zy = ((float(yi) - src_top) / src_h) * size
-
-        hover_r_img = float(self.hover_radius.get())
-
-        rx = hover_r_img * (size / src_w)
-        ry = hover_r_img * (size / src_h)
-
-        oval_id = self.zoom_canvas.create_oval(
-            zx - rx, zy - ry, zx + rx, zy + ry,
-            outline="cyan",
-            width=1,
-            tags="zoom_hover_overlay",
-        )
-
-        self.zoom_hover_overlay_ids = [oval_id]
-
-        for item_id in self.zoom_hover_overlay_ids:
-            try:
-                self.zoom_canvas.tag_raise(item_id)
-            except Exception:
-                pass
-
-        for item_id in getattr(self, "zoom_landmark_overlay_ids", []):
-            try:
-                self.zoom_canvas.tag_raise(item_id)
-            except Exception:
-                pass
-
-        for item_id in getattr(self, "zoom_crosshair_ids", []):
-            try:
-                self.zoom_canvas.tag_raise(item_id)
-            except Exception:
-                pass
-
-        for item_id in getattr(self, "zoom_extended_crosshair_ids", []):
-            try:
-                self.zoom_canvas.tag_raise(item_id)
-            except Exception:
-                pass
-
     def _on_canvas_resize(self, _event=None) -> None:
         if not self.current_image:
             self._update_zoom_view(None, None)
@@ -2610,6 +2526,8 @@ class AnnotationGUI(tk.Tk):
             return
         if self.last_mouse_canvas_pos is None:
             return
+        if self.disp_scale <= 1e-12:
+            return
 
         x0, y0, x1, y1 = self._display_rect()
         mx, my = self.last_mouse_canvas_pos
@@ -2631,11 +2549,18 @@ class AnnotationGUI(tk.Tk):
             zy = ((float(py) - src_top) / src_h) * size
             return zx, zy
 
+        # mouse position in image coordinates
         xi, yi = self._screen_to_img(mx, my)
         zx, zy = img_to_zoom(xi, yi)
 
-        zoom_radius_x = self.hover_radius.get() * (size / src_w)
-        zoom_radius_y = self.hover_radius.get() * (size / src_h)
+        # hover_radius is in MAIN VIEW SCREEN PIXELS
+        # convert to image-space radius first
+        hover_radius_screen = float(self.hover_radius.get())
+        hover_radius_img = hover_radius_screen / float(self.disp_scale)
+
+        # now convert image-space radius into zoom-view pixels
+        zoom_radius_x = hover_radius_img * (size / src_w)
+        zoom_radius_y = hover_radius_img * (size / src_h)
 
         circle_id = self.zoom_canvas.create_oval(
             zx - zoom_radius_x,
@@ -2672,7 +2597,7 @@ class AnnotationGUI(tk.Tk):
                 self.zoom_canvas.tag_raise(item_id)
             except Exception:
                 pass
-
+            
     # Clears all segmentation overlays and connector lines.
     def _remove_all_overlays(self):
         for lm in list(self.seg_item_ids.keys()):
