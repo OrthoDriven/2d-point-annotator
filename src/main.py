@@ -1050,10 +1050,28 @@ class AnnotationGUI(tk.Tk):
         self.image_tree.bind("<Leave>", lambda _e: self._bind_image_list_scroll(False))
 
         tk.Label(ctrl, text="Landmarks:", font=self.heading_font).pack(anchor="w")
+        lp_header = tk.Frame(ctrl)
+        lp_header.pack(fill="x", padx=2)
+        lp_header.grid_columnconfigure(0, minsize=55)
+        lp_header.grid_columnconfigure(1, minsize=140)
+        lp_header.grid_columnconfigure(2, minsize=80)
+        lp_header.grid_columnconfigure(3, minsize=60)
+        tk.Label(lp_header, text="View", anchor="w", font=self.heading_font).grid(
+            row=0, column=0, sticky="w", padx=(2, 4)
+        )
+        tk.Label(lp_header, text="Name", anchor="w", font=self.heading_font).grid(
+            row=0, column=1, sticky="w", padx=(2, 4)
+        )
+        tk.Label(lp_header, text="Ann.", anchor="w", font=self.heading_font).grid(
+            row=0, column=2, sticky="w", padx=(2, 4)
+        )
+        tk.Label(lp_header, text="Flag", anchor="w", font=self.heading_font).grid(
+            row=0, column=3, sticky="w", padx=(2, 4)
+        )
         self.landmark_panel_container = tk.Frame(
             ctrl, bd=1, relief="sunken", width=PANEL_WIDTH, height=CANVAS_HEIGHT
         )
-        self.landmark_panel_container.pack(fill="x", pady=(2, 0))
+        self.landmark_panel_container.pack(fill="x", pady=(0, 0))
         self.landmark_panel_container.pack_propagate(False)
 
         self.lp_canvas = tk.Canvas(
@@ -1928,18 +1946,6 @@ class AnnotationGUI(tk.Tk):
         self.landmark_table.grid_columnconfigure(1, minsize=140)
         self.landmark_table.grid_columnconfigure(2, minsize=80)
         self.landmark_table.grid_columnconfigure(3, minsize=60)
-        tk.Label(
-            self.landmark_table, text="View", anchor="w", font=self.heading_font
-        ).grid(row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2))
-        tk.Label(
-            self.landmark_table, text="Name", anchor="w", font=self.heading_font
-        ).grid(row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2))
-        tk.Label(
-            self.landmark_table, text="Ann.", anchor="w", font=self.heading_font
-        ).grid(row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2))
-        tk.Label(
-            self.landmark_table, text="Flag", anchor="w", font=self.heading_font
-        ).grid(row=0, column=3, sticky="w", padx=(2, 4), pady=(0, 2))
 
         key = (
             self._path_key(self.current_image_path)
@@ -1953,7 +1959,7 @@ class AnnotationGUI(tk.Tk):
             lm for lm in getattr(self, "landmarks", []) if lm in allowed
         ]
 
-        for i, lm in enumerate(visible_landmarks, start=1):
+        for i, lm in enumerate(visible_landmarks, start=0):
             vis_var = tk.BooleanVar(value=True)
             found_var = tk.BooleanVar(value=False)
             flag_var = tk.BooleanVar(value=bool(meta.get(lm, {}).get("flag", False)))
