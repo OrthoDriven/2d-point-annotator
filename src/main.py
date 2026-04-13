@@ -1027,7 +1027,7 @@ class AnnotationGUI(tk.Tk):
 
                 img = Image.fromarray(arr, mode="L").convert("RGB")
                 self.current_image = img
-            self.current_image.convert("RGB")
+            self.current_image = self.current_image.convert("RGB")
 
         except Exception as e:
             messagebox.showerror("Load Image", f"Failed to open image:\n{e}")

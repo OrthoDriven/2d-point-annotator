@@ -210,3 +210,5 @@ __marimo__/
 
 andrew_data/
 AGENTS.md
+*.diff
+integration-todo.org
