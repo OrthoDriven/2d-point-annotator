@@ -55,6 +55,7 @@ class AnnotationGUI(tk.Tk):
         self.dialogue_font = tkfont.nametofont("TkDefaultFont").copy()
         self.landmark_font = tkfont.nametofont("TkDefaultFont").copy()
         self.window_close_flag = False
+        self._onedrive_backup_timer: str | None = None
         if PLATFORM == "Linux":
             self._configure_linux_fonts()
 
@@ -498,7 +499,7 @@ class AnnotationGUI(tk.Tk):
             self._refresh_saved_snapshot_for_current_image()
             self.dirty = False
             self._refresh_image_listbox()
-            self._backup_to_onedrive(self.json_path)
+            self._schedule_onedrive_backup()
 
             if show_success:
                 messagebox.showinfo("Saved", "Annotations saved to JSON.")
@@ -2643,6 +2644,11 @@ class AnnotationGUI(tk.Tk):
         if not self._maybe_save_before_destructive_action("exit"):
             return
         self.window_close_flag = True
+        if self._onedrive_backup_timer is not None:
+            self.after_cancel(self._onedrive_backup_timer)
+            self._onedrive_backup_timer = None
+        if self.json_path is not None:
+            self._backup_to_onedrive(self.json_path)
         if self.db_path is not None:
             self._export_db_to_csv()
         self.destroy()
@@ -3246,6 +3252,16 @@ class AnnotationGUI(tk.Tk):
 
         thread = threading.Thread(target=_init, daemon=True)
         thread.start()
+
+    def _schedule_onedrive_backup(self, delay_ms: int = 5000) -> None:
+        if self._onedrive_backup_timer is not None:
+            self.after_cancel(self._onedrive_backup_timer)
+        self._onedrive_backup_timer = self.after(delay_ms, self._fire_onedrive_backup)
+
+    def _fire_onedrive_backup(self) -> None:
+        self._onedrive_backup_timer = None
+        if self.json_path is not None:
+            self._backup_to_onedrive(self.json_path)
 
     def _backup_to_onedrive(self, *paths: Path) -> None:
         """
