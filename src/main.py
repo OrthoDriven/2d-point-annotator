@@ -84,6 +84,7 @@ class AnnotationGUI(tk.Tk):
         self.quality_var = tk.StringVar(value="N/A")
         self.selected_landmark = tk.StringVar(value="")
         self.current_view_var = tk.StringVar(value="")
+        self.image_flag_var = tk.BooleanVar(value=False)
         self.landmark_visibility: Dict[str, tk.BooleanVar] = {}
         self.landmark_found = {}
         self.landmark_flagged: Dict[str, tk.BooleanVar] = {}
@@ -103,6 +104,7 @@ class AnnotationGUI(tk.Tk):
         self._suspend_image_tree_select = False
         self._navigation_in_progress = False
         self.current_image_flag = False
+        self.image_flag_check: tk.Checkbutton | None = None
         self.line_landmarks: Set[str] = {"L-FA", "R-FA"}
         self.current_image: Image.Image | None = None
         self.current_image_path: Path | None = None
@@ -293,6 +295,33 @@ class AnnotationGUI(tk.Tk):
         key = self._path_key(self.current_image_path)
         record["resolved_image_path"] = key
         self.annotations[key] = self._parse_annotations_for_record(record)
+
+    def _on_image_flag_widget_changed(self) -> None:
+        self.current_image_flag = bool(self.image_flag_var.get())
+        record = self._get_current_image_record()
+        if record is not None:
+            record["image_flag"] = self.current_image_flag
+
+        self._refresh_image_flag_checkbox_style()
+
+        self.dirty = True
+        self._maybe_autosave_current_image()
+
+    def _refresh_image_flag_checkbox_style(self) -> None:
+        if self.image_flag_check is None:
+            return
+
+        is_flagged = bool(self.image_flag_var.get())
+
+        try:
+            self.image_flag_check.configure(
+                fg="black",
+                activeforeground="black",
+                disabledforeground="black",
+                selectcolor="#FFB6B6" if is_flagged else self.cget("bg"),
+            )
+        except Exception:
+            pass
 
     def _save_json_file(self, show_success: bool = False) -> bool:
         if self.json_path is None:
@@ -713,6 +742,22 @@ class AnnotationGUI(tk.Tk):
 
         row = ttk.Frame(img_frame)
         row.pack(fill="x", padx=6, pady=6)
+
+        row_meta = ttk.Frame(img_frame)
+        row_meta.pack(fill="x", padx=6, pady=(0, 6))
+
+        self.image_flag_check = tk.Checkbutton(
+            row_meta,
+            text="Image Flag",
+            variable=self.image_flag_var,
+            command=self._on_image_flag_widget_changed,
+            font=self.dialogue_font,
+            fg="black",
+            activeforeground="black",
+            disabledforeground="black",
+            selectcolor=self.cget("bg"),
+        )
+        self.image_flag_check.pack(side="left", padx=(0, 12))
 
         tk.Button(
             ctrl,
@@ -2573,9 +2618,11 @@ class AnnotationGUI(tk.Tk):
             record = self._get_current_image_record()
             if record is not None:
                 self.current_image_flag = bool(record.get("image_flag", False))
+                self.image_flag_var.set(self.current_image_flag)
                 self.annotations[key] = self._parse_annotations_for_record(record)
             else:
                 self.current_image_flag = False
+                self.image_flag_var.set(False)
                 self.annotations[key] = {}
                 self.landmark_meta[key] = {}
             self.current_image_quality = 0
@@ -2587,7 +2634,10 @@ class AnnotationGUI(tk.Tk):
             self.current_image_path = Path(rel_path)
             self.absolute_current_image_path = path.resolve()
             self.current_image_flag = False
+            self.image_flag_var.set(False)
             self.current_view_var.set("")
+
+        self._refresh_image_flag_checkbox_style()
 
         w, h = self.current_image.size
         self.canvas.config(width=w, height=h)
