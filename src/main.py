@@ -94,6 +94,9 @@ class AnnotationGUI(tk.Tk):
         self.hover_enabled = tk.BooleanVar(value=False)
         self.hover_radius = tk.IntVar(value=25)
         self.hover_circle_id: Optional[int] = None
+        self.extended_crosshair_enabled = tk.BooleanVar(value=False)
+        self.extended_crosshair_length = tk.IntVar(value=50)
+        self.extended_crosshair_ids: list[int] = []
         self.method = tk.StringVar(value="Flood Fill")
         self.fill_sensitivity = tk.IntVar(value=18)
         self.edge_lock = tk.BooleanVar(value=True)
@@ -114,6 +117,7 @@ class AnnotationGUI(tk.Tk):
         self.zoom_base_item: Optional[int] = None
         self.zoom_src_rect: Tuple[float, float, float, float] | None = None
         self.zoom_crosshair_ids: list[int] = []
+        self.zoom_extended_crosshair_ids: list[int] = []
         self.zoom_landmark_overlay_ids: list[int] = []
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.csv_loaded = False
@@ -238,9 +242,11 @@ class AnnotationGUI(tk.Tk):
             "<Leave>",
             lambda e: (
                 self._hide_hover_circle(),
+                self._hide_extended_crosshair(),
                 self._hide_mouse_crosshair(),
                 setattr(self, "last_mouse_canvas_pos", None),
                 self._update_zoom_view(None, None),
+                self._hide_zoom_extended_crosshair(),
             ),
         )
         self.canvas.bind("<ButtonPress-3>", self._on_right_button_press)
@@ -309,6 +315,30 @@ class AnnotationGUI(tk.Tk):
         )
         self.radius_scale.config(state="disabled")
         self.radius_scale.pack(fill="x", padx=6, pady=6)
+
+        cross_wrap = ttk.LabelFrame(left_tools, text="Extended Crosshair Tool")
+        cross_wrap.pack(fill="x", pady=(8, 0))
+
+        tk.Checkbutton(
+            cross_wrap,
+            text="Show Extended Crosshair",
+            variable=self.extended_crosshair_enabled,
+            command=self._toggle_extended_crosshair,
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(6, 0))
+
+        self.crosshair_length_scale = tk.Scale(
+            cross_wrap,
+            from_=5,
+            to=400,
+            orient="horizontal",
+            label="Crosshair Length",
+            variable=self.extended_crosshair_length,
+            command=self._on_extended_crosshair_length_change,
+            font=self.dialogue_font,
+        )
+        self.crosshair_length_scale.config(state="disabled")
+        self.crosshair_length_scale.pack(fill="x", padx=6, pady=6)
 
         tk.Button(
             ctrl, text="Load Image", command=self.load_image, font=self.heading_font
@@ -730,6 +760,8 @@ class AnnotationGUI(tk.Tk):
         for item_id in self.zoom_crosshair_ids:
             self.zoom_canvas.tag_raise(item_id)
 
+        self._update_zoom_extended_crosshair()
+
     def _hide_zoom_crosshair(self) -> None:
         if self.zoom_canvas is None:
             return
@@ -737,6 +769,63 @@ class AnnotationGUI(tk.Tk):
         for item_id in self.zoom_crosshair_ids:
             self.zoom_canvas.delete(item_id)
         self.zoom_crosshair_ids = []
+
+    def _update_zoom_extended_crosshair(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        if not self.extended_crosshair_enabled.get():
+            self._hide_zoom_extended_crosshair()
+            return
+
+        size = self._get_zoom_canvas_size()
+        x = size / 2
+        y = size / 2
+
+        length = max(5, min(400, int(self.extended_crosshair_length.get())))
+
+        # Keep it inside the zoom canvas
+        max_len = max(1, int(size / 2) - 2)
+        length = min(length, max_len)
+
+        if not self.zoom_extended_crosshair_ids:
+            hline_id = self.zoom_canvas.create_line(
+                x - length,
+                y,
+                x + length,
+                y,
+                fill="lime",
+                width=1,
+                tags="zoom_extended_crosshair",
+            )
+            vline_id = self.zoom_canvas.create_line(
+                x,
+                y - length,
+                x,
+                y + length,
+                fill="lime",
+                width=1,
+                tags="zoom_extended_crosshair",
+            )
+            self.zoom_extended_crosshair_ids = [hline_id, vline_id]
+        else:
+            hline_id, vline_id = self.zoom_extended_crosshair_ids
+            self.zoom_canvas.coords(hline_id, x - length, y, x + length, y)
+            self.zoom_canvas.coords(vline_id, x, y - length, x, y + length)
+
+        for item_id in self.zoom_extended_crosshair_ids:
+            self.zoom_canvas.tag_raise(item_id)
+
+    def _hide_zoom_extended_crosshair(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        for item_id in self.zoom_extended_crosshair_ids:
+            try:
+                self.zoom_canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete zoom extended crosshair item: {e}")
+        self.zoom_extended_crosshair_ids = []
 
     def _clear_zoom_landmark_overlay(self) -> None:
         if self.zoom_canvas is None:
@@ -833,6 +922,12 @@ class AnnotationGUI(tk.Tk):
             except Exception:
                 pass
 
+        for item_id in getattr(self, "zoom_extended_crosshair_ids", []):
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
+
     # Builds the landmark selection table with visibility and status controls.
 
     def _build_landmark_panel(self) -> None:
@@ -912,6 +1007,8 @@ class AnnotationGUI(tk.Tk):
     def _on_canvas_resize(self, _event=None) -> None:
         if not self.current_image:
             self._update_zoom_view(None, None)
+            self._hide_extended_crosshair()
+            self._hide_zoom_extended_crosshair()
             return
         self._render_base_image()
         self._draw_points()
@@ -919,14 +1016,22 @@ class AnnotationGUI(tk.Tk):
             self._update_overlay_for(lm)
         if self.last_mouse_canvas_pos is None:
             self._update_zoom_view(None, None)
+            self._hide_extended_crosshair()
+            self._hide_zoom_extended_crosshair()
             return
 
         mouse_x, mouse_y = self.last_mouse_canvas_pos
         x0, y0, x1, y1 = self._display_rect()
         if x0 <= mouse_x < x1 and y0 <= mouse_y < y1:
             self._update_zoom_view(mouse_x, mouse_y)
+            if self.extended_crosshair_enabled.get():
+                self._update_extended_crosshair(mouse_x, mouse_y)
+            else:
+                self._hide_extended_crosshair()
         else:
             self._update_zoom_view(None, None)
+            self._hide_extended_crosshair()
+            self._hide_zoom_extended_crosshair()
 
     # Locks the initial window min-size after the first layout pass.
     def _lock_initial_minsize(self) -> None:
@@ -1400,9 +1505,12 @@ class AnnotationGUI(tk.Tk):
         self.annotations.setdefault(str(self.current_image_path), {})
         self.load_points(show_message=False)
         self._render_base_image()
+        self.extended_crosshair_ids = []
+        self.zoom_extended_crosshair_ids = []
         self._hide_hover_circle()
         self.last_mouse_canvas_pos = None
         self._update_zoom_view(None, None)
+        self._hide_zoom_extended_crosshair()
         self.dirty = False
         self._update_path_var()
 
@@ -2027,6 +2135,71 @@ class AnnotationGUI(tk.Tk):
                     logger.warning(f"Failed to delete pair line {key}: {e}")
                 self.pair_line_ids.pop(key, None)
 
+    def _toggle_extended_crosshair(self) -> None:
+        enabled = self.extended_crosshair_enabled.get()
+        self.crosshair_length_scale.config(state="normal" if enabled else "disabled")
+
+        if not enabled:
+            self._hide_extended_crosshair()
+            self._hide_zoom_extended_crosshair()
+        else:
+            if self.last_mouse_canvas_pos is not None:
+                x, y = self.last_mouse_canvas_pos
+                self._update_extended_crosshair(x, y)
+            self._update_zoom_extended_crosshair()
+
+    def _on_extended_crosshair_length_change(self, _value: str) -> None:
+        if not self.extended_crosshair_enabled.get():
+            return
+
+        length = max(5, min(400, self.extended_crosshair_length.get()))
+        self.extended_crosshair_length.set(length)
+
+        if self.last_mouse_canvas_pos is not None:
+            x, y = self.last_mouse_canvas_pos
+            self._update_extended_crosshair(x, y)
+
+        self._update_zoom_extended_crosshair()
+
+    def _update_extended_crosshair(self, x: float, y: float) -> None:
+        length = self.extended_crosshair_length.get()
+
+        if not self.extended_crosshair_ids:
+            hline_id = self.canvas.create_line(
+                x - length,
+                y,
+                x + length,
+                y,
+                fill="lime",
+                width=1,
+                tags="extended_crosshair",
+            )
+            vline_id = self.canvas.create_line(
+                x,
+                y - length,
+                x,
+                y + length,
+                fill="lime",
+                width=1,
+                tags="extended_crosshair",
+            )
+            self.extended_crosshair_ids = [hline_id, vline_id]
+        else:
+            hline_id, vline_id = self.extended_crosshair_ids
+            self.canvas.coords(hline_id, x - length, y, x + length, y)
+            self.canvas.coords(vline_id, x, y - length, x, y + length)
+
+        for item_id in self.extended_crosshair_ids:
+            self.canvas.tag_raise(item_id)
+
+    def _hide_extended_crosshair(self) -> None:
+        for item_id in self.extended_crosshair_ids:
+            try:
+                self.canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete extended crosshair item: {e}")
+        self.extended_crosshair_ids = []
+
     # Enables/disables the hover circle UI and hides it when disabled.
     def _toggle_hover(self) -> None:
         enabled = self.hover_enabled.get()
@@ -2052,6 +2225,8 @@ class AnnotationGUI(tk.Tk):
             self.last_mouse_canvas_pos = None
             self._hide_mouse_crosshair()
             self._update_zoom_view(None, None)
+            self._hide_extended_crosshair()
+            self._hide_zoom_extended_crosshair()
             return
         x0, y0, x1, y1 = self._display_rect()
         if x0 <= event.x < x1 and y0 <= event.y < y1:
@@ -2064,11 +2239,17 @@ class AnnotationGUI(tk.Tk):
                 )  # hover circle stays screen-space
             else:
                 self._hide_hover_circle()
+            if self.extended_crosshair_enabled.get():
+                self._update_extended_crosshair(event.x, event.y)
+            else:
+                self._hide_extended_crosshair()
         else:
             self.last_mouse_canvas_pos = None
             self._hide_mouse_crosshair()
             self._hide_hover_circle()
             self._update_zoom_view(None, None)
+            self._hide_extended_crosshair()
+            self._hide_zoom_extended_crosshair()
 
     # Adjusts hover radius via standard mouse wheel events.
     def _on_mousewheel(self, event) -> None:
