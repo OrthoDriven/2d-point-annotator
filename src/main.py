@@ -496,6 +496,7 @@ class AnnotationGUI(tk.Tk):
             self._refresh_saved_snapshot_for_current_image()
             self.dirty = False
             self._refresh_image_listbox()
+            self._backup_to_onedrive(self.json_path)
 
             if show_success:
                 messagebox.showinfo("Saved", "Annotations saved to JSON.")
@@ -3236,19 +3237,18 @@ class AnnotationGUI(tk.Tk):
         thread = threading.Thread(target=_init, daemon=True)
         thread.start()
 
-    def _backup_to_onedrive(self, csv_path: Path) -> None:
+    def _backup_to_onedrive(self, *paths: Path) -> None:
         """
-        Backup database and CSV to OneDrive.
+        Backup files to OneDrive.
 
         Uploads to: pelvic-2d-points-backup/<username>/<YYYY-MM-DD>/
 
         On window close, shows progress dialog while uploading.
         Otherwise uses async upload to avoid blocking GUI.
         """
-        if self.db_path is None:
+        files_to_backup = [p for p in paths if p is not None and p.exists()]
+        if not files_to_backup:
             return
-
-        files_to_backup = [self.db_path, csv_path]
 
         if self.window_close_flag:
             # Show progress dialog and upload in background

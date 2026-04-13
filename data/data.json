@@ -130,23 +130,18 @@
             37.3,
             94.1
           ],
-          "flag": true,
-          "note": "sdfsdf"
-        },
-        "L-POD": {
-          "value": null,
-          "flag": true,
-          "note": "Here's an LPOD, bro"
+          "flag": false,
+          "note": ""
         },
         "L-FA": {
           "value": [
             [
-              45.4,
-              300.1
+              448.9,
+              307.9
             ],
             [
-              43.6,
-              502.0
+              385.8,
+              499.8
             ]
           ],
           "flag": false,
@@ -155,18 +150,19 @@
         "R-FA": {
           "value": [
             [
-              443.7,
-              305.3
+              400.9,
+              254.3
             ],
             [
-              89.3,
-              291.3
+              333.7,
+              344.4
             ]
           ],
           "flag": false,
           "note": ""
         }
-      }
+      },
+      "image_direction": "AP"
     },
     {
       "image_path": "tutorial_image_2.tif",
