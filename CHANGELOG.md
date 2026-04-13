@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.0.0...v2.0.1) (2026-04-13)
+
+
+### Bug Fixes
+
+* **ui:** Added "Not FDA approved" on home screen. ([ee8ba41](https://github.com/OrthoDriven/2d-point-annotator/commit/ee8ba412fb518d963b94e0b9777ba49b00c69965))
+
 ## [2.0.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v1.4.4...v2.0.0) (2026-04-13)
 
 
