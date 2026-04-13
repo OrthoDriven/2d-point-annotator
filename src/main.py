@@ -107,6 +107,12 @@ class AnnotationGUI(tk.Tk):
         self.mouse_crosshair_ids: list[int] = []
         self.last_mouse_canvas_pos: tuple[int, int] | None = None
         self.right_mouse_held: bool = False
+        self.zoom_canvas: tk.Canvas | None = None
+        self.zoom_percent = tk.IntVar(value=8)
+        self.zoom_img_obj: ImageTk.PhotoImage | None = None
+        self.zoom_base_item: Optional[int] = None
+        self.zoom_src_rect: Tuple[float, float, float, float] | None = None
+        self.zoom_crosshair_ids: list[int] = []
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.csv_loaded = False
         # Also adjust these if you want everything to match:
@@ -232,6 +238,7 @@ class AnnotationGUI(tk.Tk):
                 self._hide_hover_circle(),
                 self._hide_mouse_crosshair(),
                 setattr(self, "last_mouse_canvas_pos", None),
+                self._update_zoom_view(None, None),
             ),
         )
         self.canvas.bind("<ButtonPress-3>", self._on_right_button_press)
@@ -249,6 +256,28 @@ class AnnotationGUI(tk.Tk):
         ctrl.pack(side=tk.RIGHT, fill="y", padx=(5, 10), pady=10)
         ctrl.pack_propagate(False)
         self._ctrl = ctrl
+
+        zoom_wrap = ttk.LabelFrame(left_tools, text="Zoom View")
+        zoom_wrap.pack(fill="x", pady=(0, 8))
+        self.zoom_canvas = tk.Canvas(
+            zoom_wrap,
+            width=450,
+            height=450,
+            bg="black",
+            highlightthickness=0,
+        )
+        self.zoom_canvas.pack(fill="x", padx=0, pady=0)
+        tk.Scale(
+            zoom_wrap,
+            from_=2,
+            to=40,
+            orient="horizontal",
+            label="Zoom (x)",
+            variable=self.zoom_percent,
+            command=self._on_zoom_change,
+            font=self.dialogue_font,
+        ).pack(fill="x", padx=6, pady=(6, 6))
+        self.after(0, self._render_black_zoom_view)
 
         hover_wrap = ttk.LabelFrame(left_tools, text="Hover Circle Tool")
         hover_wrap.pack(fill="x")
@@ -518,6 +547,186 @@ class AnnotationGUI(tk.Tk):
         disp_w, disp_h = self.disp_size
         return off_x, off_y, off_x + disp_w, off_y + disp_h
 
+    def _get_zoom_canvas_size(self) -> int:
+        if self.zoom_canvas is None:
+            return 1
+
+        w = self.zoom_canvas.winfo_width()
+        h = self.zoom_canvas.winfo_height()
+
+        if w <= 1 or h <= 1:
+            req_w = self.zoom_canvas.winfo_reqwidth()
+            req_h = self.zoom_canvas.winfo_reqheight()
+            w = max(w, req_w, 1)
+            h = max(h, req_h, 1)
+
+        return max(1, min(w, h))
+
+    def _render_black_zoom_view(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        size = self._get_zoom_canvas_size()
+        black_img = Image.new("RGB", (size, size), "black")
+        self.zoom_img_obj = ImageTk.PhotoImage(black_img)
+
+        if self.zoom_base_item is None:
+            self.zoom_base_item = self.zoom_canvas.create_image(
+                0, 0, anchor="nw", image=self.zoom_img_obj
+            )
+        else:
+            self.zoom_canvas.itemconfigure(self.zoom_base_item, image=self.zoom_img_obj)
+            self.zoom_canvas.coords(self.zoom_base_item, 0, 0)
+
+        self.zoom_src_rect = None
+        self._update_zoom_crosshair()
+
+    def _update_zoom_view(
+        self, mouse_x: Optional[float] = None, mouse_y: Optional[float] = None
+    ) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        size = self._get_zoom_canvas_size()
+
+        if self.current_image is None or mouse_x is None or mouse_y is None:
+            self._render_black_zoom_view()
+            return
+
+        x0, y0, x1, y1 = self._display_rect()
+        if not (x0 <= mouse_x < x1 and y0 <= mouse_y < y1):
+            self._render_black_zoom_view()
+            return
+
+        xi, yi = self._screen_to_img(mouse_x, mouse_y)
+        iw, ih = self.current_image.size
+
+        if not (0 <= xi < iw and 0 <= yi < ih):
+            self._render_black_zoom_view()
+            return
+
+        zoom_lev = max(2, min(40, float(self.zoom_percent.get())))
+        half_w = max(1.0, iw / (zoom_lev * 2.0))
+        half_h = max(1.0, ih / (zoom_lev * 2.0))
+
+        src_left = float(xi) - half_w
+        src_top = float(yi) - half_h
+        src_right = float(xi) + half_w
+        src_bottom = float(yi) + half_h
+
+        self.zoom_src_rect = (src_left, src_top, src_right, src_bottom)
+
+        try:
+            out = self.current_image.transform(
+                (size, size),
+                Image.Transform.EXTENT,
+                self.zoom_src_rect,
+                resample=Image.Resampling.NEAREST,
+                fill=0,
+            )
+        except TypeError:
+            out = self.current_image.transform(
+                (size, size),
+                Image.Transform.EXTENT,
+                self.zoom_src_rect,
+                resample=Image.Resampling.NEAREST,
+            )
+
+        self.zoom_img_obj = ImageTk.PhotoImage(out)
+
+        if self.zoom_base_item is None:
+            self.zoom_base_item = self.zoom_canvas.create_image(
+                0, 0, anchor="nw", image=self.zoom_img_obj
+            )
+        else:
+            self.zoom_canvas.itemconfigure(self.zoom_base_item, image=self.zoom_img_obj)
+            self.zoom_canvas.coords(self.zoom_base_item, 0, 0)
+
+        self._update_zoom_crosshair()
+
+    def _on_zoom_change(self, _value) -> None:
+        if self.last_mouse_canvas_pos is None:
+            self._update_zoom_view(None, None)
+            return
+
+        mouse_x, mouse_y = self.last_mouse_canvas_pos
+        self._update_zoom_view(mouse_x, mouse_y)
+
+    def _change_zoom_percent(self, delta) -> None:
+        new_zoom = max(2, min(40, self.zoom_percent.get() + delta))
+        if new_zoom != self.zoom_percent.get():
+            self.zoom_percent.set(new_zoom)
+            self._on_zoom_change(str(new_zoom))
+
+    def _update_zoom_crosshair(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        size = self._get_zoom_canvas_size()
+        x = size / 2
+        y = size / 2
+
+        circle_r = 16
+        cross_r = circle_r
+
+        circle_color = "blue"
+        crosshair_color = "orange"
+
+        if not self.zoom_crosshair_ids:
+            circle_id = self.zoom_canvas.create_oval(
+                x - circle_r,
+                y - circle_r,
+                x + circle_r,
+                y + circle_r,
+                outline=circle_color,
+                width=1,
+                tags="zoom_crosshair",
+            )
+            hline_id = self.zoom_canvas.create_line(
+                x - cross_r,
+                y,
+                x + cross_r,
+                y,
+                fill=crosshair_color,
+                width=1,
+                tags="zoom_crosshair",
+            )
+            vline_id = self.zoom_canvas.create_line(
+                x,
+                y - cross_r,
+                x,
+                y + cross_r,
+                fill=crosshair_color,
+                width=1,
+                tags="zoom_crosshair",
+            )
+            self.zoom_crosshair_ids = [circle_id, hline_id, vline_id]
+        else:
+            circle_id, hline_id, vline_id = self.zoom_crosshair_ids
+            self.zoom_canvas.coords(
+                circle_id,
+                x - circle_r,
+                y - circle_r,
+                x + circle_r,
+                y + circle_r,
+            )
+            self.zoom_canvas.coords(hline_id, x - cross_r, y, x + cross_r, y)
+            self.zoom_canvas.coords(vline_id, x, y - cross_r, x, y + cross_r)
+            self.zoom_canvas.itemconfigure(circle_id, outline=circle_color)
+            self.zoom_canvas.itemconfigure(hline_id, fill=crosshair_color)
+            self.zoom_canvas.itemconfigure(vline_id, fill=crosshair_color)
+
+        for item_id in self.zoom_crosshair_ids:
+            self.zoom_canvas.tag_raise(item_id)
+
+    def _hide_zoom_crosshair(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        for item_id in self.zoom_crosshair_ids:
+            self.zoom_canvas.delete(item_id)
+        self.zoom_crosshair_ids = []
+
     # Builds the landmark selection table with visibility and status controls.
 
     def _build_landmark_panel(self) -> None:
@@ -596,11 +805,22 @@ class AnnotationGUI(tk.Tk):
     # (5) Handle canvas resize (add to class)
     def _on_canvas_resize(self, _event=None) -> None:
         if not self.current_image:
+            self._update_zoom_view(None, None)
             return
         self._render_base_image()
         self._draw_points()
         for lm in ("LOB", "ROB"):
             self._update_overlay_for(lm)
+        if self.last_mouse_canvas_pos is None:
+            self._update_zoom_view(None, None)
+            return
+
+        mouse_x, mouse_y = self.last_mouse_canvas_pos
+        x0, y0, x1, y1 = self._display_rect()
+        if x0 <= mouse_x < x1 and y0 <= mouse_y < y1:
+            self._update_zoom_view(mouse_x, mouse_y)
+        else:
+            self._update_zoom_view(None, None)
 
     # Locks the initial window min-size after the first layout pass.
     def _lock_initial_minsize(self) -> None:
@@ -1074,6 +1294,8 @@ class AnnotationGUI(tk.Tk):
         self.load_points(show_message=False)
         self._render_base_image()
         self._hide_hover_circle()
+        self.last_mouse_canvas_pos = None
+        self._update_zoom_view(None, None)
         self.dirty = False
         self._update_path_var()
 
@@ -1722,11 +1944,13 @@ class AnnotationGUI(tk.Tk):
         if not self.current_image:
             self.last_mouse_canvas_pos = None
             self._hide_mouse_crosshair()
+            self._update_zoom_view(None, None)
             return
         x0, y0, x1, y1 = self._display_rect()
         if x0 <= event.x < x1 and y0 <= event.y < y1:
             self.last_mouse_canvas_pos = (event.x, event.y)
             self._update_mouse_crosshair(event.x, event.y)
+            self._update_zoom_view(event.x, event.y)
             if self.hover_enabled.get():
                 self._update_hover_circle(
                     event.x, event.y
@@ -1737,9 +1961,14 @@ class AnnotationGUI(tk.Tk):
             self.last_mouse_canvas_pos = None
             self._hide_mouse_crosshair()
             self._hide_hover_circle()
+            self._update_zoom_view(None, None)
 
     # Adjusts hover radius via standard mouse wheel events.
     def _on_mousewheel(self, event) -> None:
+        if self.right_mouse_held:
+            step = 2 if event.delta > 0 else -2
+            self._change_zoom_percent(step)
+            return
         if not self.hover_enabled.get():
             return
         step = 2 if event.delta > 0 else -2
@@ -1747,6 +1976,10 @@ class AnnotationGUI(tk.Tk):
 
     # Adjusts hover radius for Linux button-4/5 events.
     def _on_scroll_linux(self, direction: int) -> None:
+        if self.right_mouse_held:
+            step = 2 if direction > 0 else -2
+            self._change_zoom_percent(step)
+            return
         if not self.hover_enabled.get():
             return
         step = 2 if direction > 0 else -2
