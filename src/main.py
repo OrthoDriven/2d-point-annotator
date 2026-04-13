@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # pyright: reportMissingImports=false, reportMissingTypeArgument=false, reportUninitializedInstanceVariable=false, reportOperatorIssue=false
-
 import ast
 import datetime
 import json
@@ -33,7 +32,6 @@ from PIL import Image, ImageTk
 from auth import OneDriveBackup  # pyright: ignore[reportImplicitRelativeImport]
 from dirs import BASE_DIR, PLATFORM  # pyright: ignore[reportImplicitRelativeImport]
 from path_utils import extract_filename  # pyright: ignore[reportImplicitRelativeImport]
-
 
 AnnotationPoint = Tuple[float, float]
 AnnotationValue = Union[AnnotationPoint, List[AnnotationPoint]]
@@ -903,7 +901,7 @@ class AnnotationGUI(tk.Tk):
 
         tk.Label(
             left_tools,
-            text=f"v{self._get_app_version()}",
+            text=f"v{self._get_app_version()}\n NOT FDA APPROVED",
             font=self.dialogue_font,
             fg="grey50",
             anchor="w",
