@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportMissingImports=false, reportMissingTypeArgument=false, reportUninitializedInstanceVariable=false, reportOperatorIssue=false
+
 import ast
 import datetime
 import json
@@ -28,11 +30,9 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageTk
 
-from auth import OneDriveBackup
-from dirs import BASE_DIR, PLATFORM
-from path_utils import (
-    extract_filename,
-)
+from auth import OneDriveBackup  # pyright: ignore[reportImplicitRelativeImport]
+from dirs import BASE_DIR, PLATFORM  # pyright: ignore[reportImplicitRelativeImport]
+from path_utils import extract_filename  # pyright: ignore[reportImplicitRelativeImport]
 
 
 AnnotationPoint = Tuple[float, float]
@@ -99,6 +99,11 @@ class AnnotationGUI(tk.Tk):
         self.hover_enabled = tk.BooleanVar(value=False)
         self.hover_radius = tk.IntVar(value=25)
         self.hover_circle_id: Optional[int] = None
+        self.femoral_axis_enabled = tk.BooleanVar(value=False)
+        self.femoral_axis_count = tk.IntVar(value=5)
+        self.femoral_axis_proj_length = tk.IntVar(value=60)
+        self.femoral_axis_whisker_tip_length = tk.IntVar(value=10)
+        self.femoral_axis_item_ids: list[int] = []
         self.extended_crosshair_enabled = tk.BooleanVar(value=False)
         self.extended_crosshair_length = tk.IntVar(value=50)
         self.extended_crosshair_ids: list[int] = []
@@ -189,6 +194,8 @@ class AnnotationGUI(tk.Tk):
             try:
                 with sqlite3.connect(self.db_path) as conn:
                     cur = conn.cursor()
+                    if self.absolute_current_image_path is None:
+                        return
                     image_filename = extract_filename(self.absolute_current_image_path)
 
                     cur.execute(
@@ -214,6 +221,8 @@ class AnnotationGUI(tk.Tk):
             try:
                 with sqlite3.connect(self.db_path) as conn:
                     cur = conn.cursor()
+                    if self.absolute_current_image_path is None:
+                        return False
 
                     query = """
                         SELECT verified FROM annotations WHERE image_filename = ?
@@ -319,6 +328,43 @@ class AnnotationGUI(tk.Tk):
         )
         self.radius_scale.config(state="disabled")
         self.radius_scale.pack(fill="x", padx=6, pady=6)
+
+        axis_wrap = ttk.LabelFrame(left_tools, text="Femoral Axis Tool")
+        axis_wrap.pack(fill="x", pady=(8, 0))
+
+        tk.Checkbutton(
+            axis_wrap,
+            text="Show Femoral Axis",
+            variable=self.femoral_axis_enabled,
+            command=self._toggle_femoral_axis,
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(6, 0))
+
+        self.femoral_axis_count_scale = tk.Scale(
+            axis_wrap,
+            from_=1,
+            to=20,
+            orient="horizontal",
+            label="N Orthogonal Projections",
+            variable=self.femoral_axis_count,
+            command=self._on_femoral_axis_count_change,
+            font=self.dialogue_font,
+        )
+        self.femoral_axis_count_scale.config(state="disabled")
+        self.femoral_axis_count_scale.pack(fill="x", padx=6, pady=(6, 2))
+
+        self.femoral_axis_whisker_tip_length_scale = tk.Scale(
+            axis_wrap,
+            from_=1,
+            to=80,
+            orient="horizontal",
+            label="Whisker Tip Length",
+            variable=self.femoral_axis_whisker_tip_length,
+            command=self._on_femoral_axis_whisker_tip_length_change,
+            font=self.dialogue_font,
+        )
+        self.femoral_axis_whisker_tip_length_scale.config(state="disabled")
+        self.femoral_axis_whisker_tip_length_scale.pack(fill="x", padx=6, pady=(0, 6))
 
         cross_wrap = ttk.LabelFrame(left_tools, text="Extended Crosshair Tool")
         cross_wrap.pack(fill="x", pady=(8, 0))
@@ -831,6 +877,156 @@ class AnnotationGUI(tk.Tk):
                 logger.warning(f"Failed to delete zoom extended crosshair item: {e}")
         self.zoom_extended_crosshair_ids = []
 
+    def _change_femoral_axis_length(self, delta: int) -> None:
+        new_len = max(2, min(300, int(self.femoral_axis_proj_length.get()) + delta))
+        if new_len != self.femoral_axis_proj_length.get():
+            self.femoral_axis_proj_length.set(new_len)
+            self._update_femoral_axis_overlay()
+
+    def _toggle_femoral_axis(self) -> None:
+        enabled = self.femoral_axis_enabled.get()
+        self.femoral_axis_count_scale.config(state="normal" if enabled else "disabled")
+        self.femoral_axis_whisker_tip_length_scale.config(
+            state="normal" if enabled else "disabled"
+        )
+
+        if enabled and self.hover_enabled.get():
+            self.hover_enabled.set(False)
+            self.radius_scale.config(state="disabled")
+            self._hide_hover_circle()
+
+        if not enabled:
+            self._clear_femoral_axis_overlay()
+        else:
+            self._update_femoral_axis_overlay()
+
+    def _on_femoral_axis_whisker_tip_length_change(self, _value: str) -> None:
+        if not self.femoral_axis_enabled.get():
+            return
+        new_len = max(1, min(80, int(self.femoral_axis_whisker_tip_length.get())))
+        self.femoral_axis_whisker_tip_length.set(new_len)
+        self._update_femoral_axis_overlay()
+
+    def _on_femoral_axis_count_change(self, _value: str) -> None:
+        if not self.femoral_axis_enabled.get():
+            return
+        count = max(1, min(20, int(self.femoral_axis_count.get())))
+        self.femoral_axis_count.set(count)
+        self._update_femoral_axis_overlay()
+
+    def _clear_femoral_axis_overlay(self) -> None:
+        for item_id in self.femoral_axis_item_ids:
+            try:
+                self.canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete femoral axis item: {e}")
+        self.femoral_axis_item_ids = []
+
+    def _change_femoral_axis_whisker_tip_length(self, delta: int) -> None:
+        new_len = max(
+            1,
+            min(80, int(self.femoral_axis_whisker_tip_length.get()) + delta),
+        )
+        if new_len != self.femoral_axis_whisker_tip_length.get():
+            self.femoral_axis_whisker_tip_length.set(new_len)
+            self._update_femoral_axis_overlay()
+
+    def _get_active_femoral_axis_line_screen(
+        self,
+    ) -> Optional[Tuple[float, float, float, float]]:
+        if not self.current_image:
+            return None
+        if not self.femoral_axis_enabled.get():
+            return None
+
+        landmark = self.selected_landmark.get()
+        if landmark not in ("L-FA", "R-FA"):
+            return None
+
+        points = self._get_line_points(landmark)
+        if len(points) >= 2:
+            x1, y1 = self._img_to_screen(*points[0])
+            x2, y2 = self._img_to_screen(*points[1])
+            return x1, y1, x2, y2
+
+        if len(points) == 1 and self.last_mouse_canvas_pos is not None:
+            mouse_x, mouse_y = self.last_mouse_canvas_pos
+            x0, y0, x1, y1 = self._display_rect()
+            if x0 <= mouse_x < x1 and y0 <= mouse_y < y1:
+                sx, sy = self._img_to_screen(*points[0])
+                return sx, sy, mouse_x, mouse_y
+
+        return None
+
+    def _update_femoral_axis_overlay(self) -> None:
+        self._clear_femoral_axis_overlay()
+
+        line = self._get_active_femoral_axis_line_screen()
+        if line is None:
+            return
+
+        x1, y1, x2, y2 = line
+        vx = x2 - x1
+        vy = y2 - y1
+        mag = float((vx * vx + vy * vy) ** 0.5)
+        if mag < 1e-6:
+            return
+
+        tx = vx / mag
+        ty = vy / mag
+        nx = -ty
+        ny = tx
+
+        n_proj = max(1, int(self.femoral_axis_count.get()))
+        proj_len = float(self.femoral_axis_proj_length.get())
+        cap_half = float(self.femoral_axis_whisker_tip_length.get())
+
+        for i in range(1, n_proj + 1):
+            frac = i / (n_proj + 1.0)
+            cx = x1 + frac * vx
+            cy = y1 + frac * vy
+
+            ax = cx - proj_len * nx
+            ay = cy - proj_len * ny
+            bx = cx + proj_len * nx
+            by = cy + proj_len * ny
+
+            main_id = self.canvas.create_line(
+                ax,
+                ay,
+                bx,
+                by,
+                fill="magenta",
+                width=2,
+                tags="femoral_axis",
+            )
+            cap1_id = self.canvas.create_line(
+                ax - cap_half * tx,
+                ay - cap_half * ty,
+                ax + cap_half * tx,
+                ay + cap_half * ty,
+                fill="magenta",
+                width=2,
+                tags="femoral_axis",
+            )
+            cap2_id = self.canvas.create_line(
+                bx - cap_half * tx,
+                by - cap_half * ty,
+                bx + cap_half * tx,
+                by + cap_half * ty,
+                fill="magenta",
+                width=2,
+                tags="femoral_axis",
+            )
+            self.femoral_axis_item_ids.extend([main_id, cap1_id, cap2_id])
+
+        for item_id in self.femoral_axis_item_ids:
+            try:
+                self.canvas.tag_raise(item_id)
+            except Exception:
+                pass
+        self.canvas.tag_raise("marker")
+
     def _clear_zoom_landmark_overlay(self) -> None:
         if self.zoom_canvas is None:
             return
@@ -1204,6 +1400,7 @@ class AnnotationGUI(tk.Tk):
         if not self.current_image:
             self._clear_line_preview()
             self._update_zoom_view(None, None)
+            self._clear_femoral_axis_overlay()
             self._hide_extended_crosshair()
             self._hide_zoom_extended_crosshair()
             return
@@ -1214,6 +1411,7 @@ class AnnotationGUI(tk.Tk):
         if self.last_mouse_canvas_pos is None:
             self._clear_line_preview()
             self._update_zoom_view(None, None)
+            self._update_femoral_axis_overlay()
             self._hide_extended_crosshair()
             self._hide_zoom_extended_crosshair()
             return
@@ -1223,6 +1421,7 @@ class AnnotationGUI(tk.Tk):
         if x0 <= mouse_x < x1 and y0 <= mouse_y < y1:
             self._update_zoom_view(mouse_x, mouse_y)
             self._update_line_preview(mouse_x, mouse_y)
+            self._update_femoral_axis_overlay()
             if self.extended_crosshair_enabled.get():
                 self._update_extended_crosshair(mouse_x, mouse_y)
             else:
@@ -1230,6 +1429,7 @@ class AnnotationGUI(tk.Tk):
         else:
             self._clear_line_preview()
             self._update_zoom_view(None, None)
+            self._clear_femoral_axis_overlay()
             self._hide_extended_crosshair()
             self._hide_zoom_extended_crosshair()
 
@@ -1298,6 +1498,7 @@ class AnnotationGUI(tk.Tk):
             self._update_line_preview(*self.last_mouse_canvas_pos)
         else:
             self._clear_line_preview()
+        self._update_femoral_axis_overlay()
         self.after_idle(self._scroll_landmark_into_view, lm)
 
     def _change_selected_landmark(self, step: int) -> None:
@@ -1512,6 +1713,8 @@ class AnnotationGUI(tk.Tk):
         return
 
     def _get_image_index_from_directory(self) -> Tuple[int, list]:
+        if self.absolute_current_image_path is None:
+            return 0, []
         # Grab the directory that the current image lives in
         current_image_directory = (
             Path(self.absolute_current_image_path).resolve().parent
@@ -1573,6 +1776,9 @@ class AnnotationGUI(tk.Tk):
 
         else:
             idx, all_files = self._get_image_index_from_directory()
+            current_path = self.absolute_current_image_path
+            if current_path is None or not all_files:
+                return
             if len(all_files) == idx + 1:
                 messagebox.showwarning(
                     "End of Directory",
@@ -1581,8 +1787,7 @@ class AnnotationGUI(tk.Tk):
                 )
             else:
                 self.absolute_current_image_path = Path(
-                    self.absolute_current_image_path.resolve().parent
-                    / all_files[idx + 1]
+                    current_path.resolve().parent / all_files[idx + 1]
                 )
                 self.load_image_from_path(Path(self.absolute_current_image_path))
 
@@ -1616,6 +1821,9 @@ class AnnotationGUI(tk.Tk):
             self._update_queue_status()
         else:
             idx, all_files = self._get_image_index_from_directory()
+            current_path = self.absolute_current_image_path
+            if current_path is None or not all_files:
+                return
             if idx == 0:
                 messagebox.showwarning(
                     "Beginning of Directory",
@@ -1623,8 +1831,7 @@ class AnnotationGUI(tk.Tk):
                 )
             else:
                 self.absolute_current_image_path = Path(
-                    self.absolute_current_image_path.resolve().parent
-                    / all_files[idx - 1]
+                    current_path.resolve().parent / all_files[idx - 1]
                 )
                 self.load_image_from_path(Path(self.absolute_current_image_path))
 
@@ -2048,6 +2255,8 @@ class AnnotationGUI(tk.Tk):
             df = df[[c for c in cols if c in df.columns]]
 
             # Determine final CSV path
+            if self.abs_csv_path is None:
+                return
             csv_path = Path(self.abs_csv_path)
             if self.check_csv_mode:
                 dir = csv_path.parent
@@ -2100,6 +2309,10 @@ class AnnotationGUI(tk.Tk):
         if not self.current_image_path:
             if show_message:
                 messagebox.showwarning("Load Points", "No image loaded.")
+            return
+        if self.abs_csv_path is None:
+            if show_message:
+                messagebox.showerror("Load Points", "CSV path is not configured.")
             return
         if not Path(self.abs_csv_path).exists():
             if show_message:
@@ -2235,6 +2448,7 @@ class AnnotationGUI(tk.Tk):
         self.canvas.delete("marker")
         if not self.current_image_path:
             self._clear_line_preview()
+            self._clear_femoral_axis_overlay()
             return
         # pts = self.annotations.get(self.current_image_path, {})
         pts, quality = self._get_annotations()
@@ -2385,6 +2599,7 @@ class AnnotationGUI(tk.Tk):
         for lm in ("LOB", "ROB"):
             self._update_overlay_for(lm)
         self._update_pair_lines()
+        self._update_femoral_axis_overlay()
 
     # Removes any connector lines between paired landmarks.
     def _remove_pair_lines(self):
@@ -2523,6 +2738,11 @@ class AnnotationGUI(tk.Tk):
     def _toggle_hover(self) -> None:
         enabled = self.hover_enabled.get()
         self.radius_scale.config(state="normal" if enabled else "disabled")
+        if enabled and self.femoral_axis_enabled.get():
+            self.femoral_axis_enabled.set(False)
+            self.femoral_axis_count_scale.config(state="disabled")
+            self.femoral_axis_whisker_tip_length_scale.config(state="disabled")
+            self._clear_femoral_axis_overlay()
         if not enabled:
             self._hide_hover_circle()
 
@@ -2543,6 +2763,7 @@ class AnnotationGUI(tk.Tk):
         if not self.current_image:
             self.last_mouse_canvas_pos = None
             self._clear_line_preview()
+            self._clear_femoral_axis_overlay()
             self._hide_mouse_crosshair()
             self._update_zoom_view(None, None)
             self._hide_extended_crosshair()
@@ -2554,6 +2775,7 @@ class AnnotationGUI(tk.Tk):
             self._update_mouse_crosshair(event.x, event.y)
             self._update_zoom_view(event.x, event.y)
             self._update_line_preview(event.x, event.y)
+            self._update_femoral_axis_overlay()
             if self.hover_enabled.get():
                 self._update_hover_circle(
                     event.x, event.y
@@ -2567,6 +2789,7 @@ class AnnotationGUI(tk.Tk):
         else:
             self.last_mouse_canvas_pos = None
             self._clear_line_preview()
+            self._clear_femoral_axis_overlay()
             self._hide_mouse_crosshair()
             self._hide_hover_circle()
             self._update_zoom_view(None, None)
@@ -2575,6 +2798,7 @@ class AnnotationGUI(tk.Tk):
 
     def _on_canvas_leave(self, _event) -> None:
         self._hide_hover_circle()
+        self._clear_femoral_axis_overlay()
         self._hide_extended_crosshair()
         self._hide_mouse_crosshair()
         self._clear_line_preview()
@@ -2588,6 +2812,13 @@ class AnnotationGUI(tk.Tk):
             step = 2 if event.delta > 0 else -2
             self._change_zoom_percent(step)
             return
+        if self.femoral_axis_enabled.get() and self.selected_landmark.get() in (
+            "L-FA",
+            "R-FA",
+        ):
+            step = 2 if event.delta > 0 else -2
+            self._change_femoral_axis_length(step)
+            return
         if not self.hover_enabled.get():
             return
         step = 2 if event.delta > 0 else -2
@@ -2598,6 +2829,13 @@ class AnnotationGUI(tk.Tk):
         if self.right_mouse_held:
             step = 2 if direction > 0 else -2
             self._change_zoom_percent(step)
+            return
+        if self.femoral_axis_enabled.get() and self.selected_landmark.get() in (
+            "L-FA",
+            "R-FA",
+        ):
+            step = 2 if direction > 0 else -2
+            self._change_femoral_axis_length(step)
             return
         if not self.hover_enabled.get():
             return
