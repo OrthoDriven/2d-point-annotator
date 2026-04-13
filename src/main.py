@@ -431,6 +431,7 @@ class AnnotationGUI(tk.Tk):
             return
         self._set_current_view(new_view)
         self._maybe_autosave_current_image()
+        self.focus_set()
 
     def _on_image_flag_widget_changed(self) -> None:
         self.current_image_flag = bool(self.image_flag_var.get())
@@ -465,6 +466,7 @@ class AnnotationGUI(tk.Tk):
         if record is not None:
             record["image_direction"] = self.current_image_direction
         self._maybe_autosave_current_image()
+        self.focus_set()
 
     def _save_json_file(self, show_success: bool = False) -> bool:
         if self.json_path is None:
@@ -722,6 +724,12 @@ class AnnotationGUI(tk.Tk):
         IMAGE_LIST_HEIGHT = 180
         CANVAS_HEIGHT = 220
 
+        self.option_add("*Scale.takeFocus", "0")
+        self.option_add("*Checkbutton.takeFocus", "0")
+        self.option_add("*Button.takeFocus", "0")
+        self.option_add("*Entry.takeFocus", "0")
+        self.option_add("*TCombobox.takeFocus", "0")
+
         main = tk.Frame(self)
         main.pack(fill="both", expand=True)
 
@@ -929,6 +937,7 @@ class AnnotationGUI(tk.Tk):
             state="readonly",
             font=self.dialogue_font,
             width=4,
+            takefocus=False,
         )
         self.direction_dropdown.pack(side="left")
         self.direction_dropdown.bind(
@@ -945,6 +954,7 @@ class AnnotationGUI(tk.Tk):
             state="readonly",
             font=self.dialogue_font,
             width=24,
+            takefocus=False,
         )
         self.view_dropdown.pack(side="left", fill="x", expand=True)
         self.view_dropdown.bind("<<ComboboxSelected>>", self._on_view_selected)
