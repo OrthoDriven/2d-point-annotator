@@ -84,6 +84,7 @@ class AnnotationGUI(tk.Tk):
         self.quality_var = tk.StringVar(value="N/A")
         self.selected_landmark = tk.StringVar(value="")
         self.current_view_var = tk.StringVar(value="")
+        self.view_dropdown: ttk.Combobox | None = None
         self.image_flag_var = tk.BooleanVar(value=False)
         self.landmark_visibility: Dict[str, tk.BooleanVar] = {}
         self.landmark_found = {}
@@ -296,6 +297,135 @@ class AnnotationGUI(tk.Tk):
         record["resolved_image_path"] = key
         self.annotations[key] = self._parse_annotations_for_record(record)
 
+    def _get_allowed_landmarks_for_current_view(self) -> set[str]:
+        view = self.current_view_var.get().strip()
+        if not view:
+            return set()
+        return set(self.allowed_views.get(view, []))
+
+    def _get_current_view(self) -> str:
+        record = self._get_current_image_record()
+        if record is None:
+            return ""
+        val = record.get("view")
+        return "" if val is None else str(val)
+
+    def _set_current_view(self, view_name: str) -> None:
+        record = self._get_current_image_record()
+        if record is None:
+            return
+        record["view"] = view_name
+        self.current_view_var.set(view_name)
+        self._prune_annotations_for_current_view()
+        self._rebuild_landmark_panel_for_view()
+        self._load_note_for_selected_landmark()
+        self.dirty = True
+
+    def _prune_annotations_for_current_view(self) -> None:
+        if self.current_image_path is None:
+            return
+
+        allowed = self._get_allowed_landmarks_for_current_view()
+        key = self._path_key(self.current_image_path)
+        pts = self.annotations.setdefault(key, {})
+        meta = self.landmark_meta.setdefault(key, {})
+
+        to_delete = [lm for lm in pts if lm not in allowed]
+        for lm in to_delete:
+            del pts[lm]
+            meta.pop(lm, None)
+
+    def _rebuild_landmark_panel_for_view(self) -> None:
+        allowed = self._get_allowed_landmarks_for_current_view()
+        current = self.selected_landmark.get()
+
+        self._build_landmark_panel()
+
+        if current in allowed:
+            self.selected_landmark.set(current)
+        elif self.landmarks:
+            for lm in self.landmarks:
+                if lm in allowed:
+                    self.selected_landmark.set(lm)
+                    break
+            else:
+                self.selected_landmark.set("")
+        else:
+            self.selected_landmark.set("")
+
+        self._draw_points()
+
+    def _prompt_for_view_if_needed(self) -> None:
+        if self.current_image_path is None:
+            return
+
+        current_view = self._get_current_view()
+        if current_view in self.allowed_views:
+            self.current_view_var.set(current_view)
+            self._prune_annotations_for_current_view()
+            self._rebuild_landmark_panel_for_view()
+            return
+
+        if not self.allowed_views:
+            return
+
+        popup = tk.Toplevel(self)
+        popup.title("Select View")
+        popup.transient(self)
+        popup.resizable(False, False)
+
+        frame = ttk.Frame(popup, padding=12)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(
+            frame,
+            text="This image needs a valid view selection.",
+            font=self.dialogue_font,
+        ).pack(anchor="w", pady=(0, 8))
+
+        view_names = list(self.allowed_views.keys())
+        choice_var = tk.StringVar(value=view_names[0])
+
+        combo = ttk.Combobox(
+            frame,
+            textvariable=choice_var,
+            values=view_names,
+            state="readonly",
+            font=self.dialogue_font,
+            width=28,
+        )
+        combo.pack(fill="x", pady=(0, 10))
+        combo.current(0)
+        combo.focus_set()
+
+        result = {"done": False}
+
+        def confirm() -> None:
+            if result["done"]:
+                return
+            result["done"] = True
+            self._set_current_view(choice_var.get())
+            self.current_view_var.set(choice_var.get())
+            popup.destroy()
+            self._maybe_autosave_current_image()
+
+        popup.protocol("WM_DELETE_WINDOW", confirm)
+
+        ttk.Button(frame, text="OK", command=confirm).pack(anchor="e")
+
+        popup.update_idletasks()
+        popup.deiconify()
+        popup.lift()
+        popup.grab_set()
+        popup.wait_window()
+
+    def _on_view_selected(self, _event=None) -> None:
+        new_view = self.current_view_var.get().strip()
+        if new_view not in self.allowed_views:
+            return
+        self._set_current_view(new_view)
+        self._maybe_autosave_current_image()
+
     def _on_image_flag_widget_changed(self) -> None:
         self.current_image_flag = bool(self.image_flag_var.get())
         record = self._get_current_image_record()
@@ -502,6 +632,10 @@ class AnnotationGUI(tk.Tk):
         self.last_seed.clear()
         self.queue_mode = False
         self.check_csv_mode = False
+        self.current_view_var.set("")
+
+        if self.view_dropdown is not None:
+            self.view_dropdown["values"] = list(self.allowed_views.keys())
 
         missing: List[str] = []
         for idx, raw_record in enumerate(images):
@@ -556,8 +690,7 @@ class AnnotationGUI(tk.Tk):
         self.current_image_index = 0
         self.load_image_from_path(self.images[0])
 
-        if self.landmarks:
-            self.selected_landmark.set(self.landmarks[0])
+        if self.selected_landmark.get():
             self._on_landmark_selected()
 
         for image_path in self.images:
@@ -758,6 +891,20 @@ class AnnotationGUI(tk.Tk):
             selectcolor=self.cget("bg"),
         )
         self.image_flag_check.pack(side="left", padx=(0, 12))
+
+        row_meta2 = ttk.Frame(img_frame)
+        row_meta2.pack(fill="x", padx=6, pady=(0, 6))
+
+        tk.Label(row_meta2, text="View:", font=self.dialogue_font).pack(side="left")
+        self.view_dropdown = ttk.Combobox(
+            row_meta2,
+            textvariable=self.current_view_var,
+            state="readonly",
+            font=self.dialogue_font,
+            width=24,
+        )
+        self.view_dropdown.pack(side="left", fill="x", expand=True)
+        self.view_dropdown.bind("<<ComboboxSelected>>", self._on_view_selected)
 
         tk.Button(
             ctrl,
@@ -1711,7 +1858,12 @@ class AnnotationGUI(tk.Tk):
         )
         meta = self.landmark_meta.get(key, {})
 
-        for i, lm in enumerate(getattr(self, "landmarks", []), start=1):
+        allowed = self._get_allowed_landmarks_for_current_view()
+        visible_landmarks = [
+            lm for lm in getattr(self, "landmarks", []) if lm in allowed
+        ]
+
+        for i, lm in enumerate(visible_landmarks, start=1):
             vis_var = tk.BooleanVar(value=True)
             found_var = tk.BooleanVar(value=False)
             flag_var = tk.BooleanVar(value=bool(meta.get(lm, {}).get("flag", False)))
@@ -1761,9 +1913,9 @@ class AnnotationGUI(tk.Tk):
             flag_cb.grid(row=i, column=3, sticky="w", padx=(2, 4), pady=1)
             self.landmark_flag_widgets[lm] = flag_cb
 
-        if getattr(self, "landmarks", None) and not self.selected_landmark.get():
-            self.selected_landmark.set(self.landmarks[0])
-        elif not getattr(self, "landmarks", None):
+        if visible_landmarks and not self.selected_landmark.get():
+            self.selected_landmark.set(visible_landmarks[0])
+        elif not visible_landmarks:
             self.selected_landmark.set("")
 
         self._load_note_for_selected_landmark()
@@ -2192,6 +2344,8 @@ class AnnotationGUI(tk.Tk):
         self.current_image_index = -1
         self.saved_image_snapshots.clear()
         self.current_view_var.set("")
+        if self.view_dropdown is not None:
+            self.view_dropdown["values"] = ()
         self.current_image_flag = False
 
         isolated_data_path = Path(BASE_DIR.parent / "data")
@@ -2607,6 +2761,9 @@ class AnnotationGUI(tk.Tk):
             return
 
         json_record_loaded = self.json_path is not None and self.images
+        if self.view_dropdown is not None:
+            self.view_dropdown["values"] = list(self.allowed_views.keys())
+
         if json_record_loaded:
             resolved_path = path.resolve()
             self.current_image_path = resolved_path
@@ -2626,7 +2783,7 @@ class AnnotationGUI(tk.Tk):
                 self.annotations[key] = {}
                 self.landmark_meta[key] = {}
             self.current_image_quality = 0
-            self.current_view_var.set(str(record.get("view") or "") if record else "")
+            self.current_view_var.set(self._get_current_view())
         else:
             rel_path = PurePath(path.resolve()).relative_to(
                 BASE_DIR.resolve(), walk_up=True
@@ -2670,10 +2827,10 @@ class AnnotationGUI(tk.Tk):
         self._update_path_var()
         self.dirty = False
 
-        if self.landmarks:
-            self.selected_landmark.set(self.landmarks[0])
+        if json_record_loaded:
+            self._prompt_for_view_if_needed()
         else:
-            self.selected_landmark.set("")
+            self._rebuild_landmark_panel_for_view()
 
         self._load_note_for_selected_landmark()
 
@@ -3997,7 +4154,8 @@ class AnnotationGUI(tk.Tk):
         else:
             return True
 
-        if other_lm not in self.landmarks:
+        allowed = self._get_allowed_landmarks_for_current_view()
+        if other_lm not in allowed:
             return True
 
         pts, _quality = self._get_annotations()
