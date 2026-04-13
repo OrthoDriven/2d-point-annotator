@@ -102,6 +102,7 @@ class AnnotationGUI(tk.Tk):
         self.allowed_views: Dict[str, List[str]] = {}
         self.landmark_meta: Dict[str, Dict[str, Dict[str, Union[bool, str]]]] = {}
         self.saved_image_snapshots: Dict[str, str] = {}
+        self.image_tree: ttk.Treeview | None = None
         self._suspend_image_tree_select = False
         self._navigation_in_progress = False
         self.current_image_flag = False
@@ -320,6 +321,7 @@ class AnnotationGUI(tk.Tk):
         self._rebuild_landmark_panel_for_view()
         self._load_note_for_selected_landmark()
         self.dirty = True
+        self._refresh_image_listbox()
 
     def _prune_annotations_for_current_view(self) -> None:
         if self.current_image_path is None:
@@ -482,6 +484,7 @@ class AnnotationGUI(tk.Tk):
 
             self._refresh_saved_snapshot_for_current_image()
             self.dirty = False
+            self._refresh_image_listbox()
 
             if show_success:
                 messagebox.showinfo("Saved", "Annotations saved to JSON.")
@@ -685,6 +688,7 @@ class AnnotationGUI(tk.Tk):
             self.canvas.delete("all")
             self._render_black_zoom_view()
             self.dirty = False
+            self._refresh_image_listbox()
             return
 
         self.current_image_index = 0
@@ -698,9 +702,12 @@ class AnnotationGUI(tk.Tk):
                 self._canonical_image_state_for_path(image_path)
             )
 
+        self._refresh_image_listbox()
+
     def _setup_ui(self) -> None:
         PANEL_WIDTH = 450
         SCROLLBAR_WIDTH = 18
+        IMAGE_LIST_HEIGHT = 180
         CANVAS_HEIGHT = 220
 
         main = tk.Frame(self)
@@ -958,6 +965,42 @@ class AnnotationGUI(tk.Tk):
             font=self.dialogue_font,
         )
         quality_entry.pack(side="right", padx=(6, 0))
+
+        tk.Label(ctrl, text="Images in JSON:", font=self.heading_font).pack(anchor="w")
+
+        image_container = tk.Frame(
+            ctrl,
+            bd=1,
+            relief="sunken",
+            width=PANEL_WIDTH,
+            height=IMAGE_LIST_HEIGHT,
+        )
+        image_container.pack(fill="x", pady=(2, 8))
+        image_container.pack_propagate(False)
+
+        self.image_tree = ttk.Treeview(
+            image_container,
+            columns=("image", "progress"),
+            show="headings",
+            height=8,
+        )
+        self.image_tree.heading("image", text="Image")
+        self.image_tree.heading("progress", text="Done")
+        self.image_tree.column("image", width=290, anchor="w")
+        self.image_tree.column("progress", width=90, anchor="center")
+        self.image_tree.pack(side=tk.LEFT, fill="both", expand=True)
+
+        image_scrollbar = tk.Scrollbar(
+            image_container,
+            orient="vertical",
+            command=self.image_tree.yview,
+        )
+        image_scrollbar.pack(side=tk.RIGHT, fill="y")
+        self.image_tree.configure(yscrollcommand=image_scrollbar.set)
+
+        self.image_tree.bind("<<TreeviewSelect>>", self._on_image_list_select)
+        self.image_tree.bind("<Enter>", lambda _e: self._bind_image_list_scroll(True))
+        self.image_tree.bind("<Leave>", lambda _e: self._bind_image_list_scroll(False))
 
         tk.Label(ctrl, text="Landmarks:", font=self.heading_font).pack(anchor="w")
         self.landmark_panel_container = tk.Frame(
@@ -2005,6 +2048,49 @@ class AnnotationGUI(tk.Tk):
         else:
             self.lp_canvas.unbind_all("<MouseWheel>")
 
+    def _bind_image_list_scroll(self, bind: bool) -> None:
+        if self.image_tree is None:
+            return
+
+        widgets: list[tk.Misc] = [self.image_tree]
+        try:
+            widgets.extend(self.image_tree.winfo_children())
+        except Exception:
+            pass
+
+        if bind:
+            for widget in widgets:
+                try:
+                    widget.bind("<MouseWheel>", self._image_list_mousewheel)
+                    widget.bind("<Button-4>", self._image_list_mousewheel_linux_up)
+                    widget.bind("<Button-5>", self._image_list_mousewheel_linux_down)
+                except Exception:
+                    pass
+        else:
+            for widget in widgets:
+                try:
+                    widget.unbind("<MouseWheel>")
+                    widget.unbind("<Button-4>")
+                    widget.unbind("<Button-5>")
+                except Exception:
+                    pass
+
+    def _image_list_mousewheel(self, event) -> None:
+        if self.image_tree is None:
+            return
+        if event.delta > 0:
+            self.image_tree.yview_scroll(-1, "units")
+        else:
+            self.image_tree.yview_scroll(1, "units")
+
+    def _image_list_mousewheel_linux_up(self, _event) -> None:
+        if self.image_tree is not None:
+            self.image_tree.yview_scroll(-1, "units")
+
+    def _image_list_mousewheel_linux_down(self, _event) -> None:
+        if self.image_tree is not None:
+            self.image_tree.yview_scroll(1, "units")
+
     # Scrolls the landmark list in response to mouse wheel events.
     def _landmark_mousewheel(self, event) -> None:
         delta = -1 if event.delta > 0 else 1
@@ -2145,6 +2231,7 @@ class AnnotationGUI(tk.Tk):
             self._draw_points()
             self._refresh_zoom_landmark_overlay()
             self._load_note_for_selected_landmark()
+            self._refresh_image_listbox()
             return
 
         if lm not in pts:
@@ -2841,6 +2928,8 @@ class AnnotationGUI(tk.Tk):
         if json_record_loaded:
             self._refresh_saved_snapshot_for_current_image()
 
+        self._refresh_image_listbox()
+
     def _prepare_landmark_data(self, for_json: Optional[bool] = None) -> dict:
         """Prepare landmark data for JSON or legacy database storage."""
         pts, _quality = self._get_annotations()
@@ -2962,6 +3051,7 @@ class AnnotationGUI(tk.Tk):
 
     def _maybe_autosave_current_image(self) -> bool:
         self.dirty = True
+        self._refresh_image_listbox()
 
         autosave_var = getattr(self, "autosave_var", None)
         if autosave_var is not None and bool(autosave_var.get()):
@@ -4643,6 +4733,176 @@ class AnnotationGUI(tk.Tk):
         ):
             style.configure(s, font=self.dialogue_font)
         return
+
+    def _refresh_image_listbox(self) -> None:
+        if self.image_tree is None:
+            return
+
+        self._suspend_image_tree_select = True
+        try:
+            for item in self.image_tree.get_children():
+                self.image_tree.delete(item)
+
+            for idx, path in enumerate(self.images):
+                progress = self._image_progress_text(path)
+                self.image_tree.insert(
+                    "",
+                    "end",
+                    iid=str(idx),
+                    values=(extract_filename(path), progress),
+                    tags=("done",) if self._image_progress_done(path) else (),
+                )
+
+            self.image_tree.tag_configure("done", foreground="green")
+
+            if 0 <= self.current_image_index < len(self.images):
+                iid = str(self.current_image_index)
+                if self.image_tree.exists(iid):
+                    self.image_tree.selection_set(iid)
+                    self.image_tree.focus(iid)
+                    self.image_tree.see(iid)
+            else:
+                self.image_tree.selection_remove(self.image_tree.selection())
+        finally:
+            if not getattr(self, "_navigation_in_progress", False):
+                self._suspend_image_tree_select = False
+
+    def _on_image_list_select(self, _event=None) -> None:
+        if self.image_tree is None or getattr(
+            self, "_suspend_image_tree_select", False
+        ):
+            return
+
+        selection = self.image_tree.selection()
+        if not selection:
+            return
+
+        idx = int(selection[0])
+        if idx == self.current_image_index or not (0 <= idx < len(self.images)):
+            return
+
+        self._navigation_in_progress = True
+        self._suspend_image_tree_select = True
+        try:
+            if not self._maybe_save_before_destructive_action("switch images"):
+                self._refresh_image_listbox()
+                return
+
+            self.current_image_index = idx
+            self.load_image_from_path(self.images[idx])
+        finally:
+            self._navigation_in_progress = False
+            self._suspend_image_tree_select = False
+
+    def _count_allowed_landmarks_for_current_image(self, image_path: Path) -> int:
+        key = self._path_key(image_path)
+        idx = self.image_index_map.get(key)
+        if idx is None:
+            return 0
+
+        if (
+            self.current_image_path is not None
+            and self._path_key(self.current_image_path) == key
+        ):
+            view = self.current_view_var.get().strip()
+        else:
+            record = self.json_data["images"][idx]
+            view = record.get("view")
+
+        if not view or view not in self.allowed_views:
+            return 0
+
+        return len(self.allowed_views.get(view, []))
+
+    def _count_completed_landmarks_for_current_image(self, image_path: Path) -> int:
+        key = self._path_key(image_path)
+        idx = self.image_index_map.get(key)
+        if idx is None:
+            return 0
+
+        is_current_image = (
+            self.current_image_path is not None
+            and self._path_key(self.current_image_path) == key
+        )
+        if is_current_image:
+            view = self.current_view_var.get().strip()
+            annotations = self.annotations.get(key, {}) or {}
+            allowed = (
+                set(self.allowed_views.get(view, []))
+                if view and view in self.allowed_views
+                else set(annotations.keys())
+            )
+            return sum(1 for lm in allowed if annotations.get(lm) is not None)
+
+        record = self.json_data["images"][idx]
+        view = record.get("view")
+        annotations = record.get("annotations", {}) or {}
+
+        if view and view in self.allowed_views:
+            allowed = set(self.allowed_views.get(view, []))
+        else:
+            allowed = set(annotations.keys())
+
+        done = 0
+        for lm in allowed:
+            raw = annotations.get(lm)
+            if raw is None:
+                continue
+
+            if isinstance(raw, dict):
+                value = raw.get("value")
+            else:
+                value = raw
+
+            if value is not None:
+                done += 1
+
+        return done
+
+    def _image_progress_text(self, image_path: Path) -> str:
+        key = self._path_key(image_path)
+        idx = self.image_index_map.get(key)
+        if idx is None:
+            return "0/?"
+
+        if (
+            self.current_image_path is not None
+            and self._path_key(self.current_image_path) == key
+        ):
+            view = self.current_view_var.get().strip()
+        else:
+            record = self.json_data["images"][idx]
+            view = record.get("view")
+
+        done = self._count_completed_landmarks_for_current_image(image_path)
+
+        if not view or view not in self.allowed_views:
+            return f"{done}/?"
+
+        total = self._count_allowed_landmarks_for_current_image(image_path)
+        return f"{done}/{total}"
+
+    def _image_progress_done(self, image_path: Path) -> bool:
+        key = self._path_key(image_path)
+        idx = self.image_index_map.get(key)
+        if idx is None:
+            return False
+
+        if (
+            self.current_image_path is not None
+            and self._path_key(self.current_image_path) == key
+        ):
+            view = self.current_view_var.get().strip()
+        else:
+            record = self.json_data["images"][idx]
+            view = record.get("view")
+
+        if not view or view not in self.allowed_views:
+            return False
+
+        done = self._count_completed_landmarks_for_current_image(image_path)
+        total = self._count_allowed_landmarks_for_current_image(image_path)
+        return total > 0 and done >= total
 
     def _widget_y_in_inner(self, widget) -> int:
         y = 0
