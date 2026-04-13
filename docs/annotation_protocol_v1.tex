@@ -1,0 +1,643 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{titlesec}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue
+}
+
+\titleformat{\section}{\Large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.5em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.5em}{}
+
+\newcommand{\TODO}[1]{%
+    \par\noindent\textcolor{red}{\textbf{TODO:} #1}\par
+}
+
+\newcommand{\todobox}[1]{%
+    \vspace{0.5em}
+    \noindent
+    \fcolorbox{red}{white}{%
+        \parbox{0.96\linewidth}{\textcolor{red}{\textbf{TODO:} #1}}%
+    }
+    \vspace{0.5em}
+}
+
+\title{Hip Landmark Annotation Protocol}
+\author{Orthopedic Driven Imaging}
+\date{Version [X.Y] \\ Effective Date: [DATE]}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Preliminary}
+
+\todobox{This top-level section groups foundational protocol content before dataset 
+construction and annotation operations begin. It is intended to contain Document Control, 
+Purpose, Scope and Intended Use, and Governance, Change Control, and Sign-Off.}
+
+\subsection{Document Control}
+
+\subsubsection{Document Information}
+\begin{itemize}[leftmargin=2em]
+    \item Document title: Hip Landmark Annotation Protocol
+    \item Document ID: [DOC-ID]
+    \item Version: [X.Y]
+    \item Effective date: [DATE]
+    \item Supersedes: [OLDER VERSION IF APPLICABLE]
+    \item Owner: [TEAM / FUNCTION]
+\end{itemize}
+
+\subsubsection{Version History}
+\begin{longtable}{p{1.5cm} p{2.5cm} p{3cm} p{7cm}}
+\toprule
+Version & Date & Author(s) & Summary of changes \\
+\midrule
+0.1 & [DATE] & [NAME] & Initial protocol template \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{Approvals and Sign-Off}
+\begin{itemize}[leftmargin=2em]
+    \item Clinical lead: [NAME / TITLE]
+    \item Annotation operations lead: [NAME / TITLE]
+    \item ML / data science lead: [NAME / TITLE]
+    \item Quality / regulatory lead: [NAME / TITLE]
+\end{itemize}
+
+\todobox{Complete the approval chain, signature requirements, release criteria, and 
+document ownership. This addresses \textbf{Governance, change control, and sign-off} 
+by making clear who is responsible for approving the protocol and who can authorize 
+changes.}
+
+\subsection{Purpose}
+This document defines the protocol for creating and maintaining the reference standard 
+for hip landmark annotation. It specifies the annotation scope, case eligibility rules, 
+landmark definitions, annotator requirements, review and adjudication workflow, data 
+quality expectations, and traceability requirements used to support safe, consistent, 
+and reproducible labeling.
+
+\todobox{Add a short paragraph stating that this document is the operational protocol 
+for generating a fit-for-purpose reference standard for model development, validation, 
+and ongoing lifecycle management. This helps satisfy \textbf{Scope and intended use} and 
+\textbf{Governance} by stating what the document is for and how it will be used.}
+
+\subsection{Scope and Intended Use}
+
+\subsubsection{Protocol Scope}
+This protocol applies to imaging studies used to generate landmark annotations, derived
+ geometric constructs, and derived measurements for the hip landmarking tool.
+
+The protocol covers:
+\begin{itemize}[leftmargin=2em]
+    \item primary landmarks,
+    \item derived landmarks,
+    \item measurements derived from primary and derived landmarks,
+    \item review, adjudication, and QC procedures,
+    \item dataset documentation and traceability.
+\end{itemize}
+
+It does not by itself define model architecture, training code, deployment criteria, or 
+user interface behavior outside the annotation workflow.
+
+\todobox{Insert the exact application \textbf{intended use statement}, including the 
+clinical task, user population, care setting, and whether outputs are for planning, 
+measurement assistance, decision support, post-op assessment, or research. Discuss how 
+landmarks might be proxies for actual anatomical features (means to an end). This 
+addresses \textbf{Scope and intended use} by tying the annotation protocol to the clinical 
+purpose of the product.}
+
+\subsubsection{Imaging Scope}
+This protocol currently contemplates landmarks and measurements on AP and lateral imaging 
+where applicable.
+
+\todobox{Specify exactly which image types are in scope: e.g., AP radiographs, lateral hip 
+radiographs, or other modalities. Also state whether this protocol applies to native hips, 
+arthroplasty hips, revision cases, or all of the above. This addresses 
+\textbf{Scope and intended use} and supports downstream 
+\textbf{Data sources and case selection}.}
+
+\subsubsection{Anatomical / Measurement Scope}
+The current draft landmark set includes primary landmarks, derived landmarks, and 
+measurements such as pelvic tilt, pelvic incidence, sacral slope, leg length, and 
+femoral offset.
+
+\todobox{Confirm which landmarks and measurements are in production scope versus 
+exploratory / internal / future work. This helps address \textbf{Landmark dictionary} 
+and ensures the protocol only governs the intended annotation outputs.}
+
+\subsection{Governance, Change Control, and Sign-Off}
+
+\subsubsection{Protocol Ownership}
+This protocol is owned by [TEAM / FUNCTION].
+
+\todobox{Define the document owner, operational owner, clinical owner, and quality owner,
+ and state who is accountable for maintaining the protocol. This directly addresses 
+ \textbf{Governance, change control, and sign-off}.}
+
+\subsubsection{Change Control}
+Changes to this protocol must be reviewed and approved before implementation.
+
+\todobox{Define what constitutes a major versus minor change, who reviews each type of 
+change, whether re-training or re-certification is required after changes, and how 
+effective dates are managed. This directly addresses 
+\textbf{Governance, change control, and sign-off}.}
+
+\subsubsection{Sign-Off Rules}
+No production annotation should proceed under an unapproved protocol version.
+
+\todobox{Define the exact sign-off requirements and release gating rules before a 
+protocol version can be used. This directly addresses 
+\textbf{Governance, change control, and sign-off}.}
+
+\section{Data}
+
+\todobox{This top-level section groups dataset sourcing, eligibility, quality, and 
+traceability requirements. It is intended to contain Data Sources and Case Selection, 
+Inclusion and Exclusion Criteria, Data Quality Acceptance / Rejection Rules, and Dataset 
+Traceability and Version Control.}
+
+\subsection{Data Sources and Case Selection}
+
+\subsubsection{Data Sources}
+Cases used under this protocol may come from internal datasets, retrospective clinical 
+archives, or external collaborators/providers, as permitted.
+
+\todobox{List each allowed data source category and document where cases come from, what
+ permissions govern their use, and whether each source is intended for development, 
+ validation, or monitoring. This addresses \textbf{Data sources and case selection} 
+ and supports \textbf{Dataset traceability and version control}.}
+
+\subsubsection{Case Selection Strategy}
+Cases should be selected according to the intended use population and target imaging 
+conditions for the model.
+
+\todobox{Add the exact case selection strategy: consecutive sampling, stratified sampling,
+ enrichment of rare anatomy, balancing of implant/non-implant cases, balancing by site or
+  projection, etc. State why the strategy was chosen and how it supports the intended use. 
+  This addresses \textbf{Data sources and case selection} and 
+  \textbf{Bias/representativeness plan}.}
+
+\subsubsection{Site and Geography Strategy}
+Cases should be sourced from sites and settings that are sufficiently representative of 
+the intended use population and use environment.
+
+\todobox{Specify the minimum number of collection sites, their geographic distribution, 
+and why this configuration is fit for purpose. State whether data are sourced from 
+distinct institutions / health systems, whether sites differ by care setting, equipment, 
+and patient mix, and whether any site is reserved for external validation only. Define 
+any cap on the proportion of cases contributed by a single site. This supports 
+\textbf{Data sources and case selection} and \textbf{Bias/representativeness plan}.}
+
+\subsubsection{Representativeness Targets}
+Case accrual should be monitored against predefined representativeness targets relevant 
+to the intended use population.
+
+\todobox{Define which variables will be monitored for representativeness during accrual 
+and dataset finalization, such as age, sex, geography, implant status, anatomy variation, 
+disease severity, site, scanner/vendor, and projection/view. State any target ranges, 
+minimum subgroup counts, or other acceptance criteria, and define how underrepresented 
+subgroups will be remediated where feasible. This supports 
+\textbf{Bias/representativeness plan} and \textbf{Data sources and case selection}.}
+
+\subsubsection{Cohort Assignment and Independence}
+Cases used for development, validation, testing, and post-deployment monitoring must be 
+assigned to cohorts in a way that preserves independence and prevents information leakage.
+
+\todobox{Define the cohort structure used under this protocol, including development, 
+tuning, internal validation, locked test, and external validation sets where applicable. 
+State the unit of assignment (e.g., patient, study, encounter, site), the rules that 
+prevent the same patient or near-duplicate images from crossing cohorts, and any time- 
+or site-based separation rules. This supports \textbf{Dataset traceability and version 
+control} and \textbf{Bias/representativeness plan}.}
+
+\subsubsection{Sequestration and Access Restrictions}
+Access to evaluation datasets should be controlled to preserve the validity of downstream 
+performance assessment.
+
+\todobox{Specify which cohorts are sequestered, who is permitted to access them, what 
+uses are prohibited, and how access is technically and operationally controlled. State 
+whether model developers, annotators, adjudicators, or analysts may view locked test or 
+external validation cases, and describe the approval and logging requirements for any 
+exception. This supports \textbf{Dataset traceability and version control}, 
+\textbf{Blinding and independence}, and \textbf{Governance}.}
+
+\subsubsection{Case Metadata to Record}
+At minimum, the following should be recorded where available:
+\begin{itemize}[leftmargin=2em]
+    \item study ID,
+    \item series ID / image ID,
+    \item projection / view,
+    \item implant presence,
+    \item annotator ID,
+    \item protocol version,
+    \item annotation timestamp.
+\end{itemize}
+
+\todobox{Expand this list to include all metadata required for stratification, 
+subgroup analysis, and reproducibility, such as site, scanner/vendor, age bucket, 
+sex, implant type, acquisition conditions, and cohort designation. This supports 
+\textbf{Data sources and case selection}, \textbf{Bias/representativeness plan}, 
+and \textbf{Dataset traceability and version control}.}
+
+\subsection{Inclusion and Exclusion Criteria}
+
+\subsubsection{Inclusion Criteria}
+Eligible cases must contain anatomy and image characteristics sufficient for placement of 
+the required landmarks for the applicable task.
+
+\todobox{Add explicit inclusion criteria, such as required anatomy visible, accepted 
+projections, minimum field-of-view, acceptable calibration marker presence, and whether 
+bilateral or unilateral studies are acceptable. This directly addresses 
+\textbf{Inclusion/exclusion criteria}.}
+
+\subsubsection{Exclusion Criteria}
+Cases may be excluded if anatomy is not sufficiently visible or if image quality or 
+anatomical conditions make landmark placement invalid for the intended use.
+
+\todobox{Add explicit exclusion criteria, such as severe motion artifact, truncation, 
+extreme rotation, severe hardware obscuration, fracture patterns out of scope, post-op 
+categories out of scope, fused anatomy, pediatric cases if excluded, or insufficient 
+metadata. This directly addresses \textbf{Inclusion/exclusion criteria}.}
+
+\subsubsection{Eligibility Review Process}
+Eligibility should be assessed before production annotation begins.
+
+\todobox{Add who performs eligibility review, whether it is done manually or 
+algorithmically, what gets logged, and how borderline cases are escalated. This 
+reinforces \textbf{Inclusion/exclusion criteria} and \textbf{Governance}.}
+
+\subsection{Data Quality Acceptance / Rejection Rules}
+
+\subsubsection{Image Quality Requirements}
+Images used for annotation must be adequate for reliable placement of the required 
+landmarks.
+
+\todobox{Define objective acceptance and rejection rules for image quality, including 
+exposure, contrast, motion, clipping/cropping, rotation/obliquity, artifacts, implant 
+obscuration, etc. This directly addresses 
+\textbf{Data quality acceptance/rejection rules}.}
+
+\subsubsection{Anatomical Visibility Rules}
+All landmarks required for a given task must either be visible enough to annotate or the 
+case must be marked uncertain / not gradable according to this protocol.
+
+\todobox{Add landmark-specific visibility thresholds or examples for what is considered 
+sufficient anatomy visibility. This supports 
+\textbf{Data quality acceptance/rejection rules} and 
+\textbf{Uncertainty / not-visible / equivocal handling}.}
+
+\subsubsection{Rejected Case Handling}
+Rejected cases should not enter the finalized reference dataset without documented 
+override.
+
+\todobox{Specify how rejected cases are logged, whether they are retained in an 
+excluded-case registry, who can override rejection, and how this decision is documented. 
+This supports \textbf{Data quality acceptance/rejection rules}, \textbf{Traceability}, 
+and \textbf{Governance}.}
+
+\subsection{Dataset Traceability and Version Control}
+
+\subsubsection{Traceability Requirements}
+Each annotation event must be traceable to the source image, annotator, software version, 
+and protocol version.
+
+\todobox{Define the minimum traceability fields that must be stored for every case and 
+every label edit, including image identifiers, annotator identity, timestamps, 
+adjudication history, and finalization status. This directly addresses 
+\textbf{Dataset traceability and version control}.}
+
+\subsubsection{Version Control}
+Datasets and protocol changes must be versioned.
+
+\todobox{Define how protocol versions, landmark schema versions, dataset freezes, 
+training/validation/test splits, and annotation revisions are version controlled. 
+This directly addresses \textbf{Dataset traceability and version control}.}
+
+\subsubsection{Change Logging}
+Changes to annotations after initial completion must be auditable.
+
+\todobox{Define who may edit finalized labels, how edits are logged, and when a changed 
+label requires dataset re-release or retraining impact assessment. This supports 
+\textbf{Dataset traceability and version control} and 
+\textbf{Governance, change control, and sign-off}.}
+
+\section{Annotation}
+
+\todobox{This top-level section groups personnel requirements, annotation procedures, 
+review workflows, uncertainty handling, QC, and bias / representativeness planning. 
+It is intended to contain the core annotation operations content.}
+
+\subsection{Annotator Qualifications}
+
+\subsubsection{Annotator Roles}
+The annotation program may include:
+\begin{itemize}[leftmargin=2em]
+    \item primary annotators,
+    \item secondary reviewers,
+    \item adjudicators,
+    \item clinical oversight reviewers.
+\end{itemize}
+
+\todobox{Define minimum qualifications for each role, including clinical background, 
+anatomy knowledge, prior annotation experience, and any role-specific credentialing 
+requirements. This directly addresses \textbf{Annotator qualifications}.}
+
+\subsubsection{Qualification Requirements}
+Annotators must be qualified for the tasks they perform.
+
+\todobox{State the minimum education, training, and competency requirements for each role. 
+Also define when non-clinicians may annotate independently versus when clinical 
+supervision is required. This directly addresses \textbf{Annotator qualifications}.}
+
+\subsection{Annotator Training and Certification}
+
+\subsubsection{Initial Training}
+All annotators must complete protocol-specific training before contributing production 
+labels.
+
+\todobox{Add the initial training package contents: anatomy review, landmark definitions,
+ software usage, common edge cases, escalation rules, and practice set review. 
+ This directly addresses \textbf{Annotator training/certification}.}
+
+\subsubsection{Calibration}
+Annotators should complete a calibration round on a predefined set of cases.
+
+\todobox{Define the calibration dataset, required agreement thresholds, and remediation 
+steps if the annotator does not meet threshold. This directly addresses 
+\textbf{Annotator training/certification} and supports 
+\textbf{QC and reliability assessment}.}
+
+\subsubsection{Certification and Re-Certification}
+Only certified (trained) annotators may produce production annotations.
+
+\todobox{Define the pass/fail criteria for certification, re-certification frequency, 
+retraining triggers, and documentation requirements. This directly addresses 
+\textbf{Annotator training/certification}.}
+
+\subsection{Annotation Environment and General Rules}
+
+\subsubsection{Annotation Software and Display Environment}
+Annotation is performed in the approved annotation environment.
+
+\todobox{Specify software/tool version, controls, software tool usage, preprocessing 
+rules, etc. Include a manual for how to use the annotation tool. This supports 
+\textbf{Annotation instructions by landmark} and 
+\textbf{Dataset traceability and version control}.}
+
+\subsubsection{General Annotation Principles}
+\begin{enumerate}[leftmargin=2em]
+    \item Annotate only on approved image types.
+    \item Do not infer anatomy not visible on the image.
+    \item Follow landmark-specific definitions exactly.
+    \item Escalate uncertain cases rather than guessing.
+\end{enumerate}
+
+\todobox{Expand these into the universal annotation rules used across all landmarks, 
+including rules about interpolation, uncertainty, common judgments/scenarios, etc. 
+This supports \textbf{Annotation instructions by landmark}.}
+
+\subsection{Landmark Dictionary}
+
+This section defines the canonical landmark inventory governed by the protocol. 
+Each landmark entry should state the acronym, underlying anatomical feature(s), view(s), 
+prediction geometry, whether it is primary or derived, and, if primary, unambiguous 
+placement rules, edge-case handling, and when to escalate. Note that if a landmark has 
+dual points, lines, or other features corresponding to the left and right sides of the 
+anatomy, then the acronym used to refer to that particular geometric feature will be the 
+normal acronym name prepended with an L or R, as appropriate. 
+
+\todobox{Populate this section with the finalized inventory of all primary and derived 
+landmarks and measurements, and clearly distinguish production, internal-only, 
+exploratory, and deferred items. This directly addresses \textbf{Landmark dictionary}.}
+
+\subsubsection{Primary Landmarks}
+\todobox{Make this complete.}
+\begin{itemize}[leftmargin=2em]
+    \item Acetabular Center
+    \item Anterior Superior Iliac Spine
+    \item Femoral Head Center
+    \item Ischial Tuberositiy
+    \item Superior Greater Trochanter
+    \item Lateral Greater Trochanter
+    \item Lesser Trochanter
+    \item Pelvic Outlet Diameter
+    \item Superior Margin of the Pubic Symphysis
+    \item Pelvic Teardrop
+    \item Femoral Axis
+
+\end{itemize}
+
+\subsubsection{Derived Landmarks}
+\todobox{Are these correct? Make this complete.}
+\begin{itemize}[leftmargin=2em]
+    \item Transischial Line
+    \item Trans-SI Line
+    \item Sacral Endplate Line
+    \item Lesser Trochanter Line
+    \item Distal Teardrop Line
+    \item Sacral Endplate -- Femoral Head Center Line
+    \item Anteinclination Line
+    \item Femoral Anatomical Axis
+\end{itemize}
+
+\subsubsection{Measurements}
+\todobox{Are these correct? Make this complete.}
+\begin{itemize}[leftmargin=2em]
+    \item Sagittal Pelvic Tilt
+    \item Pelvic Incidence
+    \item Sacral Slope
+    \item Sacral Apex Angle
+    \item Anteinclination Angle
+    \item Sacroacetabular Angle
+    \item Pelvic Acetabular Angle
+    \item Pelvic Femoral Angle
+    \item Leg Length
+    \item Femoral Diaphyseal Length
+    \item Femoral Offset
+\end{itemize}
+
+\subsection{Annotation Instructions by Landmark}
+
+For each landmark, this protocol should define:
+\begin{itemize}[leftmargin=2em]
+    \item exact anatomical definition,
+    \item applicable view(s),
+    \item point placement rule,
+    \item tie-break rules,
+    \item edge cases,
+    \item non-examples,
+    \item escalation triggers,
+    \item whether user modification is allowed.
+\end{itemize}
+
+\todobox{Create a dedicated subsection for each landmark and write the full operational 
+instruction for annotators. Include exact point placement rules, edge-case handling, 
+and examples of correct vs incorrect placement. This directly addresses 
+\textbf{Annotation instructions by landmark}.}
+
+\subsubsection{Example Landmark Entry Template}
+\noindent
+\textbf{Name:} [Landmark Name]
+
+\noindent
+\textbf{Acronynm:} [LN]
+
+\noindent
+\textbf{Underlying Anatomical Feature(s):} [Anatomical definition]
+
+\noindent
+\textbf{View(s):} [AP / lateral / etc.]
+
+\noindent
+\textbf{Prediction Geometry:} [N points/ lines / etc.]
+
+\noindent
+\textbf{Type:} [Primary/derived]
+
+\noindent
+\textbf{Placement Rules:} [Detailed instruction]
+
+\noindent
+\textbf{Edge-Case Handling:} [Detailed instruction]
+
+\noindent
+\textbf{Escalate When:} [Detailed instruction]
+
+
+\input{landmarks.tex}
+
+\todobox{Repeat the above template for every landmark in scope. This ensures the protocol 
+is operationally complete and satisfies \textbf{Annotation instructions by landmark}.}
+
+\subsection{Blinding and Independence}
+
+\subsubsection{Blinding Policy}
+Annotations should be collected in a way that minimizes avoidable bias.
+
+\todobox{Specify whether annotators are blinded to model predictions, prior annotations, 
+clinical labels, implant metadata, or each other's work. State what information is 
+available during annotation and why. This directly addresses 
+\textbf{Blinding and independence}.}
+
+\subsubsection{Independence of Reads}
+When multiple reads are obtained, they should be independent unless the protocol 
+explicitly calls for consensus annotation.
+
+\todobox{Define when reads must be independent, when reviewers may see prior annotations,
+ and how independence is maintained operationally. This directly addresses 
+ \textbf{Blinding and independence}.}
+
+\subsection{Adjudication and Consensus Rules}
+
+\subsubsection{Triggers for Review}
+Cases may be reviewed or adjudicated when disagreement, uncertainty, or QC failure occurs.
+
+\todobox{Define exactly what triggers adjudication: disagreement thresholds, missing 
+landmarks, difficult anatomy, low confidence, outlier measurements, or random QC sampling. 
+This directly addresses \textbf{Adjudication and consensus rules}.}
+
+\subsubsection{Adjudication Workflow}
+A designated reviewer or panel should resolve flagged cases.
+
+\todobox{Describe the stepwise adjudication workflow: who reviews first, who makes the 
+final decision, whether consensus or single-expert override is used, and how final labels 
+are chosen. This directly addresses \textbf{Adjudication and consensus rules}.}
+
+\subsubsection{Consensus Rules}
+Consensus rules govern how multiple annotations are resolved into the final reference 
+standard.
+
+\todobox{Specify whether final labels are produced by majority vote, adjudicator 
+overwrite, geometric averaging, or another method, and justify why this approach is 
+fit for purpose. This directly addresses \textbf{Adjudication and consensus rules}.}
+
+\subsection{Uncertainty, Not-Visible, and Equivocal Handling}
+
+\subsubsection{Not Visible}
+A landmark may be marked not visible when the anatomy needed for valid placement is not 
+adequately visualized.
+
+\todobox{Define exactly when a landmark can be marked not visible, whether the case 
+remains usable, and whether alternative landmarks or fallback measurements are allowed. 
+This directly addresses \textbf{Uncertainty / not-visible / equivocal handling}.}
+
+\subsubsection{Equivocal Cases}
+Some cases may have ambiguous anatomy or multiple plausible placements.
+
+\todobox{Define how equivocal cases are identified, labeled, escalated, and resolved. 
+State whether annotators may place a best estimate or must defer to adjudication. This 
+directly addresses \textbf{Uncertainty / not-visible / equivocal handling}.}
+
+\subsubsection{Confidence / Uncertainty Capture}
+If uncertainty is recorded, it should be captured in a structured way.
+
+\todobox{Decide whether to collect confidence scores, uncertainty tags, or reason codes, 
+and document how these are used in downstream QC or model development. This directly 
+addresses \textbf{Uncertainty / not-visible / equivocal handling}.}
+
+\subsection{QC and Reliability Assessment}
+
+\subsubsection{Routine QC}
+Routine QC should confirm that annotations are complete, plausible, and consistent with 
+protocol rules.
+
+\todobox{Define the QC plan, including completeness checks, landmark plausibility checks, 
+left-right consistency checks, derived-measurement sanity checks, and manual spot review 
+rates. This directly addresses \textbf{QC and reliability assessment}.}
+
+\subsubsection{Reliability Assessment}
+Reliability should be evaluated periodically and documented.
+
+\todobox{Define inter-annotator and intra-annotator reliability methods, the sample size 
+for repeated reads, the metrics used (e.g., point distance error, ICC), and acceptable 
+thresholds. This directly addresses \textbf{QC and reliability assessment}.}
+
+\subsubsection{Corrective Action}
+If QC or reliability thresholds are not met, corrective action is required.
+
+\todobox{State what happens when QC fails: retraining, reannotation, reviewer escalation, 
+temporary suspension of annotator privileges, or protocol revision. This supports 
+\textbf{QC and reliability assessment} and \textbf{Governance}.}
+
+\subsection{Bias and Representativeness Plan}
+
+\subsubsection{Target Population Representation}
+The dataset should represent the intended use population and key clinically relevant 
+subgroups.
+
+\todobox{Define the subgroup variables that matter for your use case, such as age, sex, 
+implant status, anatomy variation, site, scanner/vendor, disease severity, and projection 
+differences. Explain how the case selection process will ensure adequate representation. 
+This directly addresses \textbf{Bias/representativeness plan}.}
+
+\subsubsection{Monitoring for Imbalance}
+Dataset composition should be monitored during case accrual and dataset finalization.
+
+\todobox{Add a plan for tracking subgroup counts, identifying underrepresented 
+populations, and correcting imbalance where feasible. This directly addresses 
+\textbf{Bias/representativeness plan}.}
+
+\subsubsection{Performance-Relevant Subgroups}
+Where relevant, annotations and derived measurements should support subgroup-level 
+evaluation.
+
+\todobox{Add a section identifying which subgroups will later be used in model 
+performance evaluation and why they matter clinically. This directly addresses 
+\textbf{Bias/representativeness plan}.}
+
+\end{document}

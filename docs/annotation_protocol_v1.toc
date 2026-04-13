@@ -1,0 +1,82 @@
+\contentsline {section}{\numberline {1}Preliminary}{4}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Document Control}{4}{subsection.1.1}%
+\contentsline {subsubsection}{\numberline {1.1.1}Document Information}{4}{subsubsection.1.1.1}%
+\contentsline {subsubsection}{\numberline {1.1.2}Version History}{4}{subsubsection.1.1.2}%
+\contentsline {subsubsection}{\numberline {1.1.3}Approvals and Sign-Off}{4}{subsubsection.1.1.3}%
+\contentsline {subsection}{\numberline {1.2}Purpose}{4}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}Scope and Intended Use}{5}{subsection.1.3}%
+\contentsline {subsubsection}{\numberline {1.3.1}Protocol Scope}{5}{subsubsection.1.3.1}%
+\contentsline {subsubsection}{\numberline {1.3.2}Imaging Scope}{5}{subsubsection.1.3.2}%
+\contentsline {subsubsection}{\numberline {1.3.3}Anatomical / Measurement Scope}{5}{subsubsection.1.3.3}%
+\contentsline {subsection}{\numberline {1.4}Governance, Change Control, and Sign-Off}{6}{subsection.1.4}%
+\contentsline {subsubsection}{\numberline {1.4.1}Protocol Ownership}{6}{subsubsection.1.4.1}%
+\contentsline {subsubsection}{\numberline {1.4.2}Change Control}{6}{subsubsection.1.4.2}%
+\contentsline {subsubsection}{\numberline {1.4.3}Sign-Off Rules}{6}{subsubsection.1.4.3}%
+\contentsline {section}{\numberline {2}Data}{6}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Data Sources and Case Selection}{6}{subsection.2.1}%
+\contentsline {subsubsection}{\numberline {2.1.1}Data Sources}{6}{subsubsection.2.1.1}%
+\contentsline {subsubsection}{\numberline {2.1.2}Case Selection Strategy}{6}{subsubsection.2.1.2}%
+\contentsline {subsubsection}{\numberline {2.1.3}Site and Geography Strategy}{7}{subsubsection.2.1.3}%
+\contentsline {subsubsection}{\numberline {2.1.4}Representativeness Targets}{7}{subsubsection.2.1.4}%
+\contentsline {subsubsection}{\numberline {2.1.5}Cohort Assignment and Independence}{7}{subsubsection.2.1.5}%
+\contentsline {subsubsection}{\numberline {2.1.6}Sequestration and Access Restrictions}{7}{subsubsection.2.1.6}%
+\contentsline {subsubsection}{\numberline {2.1.7}Case Metadata to Record}{8}{subsubsection.2.1.7}%
+\contentsline {subsection}{\numberline {2.2}Inclusion and Exclusion Criteria}{8}{subsection.2.2}%
+\contentsline {subsubsection}{\numberline {2.2.1}Inclusion Criteria}{8}{subsubsection.2.2.1}%
+\contentsline {subsubsection}{\numberline {2.2.2}Exclusion Criteria}{8}{subsubsection.2.2.2}%
+\contentsline {subsubsection}{\numberline {2.2.3}Eligibility Review Process}{9}{subsubsection.2.2.3}%
+\contentsline {subsection}{\numberline {2.3}Data Quality Acceptance / Rejection Rules}{9}{subsection.2.3}%
+\contentsline {subsubsection}{\numberline {2.3.1}Image Quality Requirements}{9}{subsubsection.2.3.1}%
+\contentsline {subsubsection}{\numberline {2.3.2}Anatomical Visibility Rules}{9}{subsubsection.2.3.2}%
+\contentsline {subsubsection}{\numberline {2.3.3}Rejected Case Handling}{9}{subsubsection.2.3.3}%
+\contentsline {subsection}{\numberline {2.4}Dataset Traceability and Version Control}{9}{subsection.2.4}%
+\contentsline {subsubsection}{\numberline {2.4.1}Traceability Requirements}{9}{subsubsection.2.4.1}%
+\contentsline {subsubsection}{\numberline {2.4.2}Version Control}{9}{subsubsection.2.4.2}%
+\contentsline {subsubsection}{\numberline {2.4.3}Change Logging}{10}{subsubsection.2.4.3}%
+\contentsline {section}{\numberline {3}Annotation}{10}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Annotator Qualifications}{10}{subsection.3.1}%
+\contentsline {subsubsection}{\numberline {3.1.1}Annotator Roles}{10}{subsubsection.3.1.1}%
+\contentsline {subsubsection}{\numberline {3.1.2}Qualification Requirements}{10}{subsubsection.3.1.2}%
+\contentsline {subsection}{\numberline {3.2}Annotator Training and Certification}{11}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}Initial Training}{11}{subsubsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {3.2.2}Calibration}{11}{subsubsection.3.2.2}%
+\contentsline {subsubsection}{\numberline {3.2.3}Certification and Re-Certification}{11}{subsubsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.3}Annotation Environment and General Rules}{11}{subsection.3.3}%
+\contentsline {subsubsection}{\numberline {3.3.1}Annotation Software and Display Environment}{11}{subsubsection.3.3.1}%
+\contentsline {subsubsection}{\numberline {3.3.2}General Annotation Principles}{11}{subsubsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.4}Landmark Dictionary}{12}{subsection.3.4}%
+\contentsline {subsubsection}{\numberline {3.4.1}Primary Landmarks}{12}{subsubsection.3.4.1}%
+\contentsline {subsubsection}{\numberline {3.4.2}Derived Landmarks}{12}{subsubsection.3.4.2}%
+\contentsline {subsubsection}{\numberline {3.4.3}Measurements}{13}{subsubsection.3.4.3}%
+\contentsline {subsection}{\numberline {3.5}Annotation Instructions by Landmark}{13}{subsection.3.5}%
+\contentsline {subsubsection}{\numberline {3.5.1}Example Landmark Entry Template}{14}{subsubsection.3.5.1}%
+\contentsline {subsubsection}{\numberline {3.5.2}Acetabular Center}{14}{subsubsection.3.5.2}%
+\contentsline {subsubsection}{\numberline {3.5.3}Anterior Superior Iliac Spine}{14}{subsubsection.3.5.3}%
+\contentsline {subsubsection}{\numberline {3.5.4}Femoral Head Centerr}{14}{subsubsection.3.5.4}%
+\contentsline {subsubsection}{\numberline {3.5.5}Ischial Tuberositiy}{15}{subsubsection.3.5.5}%
+\contentsline {subsubsection}{\numberline {3.5.6}Superior Greater Trochanter}{15}{subsubsection.3.5.6}%
+\contentsline {subsubsection}{\numberline {3.5.7}Lateral Greater Trochanter}{15}{subsubsection.3.5.7}%
+\contentsline {subsubsection}{\numberline {3.5.8}Lesser Trochanter}{15}{subsubsection.3.5.8}%
+\contentsline {subsubsection}{\numberline {3.5.9}Pelvic Outlet Diameter}{16}{subsubsection.3.5.9}%
+\contentsline {subsubsection}{\numberline {3.5.10}Superior Margin of the Pubic Symphysis}{16}{subsubsection.3.5.10}%
+\contentsline {subsubsection}{\numberline {3.5.11}Pelvic Teardrop}{16}{subsubsection.3.5.11}%
+\contentsline {subsubsection}{\numberline {3.5.12}Femoral Axis}{16}{subsubsection.3.5.12}%
+\contentsline {subsection}{\numberline {3.6}Blinding and Independence}{17}{subsection.3.6}%
+\contentsline {subsubsection}{\numberline {3.6.1}Blinding Policy}{17}{subsubsection.3.6.1}%
+\contentsline {subsubsection}{\numberline {3.6.2}Independence of Reads}{17}{subsubsection.3.6.2}%
+\contentsline {subsection}{\numberline {3.7}Adjudication and Consensus Rules}{17}{subsection.3.7}%
+\contentsline {subsubsection}{\numberline {3.7.1}Triggers for Review}{17}{subsubsection.3.7.1}%
+\contentsline {subsubsection}{\numberline {3.7.2}Adjudication Workflow}{17}{subsubsection.3.7.2}%
+\contentsline {subsubsection}{\numberline {3.7.3}Consensus Rules}{17}{subsubsection.3.7.3}%
+\contentsline {subsection}{\numberline {3.8}Uncertainty, Not-Visible, and Equivocal Handling}{17}{subsection.3.8}%
+\contentsline {subsubsection}{\numberline {3.8.1}Not Visible}{17}{subsubsection.3.8.1}%
+\contentsline {subsubsection}{\numberline {3.8.2}Equivocal Cases}{18}{subsubsection.3.8.2}%
+\contentsline {subsubsection}{\numberline {3.8.3}Confidence / Uncertainty Capture}{18}{subsubsection.3.8.3}%
+\contentsline {subsection}{\numberline {3.9}QC and Reliability Assessment}{18}{subsection.3.9}%
+\contentsline {subsubsection}{\numberline {3.9.1}Routine QC}{18}{subsubsection.3.9.1}%
+\contentsline {subsubsection}{\numberline {3.9.2}Reliability Assessment}{18}{subsubsection.3.9.2}%
+\contentsline {subsubsection}{\numberline {3.9.3}Corrective Action}{18}{subsubsection.3.9.3}%
+\contentsline {subsection}{\numberline {3.10}Bias and Representativeness Plan}{19}{subsection.3.10}%
+\contentsline {subsubsection}{\numberline {3.10.1}Target Population Representation}{19}{subsubsection.3.10.1}%
+\contentsline {subsubsection}{\numberline {3.10.2}Monitoring for Imbalance}{19}{subsubsection.3.10.2}%
+\contentsline {subsubsection}{\numberline {3.10.3}Performance-Relevant Subgroups}{19}{subsubsection.3.10.3}%

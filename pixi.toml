@@ -18,6 +18,8 @@ fc-check = { cmd = "bash -lc 'fc-list | grep -i dejavu | head -n 20'", env = { F
 
 run = { cmd = "python src/main.py", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/fonts", FC_CONFIG_FILE = "$CONDA_PREFIX/etc/fonts/fonts.conf" } }
 
+gto-register = { cmd = "sh -c 'gto register \"$1\" $(jj log -r @ --no-graph -T commit_id) \"${@:2}\"' _", description = "gto register at jj @ instead of HEAD" }
+gto-assign = { cmd = "sh -c 'gto assign \"$1\" --stage \"$2\" --rev $(jj log -r @ --no-graph -T commit_id) \"${@:3}\"' _", description = "gto assign at jj @ instead of HEAD" }
 
 [dependencies]
 numpy = ">=2.3.5,<3"
@@ -40,6 +42,7 @@ pytest = ">=8.0.0,<9"
 requests = ">=2.32.5,<3"
 packaging = ">=26.0,<27"
 platformdirs = ">=4.5.1,<5"
+gto = ">=1.9.0,<2"
 
 [target.linux-64.dependencies]
 xorg-libxft = ">=2.3.9,<3"
