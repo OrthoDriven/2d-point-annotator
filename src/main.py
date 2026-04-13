@@ -56,6 +56,7 @@ class AnnotationGUI(tk.Tk):
         self.landmark_font = tkfont.nametofont("TkDefaultFont").copy()
         self.window_close_flag = False
         self._onedrive_backup_timer: str | None = None
+        self._onedrive_upload_in_flight: bool = False
         if PLATFORM == "Linux":
             self._configure_linux_fonts()
 
@@ -2037,7 +2038,6 @@ class AnnotationGUI(tk.Tk):
             self.canvas.itemconfigure(self.base_img_item, image=self.img_obj)
             self.canvas.coords(self.base_img_item, off_x, off_y)
 
-    # (5) Handle canvas resize (add to class)
     def _on_canvas_resize(self, _event=None) -> None:
         if not self.current_image:
             self._clear_line_preview()
@@ -3266,8 +3266,10 @@ class AnnotationGUI(tk.Tk):
 
     def _fire_onedrive_backup(self) -> None:
         self._onedrive_backup_timer = None
-        if self.json_path is not None:
-            self._backup_to_onedrive(self.json_path)
+        if self.json_path is None or self._onedrive_upload_in_flight:
+            return
+        self._onedrive_upload_in_flight = True
+        self._backup_to_onedrive(self.json_path)
 
     def _backup_to_onedrive(self, *paths: Path) -> None:
         """
@@ -3283,15 +3285,17 @@ class AnnotationGUI(tk.Tk):
             return
 
         if self.window_close_flag:
-            # Show progress dialog and upload in background
             self._backup_with_progress_dialog(files_to_backup)
+            self._onedrive_upload_in_flight = False
         else:
-            # Async upload during normal operation - don't block GUI
+
+            def _on_done(success, total):
+                self._onedrive_upload_in_flight = False
+                logger.info(f"OneDrive backup: {success}/{total} files uploaded")
+
             self.onedrive_backup.backup_multiple(
                 files_to_backup,
-                callback=lambda success, total: logger.info(
-                    f"OneDrive backup: {success}/{total} files uploaded"
-                ),
+                callback=_on_done,
             )
 
     def _backup_with_progress_dialog(self, files: list) -> None:
