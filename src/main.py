@@ -104,6 +104,8 @@ class AnnotationGUI(tk.Tk):
         self.disp_off: Tuple[int, int] = (0, 0)  # (offset_x, offset_y)
         self.disp_size: Tuple[int, int] = (0, 0)  # (disp_w, disp_h)
         self.base_img_item: Optional[int] = None
+        self.mouse_crosshair_ids: list[int] = []
+        self.last_mouse_canvas_pos: tuple[int, int] | None = None
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.csv_loaded = False
         # Also adjust these if you want everything to match:
@@ -223,7 +225,14 @@ class AnnotationGUI(tk.Tk):
         self.canvas.bind("<Configure>", self._on_canvas_resize)
         self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<Motion>", self._on_mouse_move)
-        self.canvas.bind("<Leave>", lambda e: self._hide_hover_circle())
+        self.canvas.bind(
+            "<Leave>",
+            lambda e: (
+                self._hide_hover_circle(),
+                self._hide_mouse_crosshair(),
+                setattr(self, "last_mouse_canvas_pos", None),
+            ),
+        )
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.canvas.bind("<Button-4>", lambda e: self._on_scroll_linux(1))
         self.canvas.bind("<Button-5>", lambda e: self._on_scroll_linux(-1))
@@ -1707,14 +1716,23 @@ class AnnotationGUI(tk.Tk):
 
     # Moves the hover circle with the mouse within image bounds.
     def _on_mouse_move(self, event) -> None:
-        if not self.hover_enabled.get() or not self.current_image:
+        if not self.current_image:
+            self.last_mouse_canvas_pos = None
+            self._hide_mouse_crosshair()
             return
         x0, y0, x1, y1 = self._display_rect()
         if x0 <= event.x < x1 and y0 <= event.y < y1:
-            self._update_hover_circle(
-                event.x, event.y
-            )  # hover circle stays screen-space
+            self.last_mouse_canvas_pos = (event.x, event.y)
+            self._update_mouse_crosshair(event.x, event.y)
+            if self.hover_enabled.get():
+                self._update_hover_circle(
+                    event.x, event.y
+                )  # hover circle stays screen-space
+            else:
+                self._hide_hover_circle()
         else:
+            self.last_mouse_canvas_pos = None
+            self._hide_mouse_crosshair()
             self._hide_hover_circle()
 
     # Adjusts hover radius via standard mouse wheel events.
@@ -1748,6 +1766,59 @@ class AnnotationGUI(tk.Tk):
             )
         else:
             self.canvas.coords(self.hover_circle_id, x0, y0, x1, y1)
+
+    def _update_mouse_crosshair(self, x: float, y: float) -> None:
+        circle_r = 8
+        cross_r = 4
+
+        if not self.mouse_crosshair_ids:
+            circle_id = self.canvas.create_oval(
+                x - circle_r,
+                y - circle_r,
+                x + circle_r,
+                y + circle_r,
+                outline="cyan",
+                width=1,
+                tags="mouse_crosshair",
+            )
+            hline_id = self.canvas.create_line(
+                x - cross_r,
+                y,
+                x + cross_r,
+                y,
+                fill="cyan",
+                width=1,
+                tags="mouse_crosshair",
+            )
+            vline_id = self.canvas.create_line(
+                x,
+                y - cross_r,
+                x,
+                y + cross_r,
+                fill="cyan",
+                width=1,
+                tags="mouse_crosshair",
+            )
+            self.mouse_crosshair_ids = [circle_id, hline_id, vline_id]
+        else:
+            circle_id, hline_id, vline_id = self.mouse_crosshair_ids
+            self.canvas.coords(
+                circle_id,
+                x - circle_r,
+                y - circle_r,
+                x + circle_r,
+                y + circle_r,
+            )
+            self.canvas.coords(hline_id, x - cross_r, y, x + cross_r, y)
+            self.canvas.coords(vline_id, x, y - cross_r, x, y + cross_r)
+
+        for item_id in self.mouse_crosshair_ids:
+            self.canvas.tag_raise(item_id)
+
+    def _hide_mouse_crosshair(self) -> None:
+        for item_id in self.mouse_crosshair_ids:
+            self.canvas.delete(item_id)
+        self.mouse_crosshair_ids = []
 
     # Deletes the hover circle if present.
     def _hide_hover_circle(self) -> None:
