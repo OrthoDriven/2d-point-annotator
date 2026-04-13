@@ -720,6 +720,30 @@ class AnnotationGUI(tk.Tk):
 
         self._refresh_image_listbox()
 
+    @staticmethod
+    def _get_app_version() -> str:
+        import platform as _platform
+
+        if _platform.system() == "Windows":
+            try:
+                import platformdirs
+
+                state_path = (
+                    Path(platformdirs.user_documents_dir())
+                    / "2D-Point-Annotator"
+                    / "update_state.json"
+                )
+            except Exception:
+                state_path = Path.home() / "2D-Point-Annotator" / "update_state.json"
+        else:
+            state_path = Path.home() / "2d-point-annotator" / "update_state.json"
+
+        try:
+            with state_path.open() as f:
+                return json.load(f).get("version", "dev")
+        except Exception:
+            return "dev"
+
     def _setup_ui(self) -> None:
         PANEL_WIDTH = 450
         SCROLLBAR_WIDTH = 18
@@ -876,6 +900,14 @@ class AnnotationGUI(tk.Tk):
         )
         self.crosshair_length_scale.config(state="disabled")
         self.crosshair_length_scale.pack(fill="x", padx=6, pady=6)
+
+        tk.Label(
+            left_tools,
+            text=f"v{self._get_app_version()}",
+            font=self.dialogue_font,
+            fg="grey50",
+            anchor="w",
+        ).pack(side="bottom", fill="x", padx=6, pady=(0, 4))
 
         tk.Button(
             ctrl, text="Load Data", command=self.load_data, font=self.heading_font
