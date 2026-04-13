@@ -35,6 +35,10 @@ from path_utils import (
 )
 
 
+AnnotationPoint = Tuple[float, float]
+AnnotationValue = Union[AnnotationPoint, List[AnnotationPoint]]
+
+
 class AnnotationGUI(tk.Tk):
     # Initializes the main GUI, state, and loads landmarks from CSV.
 
@@ -81,7 +85,8 @@ class AnnotationGUI(tk.Tk):
         self.selected_landmark = tk.StringVar(value="")
         self.landmark_visibility: Dict[str, tk.BooleanVar] = {}
         self.landmark_found = {}
-        self.annotations: Dict[str, Dict[str, Tuple[float, float]]] = {}
+        self.annotations: Dict[str, Dict[str, AnnotationValue]] = {}
+        self.line_landmarks: Set[str] = {"L-FA", "R-FA"}
         self.current_image: Image.Image | None = None
         self.current_image_path: Path | None = None
         self.current_image_quality: int = 0
@@ -116,6 +121,13 @@ class AnnotationGUI(tk.Tk):
         self.zoom_img_obj: ImageTk.PhotoImage | None = None
         self.zoom_base_item: Optional[int] = None
         self.zoom_src_rect: Tuple[float, float, float, float] | None = None
+        self.line_preview_id: Optional[int] = None
+        self.dragging_landmark: Optional[str] = None
+        self.dragging_point_index: Optional[int] = None
+        self.dragging_line_whole: bool = False
+        self.dragging_line_last_img_pos: Optional[AnnotationPoint] = None
+        self.drag_tolerance_px = 10
+        self.drag_line_tolerance_px = 8
         self.zoom_crosshair_ids: list[int] = []
         self.zoom_extended_crosshair_ids: list[int] = []
         self.zoom_landmark_overlay_ids: list[int] = []
@@ -236,19 +248,11 @@ class AnnotationGUI(tk.Tk):
         self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
         # recompute transform & redraw on canvas size changes
         self.canvas.bind("<Configure>", self._on_canvas_resize)
-        self.canvas.bind("<Button-1>", self._on_click)
+        self.canvas.bind("<ButtonPress-1>", self._on_left_press)
+        self.canvas.bind("<B1-Motion>", self._on_left_drag)
+        self.canvas.bind("<ButtonRelease-1>", self._on_left_release)
         self.canvas.bind("<Motion>", self._on_mouse_move)
-        self.canvas.bind(
-            "<Leave>",
-            lambda e: (
-                self._hide_hover_circle(),
-                self._hide_extended_crosshair(),
-                self._hide_mouse_crosshair(),
-                setattr(self, "last_mouse_canvas_pos", None),
-                self._update_zoom_view(None, None),
-                self._hide_zoom_extended_crosshair(),
-            ),
-        )
+        self.canvas.bind("<Leave>", self._on_canvas_leave)
         self.canvas.bind("<ButtonPress-3>", self._on_right_button_press)
         self.canvas.bind("<ButtonRelease-3>", self._on_right_button_release)
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
@@ -838,6 +842,146 @@ class AnnotationGUI(tk.Tk):
                 logger.warning(f"Failed to delete zoom landmark overlay item: {e}")
         self.zoom_landmark_overlay_ids = []
 
+    def _is_line_landmark(self, lm: str) -> bool:
+        return lm in self.line_landmarks
+
+    def _get_line_points(self, lm: str) -> List[Tuple[float, float]]:
+        pts, _quality = self._get_annotations()
+        val = pts.get(lm)
+        if val is None:
+            return []
+
+        out: List[Tuple[float, float]] = []
+
+        if (
+            isinstance(val, tuple)
+            and len(val) == 2
+            and all(isinstance(v, (int, float)) for v in val)
+        ):
+            return [(float(val[0]), float(val[1]))]
+
+        if isinstance(val, list):
+            for p in val:
+                if isinstance(p, (list, tuple)) and len(p) >= 2:
+                    try:
+                        out.append((float(p[0]), float(p[1])))
+                    except (TypeError, ValueError):
+                        pass
+
+        return out[:2]
+
+    def _set_line_points(self, lm: str, pts_list: List[Tuple[float, float]]) -> None:
+        self.annotations.setdefault(str(self.current_image_path), {})[lm] = [
+            (float(x), float(y)) for x, y in pts_list[:2]
+        ]
+        if lm in self.landmark_found:
+            self.landmark_found[lm].set(len(pts_list) > 0)
+
+    def _clamp_img_point(self, xi: float, yi: float) -> Tuple[float, float]:
+        if not self.current_image:
+            return xi, yi
+        w, h = self.current_image.size
+        xi = min(max(xi, 0.0), float(w - 1))
+        yi = min(max(yi, 0.0), float(h - 1))
+        return round(xi, 1), round(yi, 1)
+
+    def _find_line_point_hit(
+        self, lm: str, screen_x: float, screen_y: float
+    ) -> Optional[int]:
+        pts = self._get_line_points(lm)
+        if not pts:
+            return None
+
+        best_idx = None
+        best_dist2 = float("inf")
+        tol2 = float(self.drag_tolerance_px * self.drag_tolerance_px)
+
+        for i, (xi, yi) in enumerate(pts):
+            xs, ys = self._img_to_screen(xi, yi)
+            d2 = (xs - screen_x) ** 2 + (ys - screen_y) ** 2
+            if d2 <= tol2 and d2 < best_dist2:
+                best_dist2 = d2
+                best_idx = i
+
+        return best_idx
+
+    def _point_to_segment_distance_px(
+        self,
+        px: float,
+        py: float,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+    ) -> float:
+        vx = x2 - x1
+        vy = y2 - y1
+        seg_len2 = vx * vx + vy * vy
+
+        if seg_len2 <= 1e-12:
+            return ((px - x1) ** 2 + (py - y1) ** 2) ** 0.5
+
+        t = ((px - x1) * vx + (py - y1) * vy) / seg_len2
+        t = max(0.0, min(1.0, t))
+
+        proj_x = x1 + t * vx
+        proj_y = y1 + t * vy
+        return ((px - proj_x) ** 2 + (py - proj_y) ** 2) ** 0.5
+
+    def _is_line_hit(self, lm: str, screen_x: float, screen_y: float) -> bool:
+        pts = self._get_line_points(lm)
+        if len(pts) != 2:
+            return False
+
+        (x1i, y1i), (x2i, y2i) = pts
+        x1s, y1s = self._img_to_screen(x1i, y1i)
+        x2s, y2s = self._img_to_screen(x2i, y2i)
+
+        dist = self._point_to_segment_distance_px(
+            screen_x, screen_y, x1s, y1s, x2s, y2s
+        )
+        return dist <= float(self.drag_line_tolerance_px)
+
+    def _clear_line_preview(self) -> None:
+        if self.line_preview_id is not None:
+            try:
+                self.canvas.delete(self.line_preview_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete line preview: {e}")
+            self.line_preview_id = None
+
+    def _update_line_preview(self, mouse_x: float, mouse_y: float) -> None:
+        lm = self.selected_landmark.get()
+        if not lm or not self._is_line_landmark(lm):
+            self._clear_line_preview()
+            return
+
+        pts = self._get_line_points(lm)
+        if len(pts) != 1:
+            self._clear_line_preview()
+            return
+
+        x0, y0 = self._img_to_screen(*pts[0])
+
+        if self.line_preview_id is None:
+            self.line_preview_id = self.canvas.create_line(
+                x0,
+                y0,
+                mouse_x,
+                mouse_y,
+                fill="cyan",
+                width=2,
+                dash=(4, 2),
+                tags="line_preview",
+            )
+        else:
+            self.canvas.coords(self.line_preview_id, x0, y0, mouse_x, mouse_y)
+
+        try:
+            self.canvas.tag_lower(self.line_preview_id, "marker")
+        except Exception:
+            pass
+
     def _refresh_zoom_landmark_overlay(self) -> None:
         self._clear_zoom_landmark_overlay()
 
@@ -872,41 +1016,93 @@ class AnnotationGUI(tk.Tk):
 
         overlay_ids: list[int] = []
 
-        if lm not in pts:
-            return
+        if self._is_line_landmark(lm):
+            line_pts = self._get_line_points(lm)
+            if not line_pts:
+                return
 
-        px, py = pts[lm]
-        zx, zy = img_to_zoom(px, py)
+            zoom_pts = [img_to_zoom(px, py) for px, py in line_pts]
+            if len(zoom_pts) == 2:
+                line_id = self.zoom_canvas.create_line(
+                    zoom_pts[0][0],
+                    zoom_pts[0][1],
+                    zoom_pts[1][0],
+                    zoom_pts[1][1],
+                    fill="cyan",
+                    width=2,
+                    tags="zoom_landmark_overlay",
+                )
+                overlay_ids.append(line_id)
 
-        r = 7
-        circle_id = self.zoom_canvas.create_oval(
-            zx - r,
-            zy - r,
-            zx + r,
-            zy + r,
-            outline="cyan",
-            width=2,
-            tags="zoom_landmark_overlay",
-        )
-        hline_id = self.zoom_canvas.create_line(
-            zx - r,
-            zy,
-            zx + r,
-            zy,
-            fill="cyan",
-            width=1,
-            tags="zoom_landmark_overlay",
-        )
-        vline_id = self.zoom_canvas.create_line(
-            zx,
-            zy - r,
-            zx,
-            zy + r,
-            fill="cyan",
-            width=1,
-            tags="zoom_landmark_overlay",
-        )
-        overlay_ids.extend([circle_id, hline_id, vline_id])
+            r = 7
+            for zx, zy in zoom_pts:
+                circle_id = self.zoom_canvas.create_oval(
+                    zx - r,
+                    zy - r,
+                    zx + r,
+                    zy + r,
+                    outline="cyan",
+                    width=2,
+                    tags="zoom_landmark_overlay",
+                )
+                hline_id = self.zoom_canvas.create_line(
+                    zx - r,
+                    zy,
+                    zx + r,
+                    zy,
+                    fill="cyan",
+                    width=1,
+                    tags="zoom_landmark_overlay",
+                )
+                vline_id = self.zoom_canvas.create_line(
+                    zx,
+                    zy - r,
+                    zx,
+                    zy + r,
+                    fill="cyan",
+                    width=1,
+                    tags="zoom_landmark_overlay",
+                )
+                overlay_ids.extend([circle_id, hline_id, vline_id])
+        else:
+            if lm not in pts:
+                return
+
+            px, py = pts[lm]
+            if not (isinstance(px, (int, float)) and isinstance(py, (int, float))):
+                return
+
+            zx, zy = img_to_zoom(px, py)
+
+            r = 7
+            circle_id = self.zoom_canvas.create_oval(
+                zx - r,
+                zy - r,
+                zx + r,
+                zy + r,
+                outline="cyan",
+                width=2,
+                tags="zoom_landmark_overlay",
+            )
+            hline_id = self.zoom_canvas.create_line(
+                zx - r,
+                zy,
+                zx + r,
+                zy,
+                fill="cyan",
+                width=1,
+                tags="zoom_landmark_overlay",
+            )
+            vline_id = self.zoom_canvas.create_line(
+                zx,
+                zy - r,
+                zx,
+                zy + r,
+                fill="cyan",
+                width=1,
+                tags="zoom_landmark_overlay",
+            )
+            overlay_ids.extend([circle_id, hline_id, vline_id])
 
         self.zoom_landmark_overlay_ids = overlay_ids
 
@@ -1006,6 +1202,7 @@ class AnnotationGUI(tk.Tk):
     # (5) Handle canvas resize (add to class)
     def _on_canvas_resize(self, _event=None) -> None:
         if not self.current_image:
+            self._clear_line_preview()
             self._update_zoom_view(None, None)
             self._hide_extended_crosshair()
             self._hide_zoom_extended_crosshair()
@@ -1015,6 +1212,7 @@ class AnnotationGUI(tk.Tk):
         for lm in ("LOB", "ROB"):
             self._update_overlay_for(lm)
         if self.last_mouse_canvas_pos is None:
+            self._clear_line_preview()
             self._update_zoom_view(None, None)
             self._hide_extended_crosshair()
             self._hide_zoom_extended_crosshair()
@@ -1024,11 +1222,13 @@ class AnnotationGUI(tk.Tk):
         x0, y0, x1, y1 = self._display_rect()
         if x0 <= mouse_x < x1 and y0 <= mouse_y < y1:
             self._update_zoom_view(mouse_x, mouse_y)
+            self._update_line_preview(mouse_x, mouse_y)
             if self.extended_crosshair_enabled.get():
                 self._update_extended_crosshair(mouse_x, mouse_y)
             else:
                 self._hide_extended_crosshair()
         else:
+            self._clear_line_preview()
             self._update_zoom_view(None, None)
             self._hide_extended_crosshair()
             self._hide_zoom_extended_crosshair()
@@ -1094,6 +1294,10 @@ class AnnotationGUI(tk.Tk):
         self._apply_settings_to_ui_for(lm)
         self._draw_points()
         self._refresh_zoom_landmark_overlay()
+        if self.last_mouse_canvas_pos is not None:
+            self._update_line_preview(*self.last_mouse_canvas_pos)
+        else:
+            self._clear_line_preview()
         self.after_idle(self._scroll_landmark_into_view, lm)
 
     def _change_selected_landmark(self, step: int) -> None:
@@ -1527,7 +1731,21 @@ class AnnotationGUI(tk.Tk):
         landmark_data = {}
         for lm in self.landmarks:
             if lm in pts:
-                x, y = pts[lm]
+                if self._is_line_landmark(lm):
+                    line_pts = self._get_line_points(lm)
+                    if line_pts:
+                        landmark_data[lm] = [[float(x), float(y)] for x, y in line_pts]
+                    continue
+
+                point = pts[lm]
+                if not (
+                    isinstance(point, tuple)
+                    and len(point) == 2
+                    and all(isinstance(v, (int, float)) for v in point)
+                ):
+                    continue
+
+                x, y = point
                 if lm in ("LOB", "ROB"):
                     st = per_img_settings.get(lm, self._current_settings_dict())
                     method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
@@ -1860,7 +2078,7 @@ class AnnotationGUI(tk.Tk):
                     except OSError:
                         pass
 
-    def _get_annotations(self) -> Tuple[Dict[str, Tuple[float, float]], int]:
+    def _get_annotations(self) -> Tuple[Dict[str, AnnotationValue], int]:
         """Returns (points_dict, quality) for current image."""
         if self.current_image_path is not None:
             current_filename = PurePath(self.current_image_path).name
@@ -1936,6 +2154,18 @@ class AnnotationGUI(tk.Tk):
                     arr = ast.literal_eval(val)
                 except Exception:
                     continue
+                if self._is_line_landmark(lm):
+                    line_pts: List[Tuple[float, float]] = []
+                    if isinstance(arr, (list, tuple)):
+                        for point in arr[:2]:
+                            if isinstance(point, (list, tuple)) and len(point) >= 2:
+                                try:
+                                    line_pts.append((float(point[0]), float(point[1])))
+                                except Exception:
+                                    continue
+                    if line_pts:
+                        pts[lm] = line_pts
+                    continue
                 try:
                     x, y = float(arr[0]), float(arr[1])
                     pts[lm] = (x, y)
@@ -1968,7 +2198,14 @@ class AnnotationGUI(tk.Tk):
         for lm in ("LOB", "ROB"):
             if lm in pts:
                 try:
-                    sx, sy = pts[lm]
+                    point = pts[lm]
+                    if not (
+                        isinstance(point, tuple)
+                        and len(point) == 2
+                        and all(isinstance(v, (int, float)) for v in point)
+                    ):
+                        raise ValueError("LOB/ROB seed must be a point landmark")
+                    sx, sy = point
                     self.last_seed[lm] = (int(sx), int(sy))
                 except Exception:
                     self.last_seed.pop(lm, None)
@@ -1997,6 +2234,7 @@ class AnnotationGUI(tk.Tk):
     def _draw_points(self) -> None:
         self.canvas.delete("marker")
         if not self.current_image_path:
+            self._clear_line_preview()
             return
         # pts = self.annotations.get(self.current_image_path, {})
         pts, quality = self._get_annotations()
@@ -2006,21 +2244,29 @@ class AnnotationGUI(tk.Tk):
         label_font = self.landmark_font.copy()
         label_font.configure(size=30)
 
-        landmark_is_labeled = self.selected_landmark.get() in pts.keys()
+        selected_lm = self.selected_landmark.get()
+        if self._is_line_landmark(selected_lm):
+            landmark_is_labeled = len(self._get_line_points(selected_lm)) > 0
+        else:
+            landmark_is_labeled = selected_lm in pts.keys()
 
-        self.canvas.create_text(
-            x_curr,
-            y_curr,
-            text=self.selected_landmark.get(),
-            fill=("#FFCC66" if landmark_is_labeled else "#FF8066"),
-            font=label_font,
-            tags="marker",
-            anchor="nw",
-        )
+        if selected_lm:
+            self.canvas.create_text(
+                x_curr,
+                y_curr,
+                text=selected_lm,
+                fill=("#FFCC66" if landmark_is_labeled else "#FF8066"),
+                font=label_font,
+                tags="marker",
+                anchor="nw",
+            )
 
-        for lm, (x, y) in pts.items():
+        for lm, val in pts.items():
+            vis_var = self.landmark_visibility.get(lm)
+            if vis_var is not None and not vis_var.get():
+                continue
+
             drawing_current_selected = lm == self.selected_landmark.get()
-            y_offset_label = 16 if drawing_current_selected else 12
             oval_color = (
                 "blue"
                 if drawing_current_selected
@@ -2032,9 +2278,71 @@ class AnnotationGUI(tk.Tk):
             )
             shadow_font = font.copy()
             shadow_font.configure(size=font.cget("size") + 1)
-            vis_var = self.landmark_visibility.get(lm)
-            if vis_var is not None and not vis_var.get():
+
+            if self._is_line_landmark(lm):
+                line_pts = self._get_line_points(lm)
+                if not line_pts:
+                    continue
+
+                screen_pts = [self._img_to_screen(x, y) for x, y in line_pts]
+
+                line_color = "blue" if drawing_current_selected else "red"
+                if len(screen_pts) == 2:
+                    xs1, ys1 = screen_pts[0]
+                    xs2, ys2 = screen_pts[1]
+                    self.canvas.create_line(
+                        xs1,
+                        ys1,
+                        xs2,
+                        ys2,
+                        fill=line_color,
+                        width=2,
+                        tags="marker",
+                    )
+                    label_x = (xs1 + xs2) / 2
+                    label_y = (ys1 + ys2) / 2 - 14
+                else:
+                    label_x, label_y = screen_pts[0][0], screen_pts[0][1] - 14
+
+                for xs, ys in screen_pts:
+                    r = 5
+                    self.canvas.create_oval(
+                        xs - r,
+                        ys - r,
+                        xs + r,
+                        ys + r,
+                        outline=line_color,
+                        width=2,
+                        tags="marker",
+                    )
+
+                self.canvas.create_text(
+                    label_x - 1,
+                    label_y - 1,
+                    text=lm,
+                    fill="black",
+                    font=shadow_font,
+                    tags="marker",
+                )
+                self.canvas.create_text(
+                    label_x,
+                    label_y,
+                    text=lm,
+                    fill=text_color,
+                    font=font,
+                    tags="marker",
+                )
                 continue
+
+            if not (
+                isinstance(val, tuple)
+                and len(val) == 2
+                and all(isinstance(v, (int, float)) for v in val)
+            ):
+                continue
+
+            x, y = val
+            y_offset_label = 16 if drawing_current_selected else 12
             xs, ys = self._img_to_screen(x, y)
 
             r = 5
@@ -2113,8 +2421,19 @@ class AnnotationGUI(tk.Tk):
                 va = self.landmark_visibility.get(ka)
                 vb = self.landmark_visibility.get(kb)
                 if (va is None or va.get()) and (vb is None or vb.get()):
-                    x1, y1 = pts[ka]
-                    x2, y2 = pts[kb]
+                    point_a = pts[ka]
+                    point_b = pts[kb]
+                    if not (
+                        isinstance(point_a, tuple)
+                        and len(point_a) == 2
+                        and all(isinstance(v, (int, float)) for v in point_a)
+                        and isinstance(point_b, tuple)
+                        and len(point_b) == 2
+                        and all(isinstance(v, (int, float)) for v in point_b)
+                    ):
+                        continue
+                    x1, y1 = point_a
+                    x2, y2 = point_b
                     xs1, ys1 = self._img_to_screen(x1, y1)
                     xs2, ys2 = self._img_to_screen(x2, y2)
                     if key in self.pair_line_ids:
@@ -2223,6 +2542,7 @@ class AnnotationGUI(tk.Tk):
     def _on_mouse_move(self, event) -> None:
         if not self.current_image:
             self.last_mouse_canvas_pos = None
+            self._clear_line_preview()
             self._hide_mouse_crosshair()
             self._update_zoom_view(None, None)
             self._hide_extended_crosshair()
@@ -2233,6 +2553,7 @@ class AnnotationGUI(tk.Tk):
             self.last_mouse_canvas_pos = (event.x, event.y)
             self._update_mouse_crosshair(event.x, event.y)
             self._update_zoom_view(event.x, event.y)
+            self._update_line_preview(event.x, event.y)
             if self.hover_enabled.get():
                 self._update_hover_circle(
                     event.x, event.y
@@ -2245,11 +2566,21 @@ class AnnotationGUI(tk.Tk):
                 self._hide_extended_crosshair()
         else:
             self.last_mouse_canvas_pos = None
+            self._clear_line_preview()
             self._hide_mouse_crosshair()
             self._hide_hover_circle()
             self._update_zoom_view(None, None)
             self._hide_extended_crosshair()
             self._hide_zoom_extended_crosshair()
+
+    def _on_canvas_leave(self, _event) -> None:
+        self._hide_hover_circle()
+        self._hide_extended_crosshair()
+        self._hide_mouse_crosshair()
+        self._clear_line_preview()
+        self.last_mouse_canvas_pos = None
+        self._update_zoom_view(None, None)
+        self._hide_zoom_extended_crosshair()
 
     # Adjusts hover radius via standard mouse wheel events.
     def _on_mousewheel(self, event) -> None:
@@ -2438,21 +2769,59 @@ class AnnotationGUI(tk.Tk):
         self.canvas.tag_raise("marker")
 
     # Handles click to place a landmark and optionally run LOB/ROB segmentation.
-    def _on_click(self, event) -> None:
+    def _on_left_press(self, event) -> None:
         x0, y0, x1, y1 = self._display_rect()
         if not self.current_image:
             return
-        w, h = self.current_image.size
         if not (x0 <= event.x < x1 and y0 <= event.y < y1):
             return
-        xi, yi = self._screen_to_img(event.x, event.y)
-        x, y = round(xi, 1), round(yi, 1)  # or clamp if you want
+
+        self.last_mouse_canvas_pos = (event.x, event.y)
+        self._update_mouse_crosshair(event.x, event.y)
+        self._update_zoom_view(event.x, event.y)
+
         lm = self.selected_landmark.get()
         if not lm:
             messagebox.showwarning(
                 "No Landmark", "Please select a landmark in the list."
             )
             return
+
+        xi, yi = self._screen_to_img(event.x, event.y)
+        x, y = self._clamp_img_point(xi, yi)
+
+        if self._is_line_landmark(lm):
+            hit_idx = self._find_line_point_hit(lm, event.x, event.y)
+            if hit_idx is not None:
+                self.dragging_landmark = lm
+                self.dragging_point_index = hit_idx
+                self.dragging_line_whole = False
+                self.dragging_line_last_img_pos = None
+                return
+
+            pts = self._get_line_points(lm)
+            if len(pts) == 2 and self._is_line_hit(lm, event.x, event.y):
+                self.dragging_landmark = lm
+                self.dragging_point_index = None
+                self.dragging_line_whole = True
+                self.dragging_line_last_img_pos = (x, y)
+                return
+
+            if len(pts) == 0:
+                self._set_line_points(lm, [(x, y)])
+            elif len(pts) == 1:
+                self._set_line_points(lm, [pts[0], (x, y)])
+                self._clear_line_preview()
+            else:
+                self._set_line_points(lm, [(x, y)])
+                self._clear_line_preview()
+
+            self._draw_points()
+            self._refresh_zoom_landmark_overlay()
+            self.dirty = True
+            self._auto_save_to_db()
+            return
+
         self.annotations.setdefault(str(self.current_image_path), {})[lm] = (x, y)
         if lm in self.landmark_found:
             self.landmark_found[lm].set(True)
@@ -2473,6 +2842,97 @@ class AnnotationGUI(tk.Tk):
         self._auto_save_to_db()
         return
 
+    def _on_left_drag(self, event) -> None:
+        if not self.current_image:
+            return
+
+        self.last_mouse_canvas_pos = (event.x, event.y)
+        self._update_mouse_crosshair(event.x, event.y)
+
+        if self.extended_crosshair_enabled.get():
+            self._update_extended_crosshair(event.x, event.y)
+        else:
+            self._hide_extended_crosshair()
+
+        self._update_zoom_view(event.x, event.y)
+
+        if self.hover_enabled.get():
+            self._update_hover_circle(event.x, event.y)
+        else:
+            self._hide_hover_circle()
+
+        x0, y0, x1, y1 = self._display_rect()
+        if not (x0 <= event.x < x1 and y0 <= event.y < y1):
+            return
+
+        xi, yi = self._screen_to_img(event.x, event.y)
+        x, y = self._clamp_img_point(xi, yi)
+
+        if self.dragging_landmark is None:
+            return
+
+        pts = self._get_line_points(self.dragging_landmark)
+        if not pts:
+            return
+
+        if self.dragging_point_index is not None:
+            if self.dragging_point_index >= len(pts):
+                return
+
+            pts[self.dragging_point_index] = (x, y)
+            self._set_line_points(self.dragging_landmark, pts)
+            self._draw_points()
+            self._refresh_zoom_landmark_overlay()
+            self.dirty = True
+            return
+
+        if self.dragging_line_whole:
+            if len(pts) != 2:
+                return
+
+            if self.dragging_line_last_img_pos is None:
+                self.dragging_line_last_img_pos = (x, y)
+                return
+
+            last_x, last_y = self.dragging_line_last_img_pos
+            dx = x - last_x
+            dy = y - last_y
+
+            if abs(dx) < 1e-12 and abs(dy) < 1e-12:
+                return
+
+            new_pts = []
+            for px, py in pts:
+                nx, ny = self._clamp_img_point(px + dx, py + dy)
+                new_pts.append((nx, ny))
+
+            actual_dx = new_pts[0][0] - pts[0][0]
+            actual_dy = new_pts[0][1] - pts[0][1]
+            new_pts = [
+                self._clamp_img_point(px + actual_dx, py + actual_dy) for px, py in pts
+            ]
+
+            self._set_line_points(self.dragging_landmark, new_pts)
+            self.dragging_line_last_img_pos = (x, y)
+            self._draw_points()
+            self._refresh_zoom_landmark_overlay()
+            self.dirty = True
+
+    def _on_left_release(self, event) -> None:
+        x0, y0, x1, y1 = self._display_rect()
+        if self.current_image and x0 <= event.x < x1 and y0 <= event.y < y1:
+            self.last_mouse_canvas_pos = (event.x, event.y)
+            self._update_mouse_crosshair(event.x, event.y)
+            self._update_zoom_view(event.x, event.y)
+            self._update_line_preview(event.x, event.y)
+
+        if self.dragging_landmark is not None:
+            self.dragging_landmark = None
+            self.dragging_point_index = None
+            self.dragging_line_whole = False
+            self.dragging_line_last_img_pos = None
+            self._auto_save_to_db()
+
     def _delete_current_landmark(self) -> None:
         """
         The goal of this function is to remove the annotation from the current landmark. When saving. I'm going to make.
@@ -2484,10 +2944,13 @@ class AnnotationGUI(tk.Tk):
             )
             return
 
-        # Check if that annotation exists already
-        if lm in self.annotations[str(self.current_image_path)].keys():
+        current_pts = self.annotations.setdefault(str(self.current_image_path), {})
+        if lm in current_pts:
             # Delete it if it does
-            del self.annotations[str(self.current_image_path)][lm]
+            del current_pts[lm]
+
+        if self._is_line_landmark(lm):
+            self._clear_line_preview()
 
         self._draw_points()
         self._refresh_zoom_landmark_overlay()
