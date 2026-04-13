@@ -1,0 +1,85 @@
+#+TITLE: Installer & Updater Migration TODO
+#+DATE: 2026-04-13
+
+* Summary
+
+The README's install commands use is.gd URL shorteners that resolve to
+scripts on the =ajj/andrew-fixes= branch. The installers download a zip
+of that same branch. This needs to be migrated to =main= (or a release
+tag) once the feature integration PR is merged.
+
+* Current State
+
+** URL Shorteners in README.md
+
+| Shortener             | Resolves to                                                                                          |
+|-----------------------+------------------------------------------------------------------------------------------------------|
+| https://is.gd/mS0yFr | https://raw.githubusercontent.com/OrthoDriven/2d-point-annotator/ajj/andrew-fixes/WindowsInstallerImproved.ps1 |
+| https://is.gd/XsFkW8 | https://raw.githubusercontent.com/OrthoDriven/2d-point-annotator/refs/heads/ajj/andrew-fixes/install_scripts/UnixInstaller.sh |
+
+Both shortened URLs point to *ajj/andrew-fixes* branch.
+
+** Hardcoded Branch References
+
+*** install_scripts/UnixInstaller.sh
+- Line 7:  =REPO_ZIP_URL= downloads zip of =ajj/andrew-fixes=
+- Line 59: =API_URL= checks latest commit on =ajj/andrew-fixes=
+
+*** WindowsInstallerImproved.ps1 (on ajj/andrew-fixes, NOT in our repo)
+- Line ~10: =$RepoZipUrl= downloads zip of =ajj/andrew-fixes=
+- NOTE: This file does not exist on =main= — it lives only on
+  =ajj/andrew-fixes=. It needs to be copied into =install_scripts/=
+  or the README shortener needs updating.
+
+** Update Mechanism (update.py)
+
+=install_scripts/update.py= uses the *GitHub Releases API*:
+#+begin_src
+REPO_URL = "https://api.github.com/repos/OrthoDriven/2d-point-annotator/releases"
+#+end_src
+
+This is release-tag-based, NOT branch-based. It will work correctly
+once releases are published from =main=. No branch reference to fix here.
+
+** Launcher Scripts
+
+=UnixLauncher.sh= and =UnixLauncherPythonUpdater.sh= call =update.py=
+at launch. No branch hardcoding — they reference relative paths.
+
+* TODO Items
+
+** TODO Decide target branch/tag for installers
+After merging the feature-integration PR, decide whether installers
+should point to:
+- =main= (always latest)
+- A release tag (stable, via release-please)
+- A dedicated =stable= branch
+
+** TODO Update UnixInstaller.sh branch references
+- Change REPO_ZIP_URL from =ajj/andrew-fixes= to target
+- Change API_URL from =ajj/andrew-fixes= to target
+
+** TODO Add WindowsInstallerImproved.ps1 to main branch
+The Windows installer only exists on =ajj/andrew-fixes=. Either:
+- Copy it into =install_scripts/= on main
+- Or update the is.gd shortener to point to main
+
+** TODO Update or recreate is.gd short URLs
+Once scripts are on the correct branch:
+- Update https://is.gd/mS0yFr → new Windows installer location
+- Update https://is.gd/XsFkW8 → new Unix installer location
+Note: is.gd URLs may not be editable — might need new short URLs
+and a README update.
+
+** TODO Verify release-please pipeline
+=update.py= pulls from GitHub Releases API. Confirm that:
+- release-please is configured for =main=
+- Tags/releases are created on merge
+- =update.py= correctly downloads and extracts the release zip
+
+** TODO Test full install→launch→update cycle
+After all changes:
+1. Fresh install via shortened URL (or direct URL)
+2. Confirm app launches
+3. Publish a new release
+4. Confirm updater detects and applies it on next launch

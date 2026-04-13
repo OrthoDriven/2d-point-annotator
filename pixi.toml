@@ -1,5 +1,5 @@
 [workspace]
-authors = ["Andrew Jensen <contact@ajensen.org>"]
+authors = ["Andrew Jensen <contact@ajensen.org>", "Paris Flood <paris@orthodriven.com>"]
 channels = ["conda-forge"]
 name = "2d-point-annotator"
 platforms = ["linux-64", "win-64", "osx-arm64"]
@@ -16,7 +16,7 @@ fc-cache = { cmd = "fc-cache -r", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/f
 # Quick check: prove the env can see DejaVu.
 fc-check = { cmd = "bash -lc 'fc-list | grep -i dejavu | head -n 20'", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/fonts", FC_CONFIG_FILE = "$CONDA_PREFIX/etc/fonts/fonts.conf" } }
 
-run = { cmd = "python ./main.py", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/fonts", FC_CONFIG_FILE = "$CONDA_PREFIX/etc/fonts/fonts.conf" } }
+run = { cmd = "python src/main.py", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/fonts", FC_CONFIG_FILE = "$CONDA_PREFIX/etc/fonts/fonts.conf" } }
 
 
 [dependencies]

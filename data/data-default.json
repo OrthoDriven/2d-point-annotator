@@ -116,7 +116,7 @@
       "image_path": "tutorial_image_1.tif",
       "image_flag": false,
       "view": null,
-      "annotations": {},
+      "annotations": {}
     },
     {
       "image_path": "tutorial_image_2.tif",

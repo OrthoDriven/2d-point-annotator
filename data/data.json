@@ -115,32 +115,54 @@
     {
       "image_path": "tutorial_image_1.tif",
       "image_flag": false,
-      "view": null,
-      "annotations": {},
+      "view": "AP Bilateral",
+      "annotations": {
+        "L-ASIS": {
+          "value": [
+            108.9,
+            251.0
+          ],
+          "flag": true,
+          "note": "fasdfasdfdsfa"
+        },
+        "R-ASIS": {
+          "value": [
+            379.8,
+            245.1
+          ],
+          "flag": true,
+          "note": "fdsdfaassddffddsass"
+        }
+      },
+      "image_direction": "AP"
     },
     {
       "image_path": "tutorial_image_2.tif",
       "image_flag": false,
-      "view": null,
-      "annotations": {}
+      "view": "AP Bilateral",
+      "annotations": {},
+      "image_direction": "AP"
     },
     {
       "image_path": "tutorial_image_3.tif",
       "image_flag": false,
-      "view": null,
-      "annotations": {}
+      "view": "AP Bilateral",
+      "annotations": {},
+      "image_direction": "AP"
     },
     {
       "image_path": "tutorial_image_4.tif",
       "image_flag": false,
-      "view": null,
-      "annotations": {}
+      "view": "AP Unilateral (Left)",
+      "annotations": {},
+      "image_direction": "AP"
     },
     {
       "image_path": "tutorial_image_5.tif",
       "image_flag": false,
-      "view": null,
-      "annotations": {}
+      "view": "AP Bilateral",
+      "annotations": {},
+      "image_direction": "AP"
     }
   ]
 }
