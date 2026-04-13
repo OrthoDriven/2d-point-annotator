@@ -77,6 +77,7 @@ class AnnotationGUI(tk.Tk):
         self._start_min_h = 0
         self.use_ff = tk.BooleanVar(value=True)
         self.use_adap_cc = tk.BooleanVar(value=False)
+        self.autosave_var = tk.BooleanVar(value=True)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.csv_path_column = "image_path"
         self.dirty = False
@@ -876,6 +877,14 @@ class AnnotationGUI(tk.Tk):
             command=self.save_annotations,
             font=self.heading_font,
         ).pack(fill="x", pady=5)
+
+        self.autosave_check = tk.Checkbutton(
+            ctrl,
+            text="Autosave",
+            variable=self.autosave_var,
+            font=self.dialogue_font,
+        )
+        self.autosave_check.pack(anchor="w", pady=(0, 6))
 
         img_frame = ttk.LabelFrame(ctrl, text="Image + Quality")
         img_frame.pack(fill="x", pady=(10, 10))
@@ -2891,6 +2900,10 @@ class AnnotationGUI(tk.Tk):
         self.last_seed.clear()
         self._clear_line_preview()
         self._clear_femoral_axis_overlay()
+        self.dragging_landmark = None
+        self.dragging_point_index = None
+        self.dragging_line_whole = False
+        self.dragging_line_last_img_pos = None
 
         current_key = (
             self._path_key(self.current_image_path)
@@ -2904,6 +2917,7 @@ class AnnotationGUI(tk.Tk):
             self.load_points(show_message=False)
 
         self._render_base_image()
+        self.mouse_crosshair_ids = []
         self.extended_crosshair_ids = []
         self.zoom_extended_crosshair_ids = []
         self._hide_hover_circle()
