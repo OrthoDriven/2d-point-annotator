@@ -3099,10 +3099,16 @@ class AnnotationGUI(tk.Tk):
                 self._set_line_points(lm, [(x, y)])
                 self._clear_line_preview()
 
+            if not self._check_left_right_order_for_landmark(lm, x, y):
+                return
+
             self._draw_points()
             self._refresh_zoom_landmark_overlay()
             self.dirty = True
             self._auto_save_to_db()
+            return
+
+        if not self._check_left_right_order_for_landmark(lm, x, y):
             return
 
         self.annotations.setdefault(str(self.current_image_path), {})[lm] = (x, y)
@@ -3124,6 +3130,66 @@ class AnnotationGUI(tk.Tk):
         # Auto-save to database immediately after placing landmark
         self._auto_save_to_db()
         return
+
+    def _check_left_right_order_for_landmark(
+        self,
+        lm: str,
+        new_x: float,
+        new_y: float,
+    ) -> bool:
+        if lm.startswith("L-"):
+            other_lm = "R-" + lm[2:]
+            is_left_landmark = True
+        elif lm.startswith("R-"):
+            other_lm = "L-" + lm[2:]
+            is_left_landmark = False
+        else:
+            return True
+
+        if other_lm not in self.landmarks:
+            return True
+
+        pts, _quality = self._get_annotations()
+        if other_lm not in pts:
+            return True
+
+        # Use x-position of the already-placed corresponding landmark.
+        # For line landmarks, use the mean x of the existing line points.
+        if self._is_line_landmark(other_lm):
+            other_pts = self._get_line_points(other_lm)
+            if not other_pts:
+                return True
+            other_x = sum(px for px, _py in other_pts) / len(other_pts)
+        else:
+            other_pt = pts[other_lm]
+            if isinstance(other_pt, tuple):
+                other_x = float(other_pt[0])
+            else:
+                return True
+
+        # Convention requested:
+        # L-* must be to the RIGHT of the corresponding R-* landmark.
+        if is_left_landmark:
+            is_valid = new_x > other_x
+            bad_msg = (
+                f'"{lm}" must be to the RIGHT of "{other_lm}".\n\n'
+                f"Current click x = {new_x:.1f}\n"
+                f"{other_lm} x = {other_x:.1f}"
+            )
+        else:
+            is_valid = new_x < other_x
+            bad_msg = (
+                f'"{lm}" must be to the LEFT of "{other_lm}" because '
+                f'"L-" landmarks must be to the RIGHT of their matching "R-" landmarks.\n\n'
+                f"Current click x = {new_x:.1f}\n"
+                f"{other_lm} x = {other_x:.1f}"
+            )
+
+        if not is_valid:
+            messagebox.showwarning("Left/Right Landmark Order", bad_msg)
+            return False
+
+        return True
 
     def _on_left_drag(self, event) -> None:
         if not self.current_image:
