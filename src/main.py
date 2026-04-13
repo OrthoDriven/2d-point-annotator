@@ -86,6 +86,9 @@ class AnnotationGUI(tk.Tk):
         self.current_view_var = tk.StringVar(value="")
         self.landmark_visibility: Dict[str, tk.BooleanVar] = {}
         self.landmark_found = {}
+        self.landmark_flagged: Dict[str, tk.BooleanVar] = {}
+        self.landmark_flag_widgets: Dict[str, tk.Checkbutton] = {}
+        self.landmark_found_widgets: Dict[str, tk.Checkbutton] = {}
         self.annotations: Dict[str, Dict[str, AnnotationValue]] = {}
         self.landmarks: List[str] = []
         self.images: List[Path] = []
@@ -151,6 +154,8 @@ class AnnotationGUI(tk.Tk):
         self.zoom_extended_crosshair_ids: list[int] = []
         self.zoom_landmark_overlay_ids: list[int] = []
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
+        self.note_text: Optional[tk.Text] = None
+        self.note_text_internal_update: bool = False
         self.csv_loaded = False
         # Also adjust these if you want everything to match:
         # Already configured above to match heading_font
@@ -158,24 +163,24 @@ class AnnotationGUI(tk.Tk):
         self.after(0, self._lock_initial_minsize)
         self.unbind("<Up>")
         self.unbind("<Down>")
-        self.bind("<Up>", self._on_arrow_up)
-        self.bind("<Down>", self._on_arrow_down)
-        self.bind("<f>", self._on_arrow_down)
-        self.bind("<d>", self._on_arrow_up)
-        self.bind("<Left>", self._on_arrow_left)
-        self.bind("<Right>", self._on_arrow_right)
-        self.bind("<Control-b>", self._on_pg_up)
-        self.bind("<Control-n>", self._on_pg_down)
-        self.bind("<n>", self._on_pg_down)
-        self.bind("<g>", self._on_pg_down)
-        self.bind("<b>", self._on_pg_up)
-        self.bind("<BackSpace>", self._on_backspace)
-        self.bind("<space>", self._on_space)
-        self.bind("1", self._on_1_press)
-        self.bind("2", self._on_2_press)
-        self.bind("3", self._on_3_press)
-        self.bind("4", self._on_4_press)
-        self.bind("<h>", self._on_h_press)
+        self._bind_shortcut("<Up>", self._on_arrow_up)
+        self._bind_shortcut("<Down>", self._on_arrow_down)
+        self._bind_shortcut("<f>", self._on_arrow_down)
+        self._bind_shortcut("<d>", self._on_arrow_up)
+        self._bind_shortcut("<Left>", self._on_arrow_left)
+        self._bind_shortcut("<Right>", self._on_arrow_right)
+        self._bind_shortcut("<Control-b>", self._on_pg_up)
+        self._bind_shortcut("<Control-n>", self._on_pg_down)
+        self._bind_shortcut("<n>", self._on_pg_down)
+        self._bind_shortcut("<g>", self._on_pg_down)
+        self._bind_shortcut("<b>", self._on_pg_up)
+        self._bind_shortcut("<BackSpace>", self._on_backspace)
+        self._bind_shortcut("<space>", self._on_space)
+        self._bind_shortcut("1", self._on_1_press)
+        self._bind_shortcut("2", self._on_2_press)
+        self._bind_shortcut("3", self._on_3_press)
+        self._bind_shortcut("4", self._on_4_press)
+        self._bind_shortcut("<h>", self._on_h_press)
         self.queue_mode = False
         self.unannotated_queue: List[Path] = []
         self.queue_index = 0
@@ -806,6 +811,20 @@ class AnnotationGUI(tk.Tk):
             command=lambda: self._set_all_visibility(False),
             font=self.dialogue_font,
         ).pack(side="left", expand=True, fill="x")
+
+        note_wrap = ttk.LabelFrame(ctrl, text="Landmark Note")
+        note_wrap.pack(fill="x", pady=(8, 0))
+
+        self.note_text = tk.Text(
+            note_wrap,
+            height=8,
+            wrap="word",
+            font=self.dialogue_font,
+        )
+        self.note_text.pack(fill="x", padx=6, pady=6)
+        self.note_text.bind("<<Modified>>", self._on_note_text_modified)
+        self._set_note_editor_enabled(False)
+
         ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
         seg_wrap = ttk.LabelFrame(ctrl, text="Fill Tool (Obturator)")
         seg_wrap.pack(fill="x", pady=(8, 0))
@@ -1616,12 +1635,17 @@ class AnnotationGUI(tk.Tk):
             w.destroy()
         self.landmark_visibility.clear()
         self.landmark_found.clear()
+        self.landmark_flagged.clear()
         self.landmark_radio_widgets = {}
+        self.landmark_found_widgets = {}
+        self.landmark_flag_widgets = {}
+
         self.landmark_table = tk.Frame(self.lp_inner)
         self.landmark_table.pack(fill="x", padx=2, pady=2)
-        self.landmark_table.grid_columnconfigure(0, minsize=70)
+        self.landmark_table.grid_columnconfigure(0, minsize=55)
         self.landmark_table.grid_columnconfigure(1, minsize=140)
-        self.landmark_table.grid_columnconfigure(2, minsize=100)
+        self.landmark_table.grid_columnconfigure(2, minsize=80)
+        self.landmark_table.grid_columnconfigure(3, minsize=60)
         tk.Label(
             self.landmark_table, text="View", anchor="w", font=self.heading_font
         ).grid(row=0, column=0, sticky="w", padx=(2, 4), pady=(0, 2))
@@ -1629,13 +1653,26 @@ class AnnotationGUI(tk.Tk):
             self.landmark_table, text="Name", anchor="w", font=self.heading_font
         ).grid(row=0, column=1, sticky="w", padx=(2, 4), pady=(0, 2))
         tk.Label(
-            self.landmark_table, text="Annotated", anchor="w", font=self.heading_font
+            self.landmark_table, text="Ann.", anchor="w", font=self.heading_font
         ).grid(row=0, column=2, sticky="w", padx=(2, 4), pady=(0, 2))
+        tk.Label(
+            self.landmark_table, text="Flag", anchor="w", font=self.heading_font
+        ).grid(row=0, column=3, sticky="w", padx=(2, 4), pady=(0, 2))
+
+        key = (
+            self._path_key(self.current_image_path)
+            if self.json_path is not None and self.current_image_path is not None
+            else str(self.current_image_path)
+        )
+        meta = self.landmark_meta.get(key, {})
+
         for i, lm in enumerate(getattr(self, "landmarks", []), start=1):
             vis_var = tk.BooleanVar(value=True)
             found_var = tk.BooleanVar(value=False)
+            flag_var = tk.BooleanVar(value=bool(meta.get(lm, {}).get("flag", False)))
             self.landmark_visibility[lm] = vis_var
             self.landmark_found[lm] = found_var
+            self.landmark_flagged[lm] = flag_var
             tk.Checkbutton(
                 self.landmark_table,
                 variable=vis_var,
@@ -1654,15 +1691,38 @@ class AnnotationGUI(tk.Tk):
             )
             rb.grid(row=i, column=1, sticky="w", padx=(2, 4), pady=1)
             self.landmark_radio_widgets[lm] = rb
-            tk.Checkbutton(
+
+            found_cb = tk.Checkbutton(
                 self.landmark_table,
                 text="",
                 variable=found_var,
-                state="disabled",
                 font=self.dialogue_font,
-            ).grid(row=i, column=2, sticky="w", padx=(2, 4), pady=1)
+                indicatoron=True,
+                takefocus=0,
+                command=lambda lm=lm: self._on_annotated_checkbox_toggled(lm),
+            )
+            found_cb.grid(row=i, column=2, sticky="w", padx=(2, 4), pady=1)
+            self.landmark_found_widgets[lm] = found_cb
+
+            flag_cb = tk.Checkbutton(
+                self.landmark_table,
+                text="",
+                variable=flag_var,
+                font=self.dialogue_font,
+                indicatoron=True,
+                takefocus=0,
+                command=lambda lm=lm: self._on_flag_checkbox_toggled(lm),
+            )
+            flag_cb.grid(row=i, column=3, sticky="w", padx=(2, 4), pady=1)
+            self.landmark_flag_widgets[lm] = flag_cb
+
         if getattr(self, "landmarks", None) and not self.selected_landmark.get():
             self.selected_landmark.set(self.landmarks[0])
+        elif not getattr(self, "landmarks", None):
+            self.selected_landmark.set("")
+
+        self._load_note_for_selected_landmark()
+        self._bind_landmark_scroll(True)
 
     # (4) Render base image (add to class)
     def _render_base_image(self) -> None:
@@ -1782,6 +1842,7 @@ class AnnotationGUI(tk.Tk):
         lm = self.selected_landmark.get()
         self._apply_settings_to_ui_for(lm)
         self._sync_auto_tools_for_selected_landmark()
+        self._load_note_for_selected_landmark()
         self._draw_points()
         self._refresh_zoom_landmark_overlay()
         if self.last_mouse_canvas_pos is not None:
@@ -1790,6 +1851,206 @@ class AnnotationGUI(tk.Tk):
             self._clear_line_preview()
         self._update_femoral_axis_overlay()
         self.after_idle(self._scroll_landmark_into_view, lm)
+
+    def _get_landmark_meta(self, lm: str) -> Dict[str, Union[bool, str]]:
+        if self.current_image_path is None:
+            return {"flag": False, "note": ""}
+
+        key = (
+            self._path_key(self.current_image_path)
+            if self.json_path is not None
+            else str(self.current_image_path)
+        )
+        per_img = self.landmark_meta.setdefault(key, {})
+        return per_img.setdefault(lm, {"flag": False, "note": ""})
+
+    def _set_landmark_flag(self, lm: str, value: bool) -> None:
+        meta = self._get_landmark_meta(lm)
+        meta["flag"] = bool(value)
+
+    def _get_landmark_flag(self, lm: str) -> bool:
+        return bool(self._get_landmark_meta(lm).get("flag", False))
+
+    def _set_landmark_note(self, lm: str, note: str) -> None:
+        meta = self._get_landmark_meta(lm)
+        meta["note"] = note
+
+    def _get_landmark_note(self, lm: str) -> str:
+        return str(self._get_landmark_meta(lm).get("note", ""))
+
+    def _on_flag_checkbox_toggled(self, lm: str) -> None:
+        if self.current_image_path is None:
+            return
+
+        flag_var = self.landmark_flagged.get(lm)
+        is_flagged = flag_var.get() if flag_var is not None else False
+        self._set_landmark_flag(lm, is_flagged)
+
+        if not is_flagged:
+            self._set_landmark_note(lm, "")
+
+        if self.selected_landmark.get() == lm:
+            self._load_note_for_selected_landmark()
+
+        self.dirty = True
+        self._maybe_autosave_current_image()
+
+        pts, _quality = self._get_annotations()
+        self._update_found_checks(pts)
+        self._draw_points()
+
+    def _on_annotated_checkbox_toggled(self, lm: str) -> None:
+        if self.current_image_path is None:
+            return
+
+        pts, _quality = self._get_annotations()
+        found_var = self.landmark_found.get(lm)
+        is_checked = found_var.get() if found_var is not None else False
+
+        if not is_checked:
+            if lm not in pts:
+                self.landmark_found[lm].set(False)
+                self._update_found_checks(pts)
+                return
+
+            confirmed = messagebox.askyesno(
+                "Delete Landmark",
+                f'Are you sure you want to delete "{lm}"?\n\n'
+                "All information for this landmark, including any flag and notes, will be deleted.",
+            )
+
+            if not confirmed:
+                self.landmark_found[lm].set(True)
+                self._update_found_checks(pts)
+                return
+
+            del pts[lm]
+            key = (
+                self._path_key(self.current_image_path)
+                if self.json_path is not None
+                else str(self.current_image_path)
+            )
+            if key in self.landmark_meta:
+                self.landmark_meta[key].pop(lm, None)
+
+            if self._is_line_landmark(lm):
+                self._clear_line_preview()
+
+            if lm in ("LOB", "ROB"):
+                self.last_seed.pop(lm, None)
+                if str(self.current_image_path) in self.seg_masks:
+                    self.seg_masks[str(self.current_image_path)].pop(lm, None)
+                self._remove_overlay_for(lm)
+
+            self._clear_femoral_axis_overlay()
+            self.dirty = True
+            self._maybe_autosave_current_image()
+            self._draw_points()
+            self._refresh_zoom_landmark_overlay()
+            self._load_note_for_selected_landmark()
+            return
+
+        if lm not in pts:
+            self.landmark_found[lm].set(False)
+            self._update_found_checks(pts)
+
+    def _set_note_editor_enabled(self, enabled: bool) -> None:
+        if self.note_text is None:
+            return
+
+        if enabled:
+            self.note_text.configure(
+                state="normal",
+                bg="white",
+                fg="black",
+                insertbackground="black",
+            )
+        else:
+            self.note_text.configure(
+                state="disabled",
+                bg="#E6E6E6",
+                fg="#666666",
+                insertbackground="#666666",
+            )
+
+    def _load_note_for_selected_landmark(self) -> None:
+        if self.note_text is None:
+            return
+
+        lm = self.selected_landmark.get()
+        can_edit = bool(lm) and self._get_landmark_flag(lm)
+        note = self._get_landmark_note(lm) if can_edit else ""
+
+        self.note_text_internal_update = True
+        self.note_text.configure(state="normal")
+        self.note_text.delete("1.0", "end")
+        self.note_text.insert("1.0", note)
+        self.note_text.edit_modified(False)
+        self.note_text_internal_update = False
+
+        self._set_note_editor_enabled(can_edit)
+
+    def _save_note_for_selected_landmark(self) -> None:
+        if self.note_text is None or self.current_image_path is None:
+            return
+
+        lm = self.selected_landmark.get()
+        if not lm:
+            return
+
+        if not self._get_landmark_flag(lm):
+            self._set_landmark_note(lm, "")
+            return
+
+        note = self.note_text.get("1.0", "end-1c")
+        self._set_landmark_note(lm, note)
+
+    def _on_note_text_modified(self, _event=None) -> None:
+        if self.note_text is None:
+            return
+        if self.note_text_internal_update:
+            self.note_text.edit_modified(False)
+            return
+        if not self.note_text.edit_modified():
+            return
+
+        self._save_note_for_selected_landmark()
+        self.note_text.edit_modified(False)
+        self.dirty = True
+        self._maybe_autosave_current_image()
+
+    def _bind_shortcut(self, sequence: str, callback) -> None:
+        def wrapper(event):
+            if self._note_text_shortcuts_blocked():
+                return "break"
+            return callback(event)
+
+        self.bind(sequence, wrapper)
+
+    def _note_text_shortcuts_blocked(self) -> bool:
+        if self.note_text is None:
+            return False
+
+        try:
+            if str(self.note_text.cget("state")) != "normal":
+                return False
+        except Exception:
+            return False
+
+        focused = self.focus_get() is self.note_text
+
+        try:
+            px, py = self.winfo_pointerxy()
+            hovered_widget = self.winfo_containing(px, py)
+        except Exception:
+            hovered_widget = None
+
+        hovered = hovered_widget is self.note_text or (
+            hovered_widget is not None
+            and str(hovered_widget).startswith(str(self.note_text))
+        )
+
+        return focused and hovered
 
     def _sync_auto_tools_for_selected_landmark(self) -> None:
         lm = self.selected_landmark.get().strip()
@@ -2361,6 +2622,10 @@ class AnnotationGUI(tk.Tk):
 
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
+        else:
+            self.selected_landmark.set("")
+
+        self._load_note_for_selected_landmark()
 
         pts, _quality = self._get_annotations()
         self._update_found_checks(pts)
@@ -2973,10 +3238,44 @@ class AnnotationGUI(tk.Tk):
 
     # Updates the disabled “Annotated” checkboxes based on available points.
     def _update_found_checks(self, pts_dict):
+        key = (
+            self._path_key(self.current_image_path)
+            if self.json_path is not None and self.current_image_path is not None
+            else str(self.current_image_path)
+        )
+        meta = self.landmark_meta.get(key, {})
+
         for lm in self.landmarks:
             var = self.landmark_found.get(lm)
+            widget = getattr(self, "landmark_found_widgets", {}).get(lm)
             if var is not None:
-                var.set(lm in pts_dict)
+                is_found = lm in pts_dict
+                var.set(is_found)
+
+                if widget is not None:
+                    try:
+                        widget.configure(
+                            fg="green" if is_found else "black",
+                            activeforeground="green" if is_found else "black",
+                            selectcolor="#90EE90" if is_found else widget.cget("bg"),
+                        )
+                    except Exception:
+                        pass
+
+            fvar = self.landmark_flagged.get(lm)
+            fwidget = getattr(self, "landmark_flag_widgets", {}).get(lm)
+            is_flagged = bool(meta.get(lm, {}).get("flag", False))
+            if fvar is not None:
+                fvar.set(is_flagged)
+            if fwidget is not None:
+                try:
+                    fwidget.configure(
+                        fg="red" if is_flagged else "black",
+                        activeforeground="red" if is_flagged else "black",
+                        selectcolor="#FFB6B6" if is_flagged else fwidget.cget("bg"),
+                    )
+                except Exception:
+                    pass
 
     # Draws landmark markers/labels and syncs overlays and pair lines.
     def _draw_points(self) -> None:
@@ -3010,18 +3309,30 @@ class AnnotationGUI(tk.Tk):
                 anchor="nw",
             )
 
+        key = (
+            self._path_key(self.current_image_path)
+            if self.json_path is not None
+            else str(self.current_image_path)
+        )
+        meta = self.landmark_meta.get(key, {})
+
         for lm, val in pts.items():
             vis_var = self.landmark_visibility.get(lm)
             if vis_var is not None and not vis_var.get():
                 continue
 
             drawing_current_selected = lm == self.selected_landmark.get()
+            is_flagged = bool(meta.get(lm, {}).get("flag", False))
             oval_color = (
                 "blue"
                 if drawing_current_selected
                 else ("red" if not current_image_verified else "green")
             )
-            text_color = "orange" if drawing_current_selected else "yellow"
+            text_color = (
+                "orange"
+                if drawing_current_selected
+                else ("red" if is_flagged else "yellow")
+            )
             font = (
                 self.landmark_font if drawing_current_selected else self.dialogue_font
             )
