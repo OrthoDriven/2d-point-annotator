@@ -137,6 +137,34 @@
           "value": null,
           "flag": true,
           "note": "Here's an LPOD, bro"
+        },
+        "L-FA": {
+          "value": [
+            [
+              45.4,
+              300.1
+            ],
+            [
+              43.6,
+              502.0
+            ]
+          ],
+          "flag": false,
+          "note": ""
+        },
+        "R-FA": {
+          "value": [
+            [
+              443.7,
+              305.3
+            ],
+            [
+              89.3,
+              291.3
+            ]
+          ],
+          "flag": false,
+          "note": ""
         }
       }
     },

@@ -108,6 +108,8 @@ class AnnotationGUI(tk.Tk):
         self._navigation_in_progress = False
         self.current_image_flag = False
         self.image_flag_check: tk.Checkbutton | None = None
+        self.current_image_direction: str = "AP"
+        self.image_direction_var = tk.StringVar(value="AP")
         self.line_landmarks: Set[str] = {"L-FA", "R-FA"}
         self.current_image: Image.Image | None = None
         self.current_image_path: Path | None = None
@@ -292,6 +294,7 @@ class AnnotationGUI(tk.Tk):
             return
 
         record["image_flag"] = bool(self.current_image_flag)
+        record["image_direction"] = self.current_image_direction
         record["view"] = self.current_view_var.get().strip() or None
         record["annotations"] = self._prepare_landmark_data(for_json=True)
 
@@ -455,6 +458,13 @@ class AnnotationGUI(tk.Tk):
             )
         except Exception:
             pass
+
+    def _on_image_direction_changed(self, _event=None) -> None:
+        self.current_image_direction = self.image_direction_var.get()
+        record = self._get_current_image_record()
+        if record is not None:
+            record["image_direction"] = self.current_image_direction
+        self._maybe_autosave_current_image()
 
     def _save_json_file(self, show_success: bool = False) -> bool:
         if self.json_path is None:
@@ -907,6 +917,22 @@ class AnnotationGUI(tk.Tk):
             selectcolor=self.cget("bg"),
         )
         self.image_flag_check.pack(side="left", padx=(0, 12))
+
+        tk.Label(row_meta, text="Dir:", font=self.dialogue_font).pack(
+            side="left", padx=(0, 2)
+        )
+        self.direction_dropdown = ttk.Combobox(
+            row_meta,
+            textvariable=self.image_direction_var,
+            values=["AP", "PA"],
+            state="readonly",
+            font=self.dialogue_font,
+            width=4,
+        )
+        self.direction_dropdown.pack(side="left")
+        self.direction_dropdown.bind(
+            "<<ComboboxSelected>>", self._on_image_direction_changed
+        )
 
         row_meta2 = ttk.Frame(img_frame)
         row_meta2.pack(fill="x", padx=6, pady=(0, 6))
@@ -2872,10 +2898,16 @@ class AnnotationGUI(tk.Tk):
             if record is not None:
                 self.current_image_flag = bool(record.get("image_flag", False))
                 self.image_flag_var.set(self.current_image_flag)
+                self.current_image_direction = (
+                    record.get("image_direction", "AP") or "AP"
+                )
+                self.image_direction_var.set(self.current_image_direction)
                 self.annotations[key] = self._parse_annotations_for_record(record)
             else:
                 self.current_image_flag = False
                 self.image_flag_var.set(False)
+                self.current_image_direction = "AP"
+                self.image_direction_var.set("AP")
                 self.annotations[key] = {}
                 self.landmark_meta[key] = {}
             self.current_image_quality = 0
@@ -2888,6 +2920,8 @@ class AnnotationGUI(tk.Tk):
             self.absolute_current_image_path = path.resolve()
             self.current_image_flag = False
             self.image_flag_var.set(False)
+            self.current_image_direction = "AP"
+            self.image_direction_var.set("AP")
             self.current_view_var.set("")
 
         self._refresh_image_flag_checkbox_style()
@@ -4203,16 +4237,20 @@ class AnnotationGUI(tk.Tk):
                 return
 
             if len(pts) == 0:
+                if not self._check_left_right_order_for_landmark(lm, x, y):
+                    return
                 self._set_line_points(lm, [(x, y)])
             elif len(pts) == 1:
+                mean_x = (pts[0][0] + x) / 2.0
+                if not self._check_left_right_order_for_landmark(lm, mean_x, y):
+                    return
                 self._set_line_points(lm, [pts[0], (x, y)])
                 self._clear_line_preview()
             else:
+                if not self._check_left_right_order_for_landmark(lm, x, y):
+                    return
                 self._set_line_points(lm, [(x, y)])
                 self._clear_line_preview()
-
-            if not self._check_left_right_order_for_landmark(lm, x, y):
-                return
 
             self._draw_points()
             self._refresh_zoom_landmark_overlay()
@@ -4280,20 +4318,31 @@ class AnnotationGUI(tk.Tk):
             else:
                 return True
 
-        # Convention requested:
-        # L-* must be to the RIGHT of the corresponding R-* landmark.
+        is_pa = self.current_image_direction == "PA"
+
         if is_left_landmark:
-            is_valid = new_x > other_x
+            if is_pa:
+                is_valid = new_x < other_x
+                side_word = "LEFT"
+            else:
+                is_valid = new_x > other_x
+                side_word = "RIGHT"
             bad_msg = (
-                f'"{lm}" must be to the RIGHT of "{other_lm}".\n\n'
+                f'"{lm}" must be to the {side_word} of "{other_lm}" '
+                f"({self.current_image_direction} image).\n\n"
                 f"Current click x = {new_x:.1f}\n"
                 f"{other_lm} x = {other_x:.1f}"
             )
         else:
-            is_valid = new_x < other_x
+            if is_pa:
+                is_valid = new_x > other_x
+                side_word = "RIGHT"
+            else:
+                is_valid = new_x < other_x
+                side_word = "LEFT"
             bad_msg = (
-                f'"{lm}" must be to the LEFT of "{other_lm}" because '
-                f'"L-" landmarks must be to the RIGHT of their matching "R-" landmarks.\n\n'
+                f'"{lm}" must be to the {side_word} of "{other_lm}" '
+                f"({self.current_image_direction} image).\n\n"
                 f"Current click x = {new_x:.1f}\n"
                 f"{other_lm} x = {other_x:.1f}"
             )
