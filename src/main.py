@@ -1492,6 +1492,7 @@ class AnnotationGUI(tk.Tk):
     def _on_landmark_selected(self) -> None:
         lm = self.selected_landmark.get()
         self._apply_settings_to_ui_for(lm)
+        self._sync_auto_tools_for_selected_landmark()
         self._draw_points()
         self._refresh_zoom_landmark_overlay()
         if self.last_mouse_canvas_pos is not None:
@@ -1500,6 +1501,50 @@ class AnnotationGUI(tk.Tk):
             self._clear_line_preview()
         self._update_femoral_axis_overlay()
         self.after_idle(self._scroll_landmark_into_view, lm)
+
+    def _sync_auto_tools_for_selected_landmark(self) -> None:
+        lm = self.selected_landmark.get().strip()
+
+        hover_landmarks = {"L-FHC", "R-FHC", "L-AC", "R-AC"}
+        femoral_axis_landmarks = {"L-FA", "R-FA"}
+
+        want_hover = lm in hover_landmarks
+        want_femoral_axis = lm in femoral_axis_landmarks
+
+        if want_hover:
+            if not self.hover_enabled.get():
+                self.hover_enabled.set(True)
+            if self.femoral_axis_enabled.get():
+                self.femoral_axis_enabled.set(False)
+            self._toggle_hover()
+            self._toggle_femoral_axis()
+            return
+
+        if want_femoral_axis:
+            if not self.femoral_axis_enabled.get():
+                self.femoral_axis_enabled.set(True)
+            if self.hover_enabled.get():
+                self.hover_enabled.set(False)
+            self._toggle_femoral_axis()
+            self._toggle_hover()
+            return
+
+        changed = False
+
+        if self.hover_enabled.get():
+            self.hover_enabled.set(False)
+            changed = True
+
+        if self.femoral_axis_enabled.get():
+            self.femoral_axis_enabled.set(False)
+            changed = True
+
+        if changed:
+            self._toggle_hover()
+            self._toggle_femoral_axis()
+        else:
+            self._hide_hover_circle()
+            self._clear_femoral_axis_overlay()
 
     def _change_selected_landmark(self, step: int) -> None:
         if not getattr(self, "landmarks", None):
