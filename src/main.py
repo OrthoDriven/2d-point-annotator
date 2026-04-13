@@ -205,7 +205,19 @@ class AnnotationGUI(tk.Tk):
         return False
 
     def _setup_ui(self) -> None:
-        self.canvas = tk.Canvas(self, bg="grey", highlightthickness=0)
+        PANEL_WIDTH = 450
+        SCROLLBAR_WIDTH = 18
+        CANVAS_HEIGHT = 220
+
+        main = tk.Frame(self)
+        main.pack(fill="both", expand=True)
+
+        left_tools = tk.Frame(main, width=PANEL_WIDTH)
+        left_tools.pack(side=tk.LEFT, fill="y", padx=(10, 5), pady=10)
+        left_tools.pack_propagate(False)
+        self._left_tools = left_tools
+
+        self.canvas = tk.Canvas(main, bg="grey", highlightthickness=0)
         self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
         # recompute transform & redraw on canvas size changes
         self.canvas.bind("<Configure>", self._on_canvas_resize)
@@ -221,9 +233,33 @@ class AnnotationGUI(tk.Tk):
         )
         self.shadow_font = tkfont.Font(family="Liberation Sans", size=20, weight="bold")
 
-        ctrl = tk.Frame(self)
-        ctrl.pack(side=tk.RIGHT, fill="y", padx=10, pady=10)
+        ctrl = tk.Frame(main, width=PANEL_WIDTH)
+        ctrl.pack(side=tk.RIGHT, fill="y", padx=(5, 10), pady=10)
+        ctrl.pack_propagate(False)
         self._ctrl = ctrl
+
+        hover_wrap = ttk.LabelFrame(left_tools, text="Hover Circle Tool")
+        hover_wrap.pack(fill="x")
+        tk.Checkbutton(
+            hover_wrap,
+            text="Show Hover Circle",
+            variable=self.hover_enabled,
+            command=self._toggle_hover,
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(6, 0))
+        self.radius_scale = tk.Scale(
+            hover_wrap,
+            from_=1,
+            to=300,
+            orient="horizontal",
+            label="Hover Radius",
+            variable=self.hover_radius,
+            command=self._on_radius_change,
+            font=self.dialogue_font,
+        )
+        self.radius_scale.config(state="disabled")
+        self.radius_scale.pack(fill="x", padx=6, pady=6)
+
         tk.Button(
             ctrl, text="Load Image", command=self.load_image, font=self.heading_font
         ).pack(fill="x", pady=5)
@@ -308,9 +344,6 @@ class AnnotationGUI(tk.Tk):
         quality_entry.pack(side="right", padx=(6, 0))
 
         tk.Label(ctrl, text="Landmarks:", font=self.heading_font).pack(anchor="w")
-        PANEL_WIDTH = 300
-        SCROLLBAR_WIDTH = 18
-        CANVAS_HEIGHT = 220
         self.landmark_panel_container = tk.Frame(
             ctrl, bd=1, relief="sunken", width=PANEL_WIDTH, height=CANVAS_HEIGHT
         )
@@ -355,27 +388,6 @@ class AnnotationGUI(tk.Tk):
             font=self.dialogue_font,
         ).pack(side="left", expand=True, fill="x")
         ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
-        hover_wrap = ttk.LabelFrame(ctrl, text="Hover Circle Tool")
-        hover_wrap.pack(fill="x")
-        tk.Checkbutton(
-            hover_wrap,
-            text="Show Hover Circle",
-            variable=self.hover_enabled,
-            command=self._toggle_hover,
-            font=self.dialogue_font,
-        ).pack(anchor="w", padx=6, pady=(6, 0))
-        self.radius_scale = tk.Scale(
-            hover_wrap,
-            from_=1,
-            to=300,
-            orient="horizontal",
-            label="Hover Radius",
-            variable=self.hover_radius,
-            command=self._on_radius_change,
-            font=self.dialogue_font,
-        )
-        self.radius_scale.config(state="disabled")
-        self.radius_scale.pack(fill="x", padx=6, pady=6)
         seg_wrap = ttk.LabelFrame(ctrl, text="Fill Tool (Obturator)")
         seg_wrap.pack(fill="x", pady=(8, 0))
         row1 = tk.Frame(seg_wrap)
