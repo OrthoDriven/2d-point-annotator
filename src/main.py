@@ -106,6 +106,7 @@ class AnnotationGUI(tk.Tk):
         self.base_img_item: Optional[int] = None
         self.mouse_crosshair_ids: list[int] = []
         self.last_mouse_canvas_pos: tuple[int, int] | None = None
+        self.right_mouse_held: bool = False
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.csv_loaded = False
         # Also adjust these if you want everything to match:
@@ -233,6 +234,8 @@ class AnnotationGUI(tk.Tk):
                 setattr(self, "last_mouse_canvas_pos", None),
             ),
         )
+        self.canvas.bind("<ButtonPress-3>", self._on_right_button_press)
+        self.canvas.bind("<ButtonRelease-3>", self._on_right_button_release)
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.canvas.bind("<Button-4>", lambda e: self._on_scroll_linux(1))
         self.canvas.bind("<Button-5>", lambda e: self._on_scroll_linux(-1))
@@ -1819,6 +1822,12 @@ class AnnotationGUI(tk.Tk):
         for item_id in self.mouse_crosshair_ids:
             self.canvas.delete(item_id)
         self.mouse_crosshair_ids = []
+
+    def _on_right_button_press(self, event) -> None:
+        self.right_mouse_held = True
+
+    def _on_right_button_release(self, event) -> None:
+        self.right_mouse_held = False
 
     # Deletes the hover circle if present.
     def _hide_hover_circle(self) -> None:
