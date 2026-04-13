@@ -109,10 +109,12 @@ class AnnotationGUI(tk.Tk):
         self.right_mouse_held: bool = False
         self.zoom_canvas: tk.Canvas | None = None
         self.zoom_percent = tk.IntVar(value=8)
+        self.show_selected_landmark_in_zoom: tk.BooleanVar = tk.BooleanVar(value=True)
         self.zoom_img_obj: ImageTk.PhotoImage | None = None
         self.zoom_base_item: Optional[int] = None
         self.zoom_src_rect: Tuple[float, float, float, float] | None = None
         self.zoom_crosshair_ids: list[int] = []
+        self.zoom_landmark_overlay_ids: list[int] = []
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.csv_loaded = False
         # Also adjust these if you want everything to match:
@@ -277,6 +279,13 @@ class AnnotationGUI(tk.Tk):
             command=self._on_zoom_change,
             font=self.dialogue_font,
         ).pack(fill="x", padx=6, pady=(6, 6))
+        tk.Checkbutton(
+            zoom_wrap,
+            text="Show Selected Landmark",
+            variable=self.show_selected_landmark_in_zoom,
+            command=self._refresh_zoom_landmark_overlay,
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(0, 6))
         self.after(0, self._render_black_zoom_view)
 
         hover_wrap = ttk.LabelFrame(left_tools, text="Hover Circle Tool")
@@ -580,6 +589,7 @@ class AnnotationGUI(tk.Tk):
 
         self.zoom_src_rect = None
         self._update_zoom_crosshair()
+        self._clear_zoom_landmark_overlay()
 
     def _update_zoom_view(
         self, mouse_x: Optional[float] = None, mouse_y: Optional[float] = None
@@ -643,6 +653,7 @@ class AnnotationGUI(tk.Tk):
             self.zoom_canvas.coords(self.zoom_base_item, 0, 0)
 
         self._update_zoom_crosshair()
+        self._refresh_zoom_landmark_overlay()
 
     def _on_zoom_change(self, _value) -> None:
         if self.last_mouse_canvas_pos is None:
@@ -726,6 +737,101 @@ class AnnotationGUI(tk.Tk):
         for item_id in self.zoom_crosshair_ids:
             self.zoom_canvas.delete(item_id)
         self.zoom_crosshair_ids = []
+
+    def _clear_zoom_landmark_overlay(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        for item_id in getattr(self, "zoom_landmark_overlay_ids", []):
+            try:
+                self.zoom_canvas.delete(item_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete zoom landmark overlay item: {e}")
+        self.zoom_landmark_overlay_ids = []
+
+    def _refresh_zoom_landmark_overlay(self) -> None:
+        self._clear_zoom_landmark_overlay()
+
+        if self.zoom_canvas is None:
+            return
+        if not self.show_selected_landmark_in_zoom.get():
+            return
+        if self.current_image is None or self.current_image_path is None:
+            return
+        if self.zoom_src_rect is None:
+            return
+
+        lm = self.selected_landmark.get().strip()
+        if not lm:
+            return
+
+        pts, _quality = self._get_annotations()
+        size = self._get_zoom_canvas_size()
+        if size <= 1:
+            return
+
+        src_left, src_top, src_right, src_bottom = self.zoom_src_rect
+        src_w = src_right - src_left
+        src_h = src_bottom - src_top
+        if abs(src_w) < 1e-12 or abs(src_h) < 1e-12:
+            return
+
+        def img_to_zoom(px: float, py: float) -> Tuple[float, float]:
+            zx = ((float(px) - src_left) / src_w) * size
+            zy = ((float(py) - src_top) / src_h) * size
+            return zx, zy
+
+        overlay_ids: list[int] = []
+
+        if lm not in pts:
+            return
+
+        px, py = pts[lm]
+        zx, zy = img_to_zoom(px, py)
+
+        r = 7
+        circle_id = self.zoom_canvas.create_oval(
+            zx - r,
+            zy - r,
+            zx + r,
+            zy + r,
+            outline="cyan",
+            width=2,
+            tags="zoom_landmark_overlay",
+        )
+        hline_id = self.zoom_canvas.create_line(
+            zx - r,
+            zy,
+            zx + r,
+            zy,
+            fill="cyan",
+            width=1,
+            tags="zoom_landmark_overlay",
+        )
+        vline_id = self.zoom_canvas.create_line(
+            zx,
+            zy - r,
+            zx,
+            zy + r,
+            fill="cyan",
+            width=1,
+            tags="zoom_landmark_overlay",
+        )
+        overlay_ids.extend([circle_id, hline_id, vline_id])
+
+        self.zoom_landmark_overlay_ids = overlay_ids
+
+        for item_id in self.zoom_landmark_overlay_ids:
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
+
+        for item_id in getattr(self, "zoom_crosshair_ids", []):
+            try:
+                self.zoom_canvas.tag_raise(item_id)
+            except Exception:
+                pass
 
     # Builds the landmark selection table with visibility and status controls.
 
@@ -882,6 +988,7 @@ class AnnotationGUI(tk.Tk):
         lm = self.selected_landmark.get()
         self._apply_settings_to_ui_for(lm)
         self._draw_points()
+        self._refresh_zoom_landmark_overlay()
         self.after_idle(self._scroll_landmark_into_view, lm)
 
     def _change_selected_landmark(self, step: int) -> None:
@@ -2169,6 +2276,7 @@ class AnnotationGUI(tk.Tk):
         if lm in self.landmark_found:
             self.landmark_found[lm].set(True)
         self._draw_points()
+        self._refresh_zoom_landmark_overlay()
         self.dirty = True
         if lm in ("LOB", "ROB"):
             if cv2 is None:
@@ -2201,6 +2309,7 @@ class AnnotationGUI(tk.Tk):
             del self.annotations[str(self.current_image_path)][lm]
 
         self._draw_points()
+        self._refresh_zoom_landmark_overlay()
         self.dirty = True
         if lm in ("LOB", "ROB"):
             if cv2 is None:
