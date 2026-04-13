@@ -83,9 +83,23 @@ class AnnotationGUI(tk.Tk):
         self.path_var = tk.StringVar(value="No image loaded")
         self.quality_var = tk.StringVar(value="N/A")
         self.selected_landmark = tk.StringVar(value="")
+        self.current_view_var = tk.StringVar(value="")
         self.landmark_visibility: Dict[str, tk.BooleanVar] = {}
         self.landmark_found = {}
         self.annotations: Dict[str, Dict[str, AnnotationValue]] = {}
+        self.landmarks: List[str] = []
+        self.images: List[Path] = []
+        self.image_index_map: Dict[str, int] = {}
+        self.current_image_index: int = -1
+        self.json_path: Optional[Path] = None
+        self.json_dir: Optional[Path] = None
+        self.json_data: Dict = {"landmarks": [], "views": {}, "images": []}
+        self.allowed_views: Dict[str, List[str]] = {}
+        self.landmark_meta: Dict[str, Dict[str, Dict[str, Union[bool, str]]]] = {}
+        self.saved_image_snapshots: Dict[str, str] = {}
+        self._suspend_image_tree_select = False
+        self._navigation_in_progress = False
+        self.current_image_flag = False
         self.line_landmarks: Set[str] = {"L-FA", "R-FA"}
         self.current_image: Image.Image | None = None
         self.current_image_path: Path | None = None
@@ -142,7 +156,6 @@ class AnnotationGUI(tk.Tk):
         # Already configured above to match heading_font
         self._setup_ui()
         self.after(0, self._lock_initial_minsize)
-        self.landmarks = []
         self.unbind("<Up>")
         self.unbind("<Down>")
         self.bind("<Up>", self._on_arrow_up)
@@ -239,6 +252,284 @@ class AnnotationGUI(tk.Tk):
                 # Silently return False if we can't check - non-critical operation
                 return False
         return False
+
+    def _resolve_image_path(self, raw_path: str) -> Path:
+        path = Path(raw_path)
+        if path.is_absolute():
+            return path.resolve()
+        if self.json_dir is not None:
+            return (self.json_dir / path).resolve()
+        return path.resolve()
+
+    def _path_key(self, path: Union[str, Path]) -> str:
+        return str(Path(path).resolve())
+
+    def _get_current_image_record(self) -> Optional[Dict]:
+        if self.current_image_path is None:
+            return None
+        idx = self.image_index_map.get(self._path_key(self.current_image_path))
+        if idx is None:
+            return None
+        images = self.json_data.get("images", [])
+        if not isinstance(images, list) or idx >= len(images):
+            return None
+        record = images[idx]
+        return record if isinstance(record, dict) else None
+
+    def _sync_current_state_to_json_record(self) -> None:
+        record = self._get_current_image_record()
+        if record is None or self.current_image_path is None:
+            return
+
+        record["image_flag"] = bool(self.current_image_flag)
+        record["view"] = self.current_view_var.get().strip() or None
+        record["annotations"] = self._prepare_landmark_data(for_json=True)
+
+        key = self._path_key(self.current_image_path)
+        record["resolved_image_path"] = key
+        self.annotations[key] = self._parse_annotations_for_record(record)
+
+    def _save_json_file(self, show_success: bool = False) -> bool:
+        if self.json_path is None:
+            messagebox.showwarning("Save", "No JSON data file loaded.")
+            return False
+
+        try:
+            self._sync_current_state_to_json_record()
+
+            images_to_save: List[Dict] = []
+            save_data = {
+                "landmarks": list(self.json_data.get("landmarks", [])),
+                "views": dict(self.allowed_views),
+                "images": images_to_save,
+            }
+
+            for record in self.json_data.get("images", []):
+                if not isinstance(record, dict):
+                    continue
+                clean = dict(record)
+                clean.pop("resolved_image_path", None)
+                images_to_save.append(clean)
+
+            tmp_path = self.json_path.with_suffix(self.json_path.suffix + ".tmp")
+            with tmp_path.open("w", encoding="utf-8") as handle:
+                json.dump(save_data, handle, indent=2)
+            tmp_path.replace(self.json_path)
+
+            self._refresh_saved_snapshot_for_current_image()
+            self.dirty = False
+
+            if show_success:
+                messagebox.showinfo("Saved", "Annotations saved to JSON.")
+            return True
+        except Exception as e:
+            messagebox.showerror("Save Error", f"Failed to save JSON:\n{e}")
+            return False
+
+    def _parse_annotations_for_record(self, record: Dict) -> Dict[str, AnnotationValue]:
+        pts: Dict[str, AnnotationValue] = {}
+        annotations = record.get("annotations", {}) or {}
+        per_img_settings: Dict[str, Dict] = {}
+        per_img_meta: Dict[str, Dict[str, Union[bool, str]]] = {}
+
+        for lm in self.landmarks:
+            raw = annotations.get(lm)
+            if raw is None:
+                continue
+
+            if isinstance(raw, dict):
+                val = raw.get("value")
+                per_img_meta[lm] = {
+                    "flag": bool(raw.get("flag", False)),
+                    "note": str(raw.get("note", "")),
+                }
+            else:
+                val = raw
+                per_img_meta[lm] = {"flag": False, "note": ""}
+
+            if val is None:
+                continue
+
+            if self._is_line_landmark(lm):
+                if isinstance(val, list):
+                    line_pts: List[Tuple[float, float]] = []
+                    for point in val:
+                        if isinstance(point, (list, tuple)) and len(point) >= 2:
+                            try:
+                                line_pts.append((float(point[0]), float(point[1])))
+                            except (TypeError, ValueError):
+                                continue
+                    if line_pts:
+                        pts[lm] = line_pts[:2]
+                continue
+
+            if isinstance(val, (list, tuple)) and len(val) >= 2:
+                try:
+                    pts[lm] = (float(val[0]), float(val[1]))
+                except (TypeError, ValueError):
+                    continue
+
+                if lm in ("LOB", "ROB") and len(val) >= 8:
+                    method_code = str(val[2])
+                    per_img_settings[lm] = {
+                        "method": "Flood Fill"
+                        if method_code in ("FF", "Flood Fill")
+                        else "Adaptive CC",
+                        "sens": int(val[3]),
+                        "edge_lock": int(val[4]),
+                        "edge_width": int(val[5]),
+                        "clahe": int(val[6]),
+                        "grow": int(val[7]),
+                    }
+
+        if self.current_image_path is not None:
+            key = self._path_key(self.current_image_path)
+            self.lm_settings[key] = per_img_settings
+            self.landmark_meta[key] = per_img_meta
+
+        return pts
+
+    def load_data(self) -> None:
+        if not self._maybe_save_before_destructive_action("load another data file"):
+            return
+
+        json_file = filedialog.askopenfilename(
+            initialdir=BASE_DIR,
+            filetypes=[("JSON File", "*.json")],
+            title="Load annotation data JSON",
+        )
+        if not json_file:
+            return
+
+        try:
+            json_path = Path(json_file)
+            with json_path.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except Exception as e:
+            messagebox.showerror("Load Data", f"Failed to read JSON:\n{e}")
+            return
+
+        landmarks = data.get("landmarks")
+        views = data.get("views")
+        images = data.get("images")
+
+        if not isinstance(landmarks, list) or not all(
+            isinstance(name, str) and name.strip() for name in landmarks
+        ):
+            messagebox.showerror(
+                "Load Data", 'JSON must contain a "landmarks" list of names.'
+            )
+            return
+
+        if not isinstance(views, dict) or not views:
+            messagebox.showerror(
+                "Load Data", 'JSON must contain a non-empty "views" mapping.'
+            )
+            return
+
+        if not isinstance(images, list):
+            messagebox.showerror("Load Data", 'JSON must contain an "images" list.')
+            return
+
+        allowed_views: Dict[str, List[str]] = {}
+        for view_name, landmark_list in views.items():
+            if not isinstance(view_name, str) or not view_name.strip():
+                messagebox.showerror(
+                    "Load Data", "All view names must be non-empty strings."
+                )
+                return
+            if not isinstance(landmark_list, list) or not all(
+                isinstance(name, str) for name in landmark_list
+            ):
+                messagebox.showerror(
+                    "Load Data",
+                    f'View "{view_name}" must map to a list of landmark names.',
+                )
+                return
+            allowed_views[view_name] = list(landmark_list)
+
+        self.json_path = json_path
+        self.json_dir = json_path.parent
+        self.allowed_views = allowed_views
+        self.json_data = {
+            "landmarks": list(landmarks),
+            "views": dict(self.allowed_views),
+            "images": [],
+        }
+        self.landmarks = list(landmarks)
+        self.images = []
+        self.image_index_map = {}
+        self.current_image_index = -1
+        self.saved_image_snapshots = {}
+        self.annotations.clear()
+        self.lm_settings.clear()
+        self.landmark_meta.clear()
+        self.seg_masks.clear()
+        self.last_seed.clear()
+        self.queue_mode = False
+        self.check_csv_mode = False
+
+        missing: List[str] = []
+        for idx, raw_record in enumerate(images):
+            if not isinstance(raw_record, dict):
+                missing.append(f"images[{idx}] is not an object")
+                continue
+            if "image_path" not in raw_record:
+                missing.append(f"images[{idx}] is missing image_path")
+                continue
+
+            resolved = self._resolve_image_path(str(raw_record["image_path"]))
+            record = dict(raw_record)
+            record.setdefault("image_flag", False)
+            record.setdefault("view", None)
+            record.setdefault("annotations", {})
+            record["resolved_image_path"] = str(resolved)
+            self.json_data["images"].append(record)
+
+            if not resolved.exists():
+                missing.append(str(resolved))
+                continue
+
+            key = self._path_key(resolved)
+            self.images.append(resolved)
+            self.image_index_map[key] = len(self.json_data["images"]) - 1
+
+        self._build_landmark_panel()
+
+        if missing:
+            preview = "\n".join(missing[:15])
+            more = "" if len(missing) <= 15 else f"\n... and {len(missing) - 15} more"
+            messagebox.showwarning(
+                "Missing image paths",
+                "Some image paths from the JSON could not be found:\n\n"
+                f"{preview}{more}",
+            )
+
+        if not self.images:
+            self.current_image = None
+            self.current_image_path = None
+            self.absolute_current_image_path = None
+            self.current_image_index = -1
+            self.current_image_flag = False
+            self.path_var.set("No valid images found in JSON")
+            self.quality_var.set("0")
+            self.current_view_var.set("")
+            self.canvas.delete("all")
+            self._render_black_zoom_view()
+            self.dirty = False
+            return
+
+        self.current_image_index = 0
+        self.load_image_from_path(self.images[0])
+
+        if self.landmarks:
+            self.selected_landmark.set(self.landmarks[0])
+            self._on_landmark_selected()
+
+        for image_path in self.images:
+            self.saved_image_snapshots[self._path_key(image_path)] = (
+                self._canonical_image_state_for_path(image_path)
+            )
 
     def _setup_ui(self) -> None:
         PANEL_WIDTH = 450
@@ -391,6 +682,9 @@ class AnnotationGUI(tk.Tk):
         self.crosshair_length_scale.pack(fill="x", padx=6, pady=6)
 
         tk.Button(
+            ctrl, text="Load Data", command=self.load_data, font=self.heading_font
+        ).pack(fill="x", pady=5)
+        tk.Button(
             ctrl, text="Load Image", command=self.load_image, font=self.heading_font
         ).pack(fill="x", pady=5)
         tk.Button(
@@ -408,12 +702,7 @@ class AnnotationGUI(tk.Tk):
             command=self.save_annotations,
             font=self.heading_font,
         ).pack(fill="x", pady=5)
-        tk.Button(
-            ctrl,
-            text="Load CSV",
-            command=self.load_landmarks_from_csv,
-            font=self.heading_font,
-        ).pack(fill="x", pady=5)
+
         img_frame = ttk.LabelFrame(ctrl, text="Image + Quality")
         img_frame.pack(fill="x", pady=(10, 10))
 
@@ -1580,12 +1869,24 @@ class AnnotationGUI(tk.Tk):
 
     def load_landmarks_from_csv(self, path: Optional[Union[Path, str]] = None) -> None:
         if path is None:
-            self._maybe_save_before_destructive_action("load point name CSV")
+            if not self._maybe_save_before_destructive_action("load point name CSV"):
+                return
             self.abs_csv_path = filedialog.askopenfilename(
                 initialdir=BASE_DIR, filetypes=[("CSV File", ("*.csv"))]
             )
         else:
             self.abs_csv_path = str(path)
+
+        self.json_path = None
+        self.json_dir = None
+        self.json_data = {"landmarks": [], "views": {}, "images": []}
+        self.allowed_views = {}
+        self.images = []
+        self.image_index_map = {}
+        self.current_image_index = -1
+        self.saved_image_snapshots.clear()
+        self.current_view_var.set("")
+        self.current_image_flag = False
 
         isolated_data_path = Path(BASE_DIR.parent / "data")
         db_name = extract_filename(Path(self.abs_csv_path).with_suffix(".db"))
@@ -1720,21 +2021,34 @@ class AnnotationGUI(tk.Tk):
             )
 
     # Prompts to save pending changes before destructive operations.
-    def _maybe_save_before_destructive_action(self, why: str = "continue") -> None:
-        if not self.current_image_path or not self.dirty:
-            return
-        if messagebox.askyesno(
+    def _maybe_save_before_destructive_action(self, why: str = "continue") -> bool:
+        if not self.current_image_path:
+            return True
+
+        has_unsaved_changes = (
+            self._current_image_has_unsaved_changes()
+            if self.json_path is not None
+            and self._get_current_image_record() is not None
+            else self.dirty
+        )
+
+        if not has_unsaved_changes:
+            return True
+
+        should_save = messagebox.askyesno(
             "Unsaved annotations",
             "You have unsaved annotation changes for this image.\n"
             f"Do you want to save before you {why}?",
-        ):
-            self.save_annotations()
-        else:
-            self.dirty = False
+        )
+        if should_save:
+            return self.save_annotations()
+
+        return True
 
     # Handles window close, offering to save unsaved annotations.
     def _on_close(self) -> None:
-        self._maybe_save_before_destructive_action("exit")
+        if not self._maybe_save_before_destructive_action("exit"):
+            return
         self.window_close_flag = True
         if self.db_path is not None:
             self._export_db_to_csv()
@@ -1742,15 +2056,16 @@ class AnnotationGUI(tk.Tk):
 
     # Opens an image, prepares canvas, and loads saved points.
     def load_image(self) -> None:
-        self._maybe_save_before_destructive_action("load another image")
+        if not self._maybe_save_before_destructive_action("load another image"):
+            return
         abs_path = filedialog.askopenfilename(
             initialdir=BASE_DIR,
             filetypes=[("Image files", ("*.png", "*.jpg", "*.jpeg", "*.bmp", ".tif"))],
         )
-        self.absolute_current_image_path = Path(abs_path)
         if not abs_path:
             return
 
+        self.absolute_current_image_path = Path(abs_path)
         self.load_image_from_path(Path(abs_path))
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
@@ -1792,6 +2107,26 @@ class AnnotationGUI(tk.Tk):
         return idx, all_files
 
     def _next_image(self) -> None:
+        if self.json_path is not None and self.images:
+            if self.current_image_index >= len(self.images) - 1:
+                messagebox.showwarning(
+                    "End of List", "You have reached the last image in the JSON."
+                )
+                return
+
+            if not self._maybe_save_before_destructive_action("switch images"):
+                return
+
+            self._navigation_in_progress = True
+            self._suspend_image_tree_select = True
+            try:
+                self.current_image_index += 1
+                self.load_image_from_path(self.images[self.current_image_index])
+            finally:
+                self._navigation_in_progress = False
+                self._suspend_image_tree_select = False
+            return
+
         # Loads the next image in the current directory
         # self._maybe_save_before_destructive_action("load next image")
         self.save_annotations()
@@ -1837,6 +2172,26 @@ class AnnotationGUI(tk.Tk):
                 self.load_image_from_path(Path(self.absolute_current_image_path))
 
     def _prev_image(self) -> None:
+        if self.json_path is not None and self.images:
+            if self.current_image_index <= 0:
+                messagebox.showwarning(
+                    "Beginning of List", "You are at the first image in the JSON."
+                )
+                return
+
+            if not self._maybe_save_before_destructive_action("switch images"):
+                return
+
+            self._navigation_in_progress = True
+            self._suspend_image_tree_select = True
+            try:
+                self.current_image_index -= 1
+                self.load_image_from_path(self.images[self.current_image_index])
+            finally:
+                self._navigation_in_progress = False
+                self._suspend_image_tree_select = False
+            return
+
         # Loads the next image in the current directory
         # self._maybe_save_before_destructive_action("load next image")
         self.save_annotations()
@@ -1945,21 +2300,54 @@ class AnnotationGUI(tk.Tk):
             messagebox.showerror("Load Image", f"Failed to open image:\n{e}")
             return
 
-        # rel_path = os.path.relpath(path, BASE_DIR)
-        rel_path = PurePath(path.resolve()).relative_to(
-            BASE_DIR.resolve(), walk_up=True
-        )
-        self.current_image_path = Path(rel_path)
-        image_filename = PurePath(rel_path).name
+        json_record_loaded = self.json_path is not None and self.images
+        if json_record_loaded:
+            resolved_path = path.resolve()
+            self.current_image_path = resolved_path
+            self.absolute_current_image_path = resolved_path
+            self.current_image_index = (
+                self.images.index(resolved_path) if resolved_path in self.images else -1
+            )
+            key = self._path_key(resolved_path)
+            record = self._get_current_image_record()
+            if record is not None:
+                self.current_image_flag = bool(record.get("image_flag", False))
+                self.annotations[key] = self._parse_annotations_for_record(record)
+            else:
+                self.current_image_flag = False
+                self.annotations[key] = {}
+                self.landmark_meta[key] = {}
+            self.current_image_quality = 0
+            self.current_view_var.set(str(record.get("view") or "") if record else "")
+        else:
+            rel_path = PurePath(path.resolve()).relative_to(
+                BASE_DIR.resolve(), walk_up=True
+            )
+            self.current_image_path = Path(rel_path)
+            self.absolute_current_image_path = path.resolve()
+            self.current_image_flag = False
+            self.current_view_var.set("")
+
         w, h = self.current_image.size
         self.canvas.config(width=w, height=h)
         self.canvas.delete("all")
         self.base_img_item = None
         self._remove_all_overlays()
         self.last_seed.clear()
-        self.lm_settings.setdefault(str(self.current_image_path), {})
-        self.annotations.setdefault(str(self.current_image_path), {})
-        self.load_points(show_message=False)
+        self._clear_line_preview()
+        self._clear_femoral_axis_overlay()
+
+        current_key = (
+            self._path_key(self.current_image_path)
+            if json_record_loaded and self.current_image_path is not None
+            else str(self.current_image_path)
+        )
+        self.lm_settings.setdefault(current_key, {})
+        self.annotations.setdefault(current_key, {})
+
+        if not json_record_loaded:
+            self.load_points(show_message=False)
+
         self._render_base_image()
         self.extended_crosshair_ids = []
         self.zoom_extended_crosshair_ids = []
@@ -1969,52 +2357,148 @@ class AnnotationGUI(tk.Tk):
         self._hide_zoom_extended_crosshair()
         self.dirty = False
         self._update_path_var()
+        self.dirty = False
 
         if self.landmarks:
             self.selected_landmark.set(self.landmarks[0])
 
+        pts, _quality = self._get_annotations()
+        self._update_found_checks(pts)
         self._draw_points()
 
-    def _prepare_landmark_data(self) -> dict:
-        """Prepare landmark data dict for database storage."""
-        pts, quality = self._get_annotations()
-        per_img_settings = self.lm_settings.get(str(self.current_image_path), {})
+        if json_record_loaded:
+            self._refresh_saved_snapshot_for_current_image()
+
+    def _prepare_landmark_data(self, for_json: Optional[bool] = None) -> dict:
+        """Prepare landmark data for JSON or legacy database storage."""
+        pts, _quality = self._get_annotations()
+        key = (
+            self._path_key(self.current_image_path)
+            if self.json_path is not None and self.current_image_path is not None
+            else str(self.current_image_path)
+        )
+        per_img_settings = self.lm_settings.get(key, {})
+        per_img_meta = self.landmark_meta.get(key, {})
+        use_json_format = self.json_path is not None if for_json is None else for_json
 
         landmark_data = {}
+        all_landmarks = set(pts.keys()) | set(per_img_meta.keys())
+
         for lm in self.landmarks:
+            if use_json_format and lm not in all_landmarks:
+                continue
+            if not use_json_format and lm not in pts:
+                continue
+
+            meta = per_img_meta.get(lm, {})
+            is_flagged = bool(meta.get("flag", False))
+            note = str(meta.get("note", ""))
+
+            value = None
             if lm in pts:
                 if self._is_line_landmark(lm):
                     line_pts = self._get_line_points(lm)
                     if line_pts:
-                        landmark_data[lm] = [[float(x), float(y)] for x, y in line_pts]
-                    continue
-
-                point = pts[lm]
-                if not (
-                    isinstance(point, tuple)
-                    and len(point) == 2
-                    and all(isinstance(v, (int, float)) for v in point)
-                ):
-                    continue
-
-                x, y = point
-                if lm in ("LOB", "ROB"):
-                    st = per_img_settings.get(lm, self._current_settings_dict())
-                    method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
-                    landmark_data[lm] = [
-                        float(x),
-                        float(y),
-                        method_code,
-                        int(st["sens"]),
-                        int(st["edge_lock"]),
-                        int(st["edge_width"]),
-                        int(st["clahe"]),
-                        int(st["grow"]),
-                    ]
+                        value = [[float(x), float(y)] for x, y in line_pts]
                 else:
-                    landmark_data[lm] = [float(x), float(y)]
+                    point = pts[lm]
+                    if not (
+                        isinstance(point, tuple)
+                        and len(point) == 2
+                        and all(isinstance(v, (int, float)) for v in point)
+                    ):
+                        continue
+
+                    x, y = point
+                    if lm in ("LOB", "ROB"):
+                        st = per_img_settings.get(lm, self._current_settings_dict())
+                        method_code = "FF" if st["method"] == "Flood Fill" else "ACC"
+                        value = [
+                            float(x),
+                            float(y),
+                            method_code,
+                            int(st["sens"]),
+                            int(st["edge_lock"]),
+                            int(st["edge_width"]),
+                            int(st["clahe"]),
+                            int(st["grow"]),
+                        ]
+                    else:
+                        value = [float(x), float(y)]
+
+            if use_json_format:
+                if value is None and not is_flagged and not note.strip():
+                    continue
+                landmark_data[lm] = {
+                    "value": value,
+                    "flag": is_flagged,
+                    "note": note,
+                }
+            elif value is not None:
+                landmark_data[lm] = value
 
         return landmark_data
+
+    def _canonical_image_state_for_path(self, image_path: Path) -> str:
+        key = self._path_key(image_path)
+        idx = self.image_index_map.get(key)
+        if idx is None:
+            return ""
+
+        record = self.json_data["images"][idx]
+        state = {
+            "image_path": record.get("image_path"),
+            "image_flag": bool(record.get("image_flag", False)),
+            "view": record.get("view"),
+            "annotations": record.get("annotations", {}) or {},
+        }
+        return json.dumps(state, sort_keys=True, separators=(",", ":"))
+
+    def _current_image_state_string(self) -> str:
+        if self.current_image_path is None:
+            return ""
+
+        record = self._get_current_image_record()
+        state = {
+            "image_path": record.get("image_path")
+            if record
+            else str(self.current_image_path),
+            "image_flag": bool(self.current_image_flag),
+            "view": self.current_view_var.get().strip() or None,
+            "annotations": self._prepare_landmark_data(for_json=True),
+        }
+        return json.dumps(state, sort_keys=True, separators=(",", ":"))
+
+    def _refresh_saved_snapshot_for_current_image(self) -> None:
+        if self.current_image_path is None:
+            return
+        self.saved_image_snapshots[self._path_key(self.current_image_path)] = (
+            self._canonical_image_state_for_path(self.current_image_path)
+        )
+
+    def _current_image_has_unsaved_changes(self) -> bool:
+        if self.current_image_path is None:
+            return False
+
+        key = self._path_key(self.current_image_path)
+        current_state = self._current_image_state_string()
+        saved_state = self.saved_image_snapshots.get(key)
+        if saved_state is None:
+            saved_state = self._canonical_image_state_for_path(self.current_image_path)
+            self.saved_image_snapshots[key] = saved_state
+        return current_state != saved_state
+
+    def _maybe_autosave_current_image(self) -> bool:
+        self.dirty = True
+
+        autosave_var = getattr(self, "autosave_var", None)
+        if autosave_var is not None and bool(autosave_var.get()):
+            ok = self._save_json_file(show_success=False)
+            if ok:
+                self.dirty = False
+            return ok
+
+        return True
 
     def _auto_save_to_db(self) -> bool:
         """
@@ -2068,14 +2552,16 @@ class AnnotationGUI(tk.Tk):
             return False
 
     # Writes annotations (and LOB/ROB settings) back to the CSV.
-    def save_annotations(self) -> None:
-        """Save to database, then export to CSV."""
+    def save_annotations(self) -> bool:
+        """Save annotations. JSON is the primary format; SQLite/CSV kept for backup."""
         if not self.current_image_path:
             messagebox.showwarning("Save", "No image loaded.")
-            return
+            return False
+
+        return self._save_json_file(show_success=(PLATFORM == "Windows"))
 
         # Get annotation data
-        pts, quality = self._get_annotations()
+        _pts, quality = self._get_annotations()
         landmark_data = self._prepare_landmark_data()
 
         # Save to database with error handling
@@ -2106,13 +2592,13 @@ class AnnotationGUI(tk.Tk):
                 "Database Error",
                 f"Failed to save annotations to database:\n{e}",
             )
-            return
+            return False
         except Exception as e:
             messagebox.showerror(
                 "Save Error",
                 f"Unexpected error while saving:\n{e}",
             )
-            return
+            return False
 
         # Export to CSV (periodic, not every save)
         self._export_db_to_csv()
@@ -2120,6 +2606,7 @@ class AnnotationGUI(tk.Tk):
         self.dirty = False
         if PLATFORM == "Windows":
             messagebox.showinfo("Saved", "Annotations saved")
+        return True
 
     def _init_onedrive_credentials(self) -> None:
         """
@@ -2336,11 +2823,14 @@ class AnnotationGUI(tk.Tk):
         """Returns (points_dict, quality) for current image."""
         if self.current_image_path is not None:
             current_filename = PurePath(self.current_image_path).name
-            # Try exact match first
-            key = str(self.current_image_path)
-            if key in self.annotations:
-                quality = self.current_image_quality  # Already loaded
-                return self.annotations[key], quality
+            keys_to_try = [str(self.current_image_path)]
+            if self.json_path is not None:
+                keys_to_try.insert(0, self._path_key(self.current_image_path))
+
+            for key in keys_to_try:
+                if key in self.annotations:
+                    quality = self.current_image_quality
+                    return self.annotations[key], quality
 
             # Fallback: match by filename
             for key in self.annotations.keys():
