@@ -238,7 +238,7 @@ def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
     if AUTH_RECORD_PATH.exists():
         try:
             record = AuthenticationRecord.deserialize(AUTH_RECORD_PATH.read_text())
-            print("[OneDrive] Loaded existing auth record")
+            logger.info("Loaded existing auth record")
         except Exception as e:
             logger.warning(f"Failed to load auth record: {e}")
             record = None
@@ -258,30 +258,30 @@ def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
 
     # Always try to get a token to verify/refresh credentials
     try:
-        print("[OneDrive] Verifying/refreshing token...")
+        logger.info("Verifying/refreshing token...")
         token = credential.get_token(*SCOPES)
-        print(f"[OneDrive] Token acquired (expires: {token.expires_on})")
+        logger.info("Token acquired (expires: %s)", token.expires_on)
 
         # If we didn't have a record before, save one now
         if record is None:
-            print("[OneDrive] No auth record existed, creating one...")
+            logger.info("No auth record existed, creating one...")
             record = credential.authenticate(scopes=SCOPES)
             AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
             AUTH_RECORD_PATH.write_text(record.serialize())
             _close_auth_dialog()
-            print("[OneDrive] Auth record saved")
+            logger.info("Auth record saved")
 
     except Exception as token_error:
-        print(f"[OneDrive] Token acquisition failed: {token_error}")
-        print("[OneDrive] Re-authenticating with device code...")
+        logger.warning("Token acquisition failed: %s", token_error)
+        logger.info("Re-authenticating with device code...")
         record = credential.authenticate(scopes=SCOPES)
         AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
         AUTH_RECORD_PATH.write_text(record.serialize())
         _close_auth_dialog()
-        print("[OneDrive] Re-authentication successful, saved new auth record")
+        logger.info("Re-authentication successful, saved new auth record")
 
     client = GraphServiceClient(credentials=credential, scopes=SCOPES)
-    print("[OneDrive] Client created successfully")
+    logger.info("Client created successfully")
     return client
 
 
@@ -313,12 +313,11 @@ class OneDriveBackup:
                 self._client = get_graph_client()
                 self._credential = None  # credential is managed by get_graph_client
                 self._initialized = True
-                print("[OneDrive] Initialization complete")
+                logger.info("Initialization complete")
                 return True
 
             except Exception as e:
-                logger.error(f"Failed to initialize OneDrive client: {e}")
-                print(f"[OneDrive] Initialization failed: {e}")
+                logger.error("Failed to initialize OneDrive client: %s", e)
                 return False
 
     async def _ensure_folder_exists(self, folder_path: str) -> bool:
@@ -460,7 +459,7 @@ class OneDriveBackup:
         # try to access the token cache simultaneously
         with self._lock:
             try:
-                print("[OneDrive] Creating fresh client for this thread...")
+                logger.info("Creating fresh client for this thread...")
 
                 # Load cached auth record
                 record = None
@@ -470,12 +469,12 @@ class OneDriveBackup:
                             AUTH_RECORD_PATH.read_text()
                         )
                     except Exception as e:
-                        print(f"[OneDrive] Failed to load auth record: {e}")
+                        logger.warning("Failed to load auth record: %s", e)
                         return None
 
                 if record is None:
-                    print(
-                        "[OneDrive] No auth record found - user needs to authenticate first"
+                    logger.warning(
+                        "No auth record found - user needs to authenticate first"
                     )
                     return None
 
@@ -497,11 +496,11 @@ class OneDriveBackup:
                 )
 
                 client = GraphServiceClient(credentials=credential, scopes=SCOPES)
-                print("[OneDrive] Fresh client created successfully")
+                logger.info("Fresh client created successfully")
                 return client
 
             except Exception as e:
-                print(f"[OneDrive] Failed to create fresh client: {e}")
+                logger.error("Failed to create fresh client: %s", e)
                 return None
 
     def upload_backup_sync(self, file_path: str | Path, timeout: float = 30.0) -> bool:
@@ -519,31 +518,31 @@ class OneDriveBackup:
         """
         path = Path(file_path)
         if not path.exists():
-            print(f"[OneDrive] File does not exist: {path}")
+            logger.warning("File does not exist: %s", path)
             return False
 
-        print(f"[OneDrive] Starting sync upload: {path.name}")
+        logger.info("Starting sync upload: %s", path.name)
 
         try:
             client = self._create_fresh_client()
             if not client:
-                print("[OneDrive] No client available, skipping upload")
+                logger.warning("No client available, skipping upload")
                 return False
 
             loop = asyncio.SelectorEventLoop()
 
             async def do_upload():
-                print(f"[OneDrive] Reading file: {path.name}")
+                logger.info("Reading file: %s", path.name)
                 with open(path, "rb") as f:
                     file_content = f.read()
-                print(f"[OneDrive] File size: {len(file_content)} bytes")
+                logger.info("File size: %d bytes", len(file_content))
 
                 username = get_safe_username()
                 date_folder = get_date_folder()
                 remote_folder = f"{BASE_BACKUP_FOLDER}/{username}/{date_folder}"
                 drive_item_path = f"root:/{remote_folder}/{path.name}:"
 
-                print(f"[OneDrive] Uploading to: {drive_item_path}")
+                logger.info("Uploading to: %s", drive_item_path)
 
                 uploaded_file = await (
                     client.drives.by_drive_id(SHAREPOINT_DRIVE_ID)
@@ -551,30 +550,26 @@ class OneDriveBackup:
                     .content.put(file_content)
                 )
 
-                print(
-                    f"[OneDrive] Upload complete: {uploaded_file.name if uploaded_file else 'unknown'}"
+                logger.info(
+                    "Upload complete: %s",
+                    uploaded_file.name if uploaded_file else "unknown",
                 )
                 return uploaded_file is not None
 
-            print(f"[OneDrive] Running upload with {timeout}s timeout...")
+            logger.info("Running upload with %.1fs timeout...", timeout)
             coro = asyncio.wait_for(do_upload(), timeout=timeout)
             try:
                 success = loop.run_until_complete(coro)
             finally:
                 loop.close()
-            print(
-                f"[OneDrive] Sync upload result: {'success' if success else 'failed'}"
-            )
+            logger.info("Sync upload result: %s", "success" if success else "failed")
             return success
 
         except asyncio.TimeoutError:
-            print(f"[OneDrive] Upload timed out after {timeout}s for {path}")
+            logger.warning("Upload timed out after %.1fs for %s", timeout, path)
             return False
         except Exception as e:
-            print(f"[OneDrive] Sync backup error: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.error("Sync backup error: %s", e, exc_info=True)
             return False
 
     def backup_multiple(
