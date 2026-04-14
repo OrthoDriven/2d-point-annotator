@@ -207,6 +207,84 @@ def get_date_folder() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
+def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
+    """
+    Create an authenticated Graph client, triggering device-code auth if needed.
+
+    Reuses cached credentials from AUTH_RECORD_PATH. If no cached credentials
+    exist or they've expired beyond refresh, triggers the device-code flow.
+
+    Parameters
+    ----------
+    prompt_callback_fn : callable, optional
+        Custom callback for device-code prompts. Defaults to the module's
+        _prompt_callback (which shows the Tkinter dialog).
+
+    Returns
+    -------
+    GraphServiceClient
+        An authenticated client ready for API calls.
+
+    Raises
+    ------
+    Exception
+        If authentication fails completely.
+    """
+    if prompt_callback_fn is None:
+        prompt_callback_fn = _prompt_callback
+
+    # Load cached auth record if exists
+    record = None
+    if AUTH_RECORD_PATH.exists():
+        try:
+            record = AuthenticationRecord.deserialize(AUTH_RECORD_PATH.read_text())
+            print("[OneDrive] Loaded existing auth record")
+        except Exception as e:
+            logger.warning(f"Failed to load auth record: {e}")
+            record = None
+
+    # Setup credential with token cache
+    cache_opts = TokenCachePersistenceOptions(
+        name="onedrive-ml", allow_unencrypted_storage=True
+    )
+
+    credential = DeviceCodeCredential(
+        client_id=CLIENT_ID,
+        tenant_id=TENANT_ID,
+        cache_persistence_options=cache_opts,
+        authentication_record=record,
+        prompt_callback=prompt_callback_fn,
+    )
+
+    # Always try to get a token to verify/refresh credentials
+    try:
+        print("[OneDrive] Verifying/refreshing token...")
+        token = credential.get_token(*SCOPES)
+        print(f"[OneDrive] Token acquired (expires: {token.expires_on})")
+
+        # If we didn't have a record before, save one now
+        if record is None:
+            print("[OneDrive] No auth record existed, creating one...")
+            record = credential.authenticate(scopes=SCOPES)
+            AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
+            AUTH_RECORD_PATH.write_text(record.serialize())
+            _close_auth_dialog()
+            print("[OneDrive] Auth record saved")
+
+    except Exception as token_error:
+        print(f"[OneDrive] Token acquisition failed: {token_error}")
+        print("[OneDrive] Re-authenticating with device code...")
+        record = credential.authenticate(scopes=SCOPES)
+        AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
+        AUTH_RECORD_PATH.write_text(record.serialize())
+        _close_auth_dialog()
+        print("[OneDrive] Re-authentication successful, saved new auth record")
+
+    client = GraphServiceClient(credentials=credential, scopes=SCOPES)
+    print("[OneDrive] Client created successfully")
+    return client
+
+
 class OneDriveBackup:
     """
     Manages OneDrive backup operations for annotation files.
@@ -232,74 +310,8 @@ class OneDriveBackup:
                 return True
 
             try:
-                # Load cached auth record if exists
-                record = None
-                if AUTH_RECORD_PATH.exists():
-                    try:
-                        record = AuthenticationRecord.deserialize(
-                            AUTH_RECORD_PATH.read_text()
-                        )
-                        print("[OneDrive] Loaded existing auth record")
-                    except Exception as e:
-                        logger.warning(f"Failed to load auth record: {e}")
-                        record = None
-
-                # Setup credential with token cache
-                cache_opts = TokenCachePersistenceOptions(
-                    name="onedrive-ml", allow_unencrypted_storage=True
-                )
-
-                self._credential = DeviceCodeCredential(
-                    client_id=CLIENT_ID,
-                    tenant_id=TENANT_ID,
-                    cache_persistence_options=cache_opts,
-                    authentication_record=record,
-                    prompt_callback=_prompt_callback,
-                )
-
-                # Always try to get a token to verify/refresh credentials
-                # This will:
-                # - Use cached token if still valid
-                # - Silently refresh using refresh token if access token expired
-                # - Raise AuthenticationRequiredError if refresh token also expired
-                #
-                # Note: TokenCachePersistenceOptions handles persisting the actual tokens.
-                # AuthenticationRecord just contains account info and only needs to be
-                # saved once after initial authentication.
-                if self._credential is not None:
-                    print("[OneDrive] Verifying/refreshing token...")
-                    try:
-                        # get_token will silently refresh if needed
-                        token = self._credential.get_token(*SCOPES)
-                        print(
-                            f"[OneDrive] Token acquired (expires: {token.expires_on})"
-                        )
-
-                        # If we didn't have a record before, save one now
-                        # (This happens on first auth or if record file was deleted)
-                        if record is None:
-                            print("[OneDrive] No auth record existed, creating one...")
-                            record = self._credential.authenticate(scopes=SCOPES)
-                            AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
-                            AUTH_RECORD_PATH.write_text(record.serialize())
-                            _close_auth_dialog()
-                            print("[OneDrive] Auth record saved")
-
-                    except Exception as token_error:
-                        print(f"[OneDrive] Token acquisition failed: {token_error}")
-                        print("[OneDrive] Re-authenticating with device code...")
-                        # Token refresh failed, need full re-auth
-                        record = self._credential.authenticate(scopes=SCOPES)
-                        AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
-                        AUTH_RECORD_PATH.write_text(record.serialize())
-                        _close_auth_dialog()
-                        print(
-                            "[OneDrive] Re-authentication successful, saved new auth record"
-                        )
-
-                self._client = GraphServiceClient(
-                    credentials=self._credential, scopes=SCOPES
-                )
+                self._client = get_graph_client()
+                self._credential = None  # credential is managed by get_graph_client
                 self._initialized = True
                 print("[OneDrive] Initialization complete")
                 return True

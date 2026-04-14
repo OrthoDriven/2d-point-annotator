@@ -30,6 +30,8 @@ import pandas as pd
 from PIL import Image, ImageTk
 
 from auth import OneDriveBackup  # pyright: ignore[reportImplicitRelativeImport]
+from dataset_config import load_datasets_config, get_data_dir, get_dataset_dest  # pyright: ignore[reportImplicitRelativeImport]
+from downloader import download_dataset  # pyright: ignore[reportImplicitRelativeImport]
 from dirs import BASE_DIR, PLATFORM  # pyright: ignore[reportImplicitRelativeImport]
 from path_utils import extract_filename  # pyright: ignore[reportImplicitRelativeImport]
 
@@ -753,6 +755,85 @@ class AnnotationGUI(tk.Tk):
         except:
             return "N/A"
 
+    # -------------------------------------------------------------------------
+    # Study-data download helpers
+    # -------------------------------------------------------------------------
+
+    def _initial_dl_status(self) -> str:
+        if not self._datasets_config.datasets:
+            return "No datasets configured."
+
+        name = self._selected_ds_name.get()
+        dataset = next(
+            (ds for ds in self._datasets_config.datasets if ds.name == name), None
+        )
+        if not dataset:
+            return "Select a dataset."
+
+        dest = get_dataset_dest(dataset)
+        if dest.exists() and any(dest.iterdir()):
+            return f"Data folder exists: {dataset.subfolder}"
+        return f"Will download to: {dataset.subfolder}"
+
+    def _on_download_data(self) -> None:
+        name = self._selected_ds_name.get()
+        dataset = next(
+            (ds for ds in self._datasets_config.datasets if ds.name == name), None
+        )
+        if not dataset:
+            return
+
+        # Guard against accidental re-download
+        dest = get_dataset_dest(dataset)
+        if dest.exists() and any(dest.iterdir()):
+            n_files = sum(1 for _ in dest.rglob("*") if _.is_file())
+            if not messagebox.askyesno(
+                "Dataset Already Exists",
+                f"'{dataset.name}' already has {n_files} file(s) "
+                f"in:\n{dest}\n\nDownload again? "
+                f"(Existing files will be overwritten.)",
+            ):
+                return
+
+        self._dl_button.config(state="disabled")
+        self._dl_status_var.set("Starting download…")
+
+        def on_progress(msg: str) -> None:
+            self.after(0, lambda m=msg: self._dl_status_var.set(m))
+
+        def on_done(exc: Optional[Exception]) -> None:
+            if exc is None:
+                self.after(
+                    0,
+                    lambda: (
+                        self._dl_status_var.set(
+                            f"Download complete: {dataset.subfolder}"
+                        ),
+                        self._dl_button.config(state="normal"),
+                    ),
+                )
+            else:
+                self.after(
+                    0,
+                    lambda e=exc: (
+                        self._dl_status_var.set(f"Download failed: {e}"),
+                        self._dl_button.config(state="normal"),
+                        messagebox.showerror(
+                            "Download Failed",
+                            f"Could not download study data:\n\n{e}",
+                        ),
+                    ),
+                )
+
+        download_dataset(
+            dataset=dataset,
+            method=self._datasets_config.download_method,
+            on_progress=on_progress,
+            on_done=on_done,
+        )
+
+    # -------------------------------------------------------------------------
+
     def _setup_ui(self) -> None:
         PANEL_WIDTH = 450
         SCROLLBAR_WIDTH = 18
@@ -918,6 +999,51 @@ class AnnotationGUI(tk.Tk):
             anchor="w",
             justify="left",
         ).pack(side="bottom", fill="x", padx=6, pady=(0, 4))
+
+        # ── Study data download ──────────────────────────────────────────────
+        dl_frame = ttk.LabelFrame(ctrl, text="Study Data")
+        dl_frame.pack(fill="x", pady=(0, 8))
+
+        self._datasets_config = load_datasets_config()
+        ds_names = [ds.name for ds in self._datasets_config.datasets]
+
+        self._selected_ds_name = tk.StringVar()
+        if ds_names:
+            self._selected_ds_name.set(ds_names[0])
+
+        self._ds_dropdown = ttk.Combobox(
+            dl_frame,
+            textvariable=self._selected_ds_name,
+            values=ds_names,
+            state="readonly",
+            font=self.dialogue_font,
+        )
+        self._ds_dropdown.pack(fill="x", padx=6, pady=(4, 2))
+        self._ds_dropdown.bind(
+            "<<ComboboxSelected>>",
+            lambda _e: self._dl_status_var.set(self._initial_dl_status()),
+        )
+
+        self._dl_status_var = tk.StringVar(value=self._initial_dl_status())
+        tk.Label(
+            dl_frame,
+            textvariable=self._dl_status_var,
+            font=self.dialogue_font,
+            fg="grey40",
+            anchor="w",
+            wraplength=420,
+            justify="left",
+        ).pack(fill="x", padx=6, pady=(2, 2))
+
+        self._dl_button = tk.Button(
+            dl_frame,
+            text="Download",
+            command=self._on_download_data,
+            font=self.heading_font,
+            state="normal" if ds_names else "disabled",
+        )
+        self._dl_button.pack(fill="x", padx=6, pady=(0, 6))
+        # ── End study data download ──────────────────────────────────────────
 
         tk.Button(
             ctrl, text="Load Data", command=self.load_data, font=self.heading_font
