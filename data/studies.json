@@ -1,0 +1,15 @@
+{
+  "studies": [
+    {
+      "id": "fluoro-round-1-reliability",
+      "description": "Inter-rater reliability study on fluoroscopy round 1",
+      "dataset_id": "fluoro-round-1",
+      "num_groups": 4,
+      "seed": 1234,
+      "share_m": 5,
+      "recursive": false,
+      "output_prefix": "fluoro-r1",
+      "annotator_names": ["scott", "paris", "andrew", "mark"]
+    }
+  ]
+}

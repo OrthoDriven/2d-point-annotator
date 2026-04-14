@@ -18,6 +18,8 @@ fc-check = { cmd = "bash -lc 'fc-list | grep -i dejavu | head -n 20'", env = { F
 
 run = { cmd = "python src/main.py", env = { FONTCONFIG_PATH = "$CONDA_PREFIX/etc/fonts", FC_CONFIG_FILE = "$CONDA_PREFIX/etc/fonts/fonts.conf" } }
 
+generate-groups = { cmd = "python scripts/generate_study_groups.py --all", description = "Generate annotation group files from studies.json" }
+
 gto-register = { cmd = "sh -c 'gto register \"$1\" $(jj log -r @ --no-graph -T commit_id) \"${@:2}\"' _", description = "gto register at jj @ instead of HEAD" }
 gto-assign = { cmd = "sh -c 'gto assign \"$1\" --stage \"$2\" --rev $(jj log -r @ --no-graph -T commit_id) \"${@:3}\"' _", description = "gto assign at jj @ instead of HEAD" }
 
