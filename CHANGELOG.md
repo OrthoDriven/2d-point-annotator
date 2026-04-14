@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.0.1...v2.1.0) (2026-04-14)
+
+
+### Features
+
+* **repro:** Adding study generation configuration for traceability. ([888a9f3](https://github.com/OrthoDriven/2d-point-annotator/commit/888a9f3bdea4cc283ea6f8285f62e1af6e410159))
+* **repro:** Adding study generation configuration for traceability. ([2d4f763](https://github.com/OrthoDriven/2d-point-annotator/commit/2d4f763654888a3c962f788573b45efb01f91e36))
+* **tools:** add landmark reference lookup module ([9dc9808](https://github.com/OrthoDriven/2d-point-annotator/commit/9dc98089731bbf2098344c9ebf54c66e0d8202e2))
+* **ui:** Add protocol version to the UI front end. ([7a97b8d](https://github.com/OrthoDriven/2d-point-annotator/commit/7a97b8d7a846968e4ef1ca50d918f5a64149488e))
+* **ui:** Add protocol version to the UI front end. ([63a5caa](https://github.com/OrthoDriven/2d-point-annotator/commit/63a5caa124e277690197ca631d9952249a1f77da))
+* **ui:** Data downloader ([0d72a15](https://github.com/OrthoDriven/2d-point-annotator/commit/0d72a158f063c2ac037a68139250a05f4d9faf96))
+
+
+### Bug Fixes
+
+* **data:** prevent Windows hang on close and fix asyncio event loop leaks ([6a61c32](https://github.com/OrthoDriven/2d-point-annotator/commit/6a61c32e2793a8f6082016e3d3a86c22f0ffd329))
+* Fixing print thread race conditions inside async onedrive fn. ([2c35f8f](https://github.com/OrthoDriven/2d-point-annotator/commit/2c35f8f4a6f4de28a07a2d0eb8f65ac388b01474))
+* made the onedrive downloading faster ([b4a9a03](https://github.com/OrthoDriven/2d-point-annotator/commit/b4a9a0372c2241bc753d2e854b41fb9ba1c9fd4e))
+
 ## [2.0.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.0.0...v2.0.1) (2026-04-13)
 
 
