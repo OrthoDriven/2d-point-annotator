@@ -513,16 +513,13 @@ class OneDriveBackup:
         print(f"[OneDrive] Starting sync upload: {path.name}")
 
         try:
-            # Create a fresh client for this thread to avoid httpx thread-affinity issues
             client = self._create_fresh_client()
             if not client:
                 print("[OneDrive] No client available, skipping upload")
                 return False
 
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            loop = asyncio.SelectorEventLoop()
 
-            # Define the upload coroutine inline with the fresh client
             async def do_upload():
                 print(f"[OneDrive] Reading file: {path.name}")
                 with open(path, "rb") as f:
@@ -547,11 +544,12 @@ class OneDriveBackup:
                 )
                 return uploaded_file is not None
 
-            # Run with timeout
             print(f"[OneDrive] Running upload with {timeout}s timeout...")
             coro = asyncio.wait_for(do_upload(), timeout=timeout)
-            success = loop.run_until_complete(coro)
-            loop.close()
+            try:
+                success = loop.run_until_complete(coro)
+            finally:
+                loop.close()
             print(
                 f"[OneDrive] Sync upload result: {'success' if success else 'failed'}"
             )

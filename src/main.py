@@ -2683,8 +2683,12 @@ class AnnotationGUI(tk.Tk):
         if self._onedrive_backup_timer is not None:
             self.after_cancel(self._onedrive_backup_timer)
             self._onedrive_backup_timer = None
-        if self.json_path is not None:
-            self._backup_to_onedrive(self.json_path)
+        if self.json_path is not None and not self._onedrive_upload_in_flight:
+            threading.Thread(
+                target=self.onedrive_backup.backup_multiple,
+                args=([self.json_path],),
+                daemon=True,
+            ).start()
         if self.db_path is not None:
             self._export_db_to_csv()
         self.destroy()
@@ -3302,31 +3306,18 @@ class AnnotationGUI(tk.Tk):
         self._backup_to_onedrive(self.json_path)
 
     def _backup_to_onedrive(self, *paths: Path) -> None:
-        """
-        Backup files to OneDrive.
-
-        Uploads to: pelvic-2d-points-backup/<username>/<YYYY-MM-DD>/
-
-        On window close, shows progress dialog while uploading.
-        Otherwise uses async upload to avoid blocking GUI.
-        """
         files_to_backup = [p for p in paths if p is not None and p.exists()]
         if not files_to_backup:
             return
 
-        if self.window_close_flag:
-            self._backup_with_progress_dialog(files_to_backup)
+        def _on_done(success, total):
             self._onedrive_upload_in_flight = False
-        else:
+            logger.info(f"OneDrive backup: {success}/{total} files uploaded")
 
-            def _on_done(success, total):
-                self._onedrive_upload_in_flight = False
-                logger.info(f"OneDrive backup: {success}/{total} files uploaded")
-
-            self.onedrive_backup.backup_multiple(
-                files_to_backup,
-                callback=_on_done,
-            )
+        self.onedrive_backup.backup_multiple(
+            files_to_backup,
+            callback=_on_done,
+        )
 
     def _backup_with_progress_dialog(self, files: list) -> None:
         """

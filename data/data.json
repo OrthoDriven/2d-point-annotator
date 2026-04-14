@@ -1,7 +1,7 @@
 {
   "landmarks": [
-    "L-ASIS",
-    "R-ASIS",
+    "L-LIP",
+    "R-LIP",
     "L-POD",
     "R-POD",
     "L-PT",
@@ -37,8 +37,8 @@
   ],
   "views": {
     "AP Bilateral": [
-      "L-ASIS",
-      "R-ASIS",
+      "L-LIP",
+      "R-LIP",
       "L-POD",
       "R-POD",
       "L-PT",
@@ -73,7 +73,7 @@
       "R-FA"
     ],
     "AP Unilateral (Left)": [
-      "L-ASIS",
+      "L-LIP",
       "L-POD",
       "L-PT",
       "L-IT",
@@ -92,7 +92,7 @@
       "L-FA"
     ],
     "AP Unilateral (Right)": [
-      "R-ASIS",
+      "R-LIP",
       "R-POD",
       "R-PT",
       "R-IT",
@@ -115,54 +115,32 @@
     {
       "image_path": "tutorial_image_1.tif",
       "image_flag": false,
-      "view": "AP Bilateral",
-      "annotations": {
-        "L-ASIS": {
-          "value": [
-            108.9,
-            251.0
-          ],
-          "flag": true,
-          "note": "fasdfasdfdsfa"
-        },
-        "R-ASIS": {
-          "value": [
-            379.8,
-            245.1
-          ],
-          "flag": true,
-          "note": "fdsdfaassddffddsass"
-        }
-      },
-      "image_direction": "AP"
+      "view": null,
+      "annotations": {}
     },
     {
       "image_path": "tutorial_image_2.tif",
       "image_flag": false,
-      "view": "AP Bilateral",
-      "annotations": {},
-      "image_direction": "AP"
+      "view": null,
+      "annotations": {}
     },
     {
       "image_path": "tutorial_image_3.tif",
       "image_flag": false,
-      "view": "AP Bilateral",
-      "annotations": {},
-      "image_direction": "AP"
+      "view": null,
+      "annotations": {}
     },
     {
       "image_path": "tutorial_image_4.tif",
       "image_flag": false,
-      "view": "AP Unilateral (Left)",
-      "annotations": {},
-      "image_direction": "AP"
+      "view": null,
+      "annotations": {}
     },
     {
       "image_path": "tutorial_image_5.tif",
       "image_flag": false,
-      "view": "AP Bilateral",
-      "annotations": {},
-      "image_direction": "AP"
+      "view": null,
+      "annotations": {}
     }
   ]
 }
