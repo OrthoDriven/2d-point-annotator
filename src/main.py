@@ -2851,11 +2851,18 @@ class AnnotationGUI(tk.Tk):
             self.after_cancel(self._onedrive_backup_timer)
             self._onedrive_backup_timer = None
         if self.json_path is not None and not self._onedrive_upload_in_flight:
-            threading.Thread(
-                target=self.onedrive_backup.backup_multiple,
-                args=([self.json_path],),
-                daemon=True,
-            ).start()
+            # Non-daemon thread so Python waits for it during shutdown
+            # instead of killing it mid-write (which crashes stdout).
+            t = threading.Thread(
+                target=self.onedrive_backup.upload_backup_sync,
+                args=(self.json_path,),
+                daemon=False,
+            )
+            t.start()
+            # Give the upload a moment to finish before tearing down Tk.
+            # If it takes longer, Python shutdown will still wait for the
+            # non-daemon thread — but Tk will already be gone.
+            t.join(timeout=2.0)
         if self.db_path is not None:
             self._export_db_to_csv()
         self.destroy()
