@@ -293,7 +293,18 @@ class AnnotationGUI(tk.Tk):
         if path.is_absolute():
             return path.resolve()
         if self.json_dir is not None:
-            return (self.json_dir / path).resolve()
+            standard = (self.json_dir / path).resolve()
+            if standard.exists():
+                return standard
+            # Fallback: if the JSON lives inside the directory referenced by
+            # the first component of image_path, strip that component.
+            # e.g. image_path="group1/img.tif", json is in .../group1/
+            #   → standard tries .../group1/group1/img.tif (wrong)
+            #   → fallback strips "group1/" → .../group1/img.tif (correct)
+            parts = path.parts
+            if len(parts) > 1 and parts[0] == self.json_dir.name:
+                return (self.json_dir / Path(*parts[1:])).resolve()
+            return standard
         return path.resolve()
 
     def _path_key(self, path: Union[str, Path]) -> str:
