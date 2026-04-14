@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.1.0...v2.1.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* **io:** Make image loading work in flat json hierarchy and relative ([0367fd1](https://github.com/OrthoDriven/2d-point-annotator/commit/0367fd1b0ed46042a40ec0546582f18a9c1c3751))
+* **io:** Make image loading work in flat json hierarchy and relative hierarchy. ([f17d9a6](https://github.com/OrthoDriven/2d-point-annotator/commit/f17d9a6be1e05525d4f0917613fbdbbfbc22ec79))
+* Removing unused and test files scattered around. ([10edbca](https://github.com/OrthoDriven/2d-point-annotator/commit/10edbcaddf10bdf439fd3578e2cd4d98f1b689ea))
+
 ## [2.1.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.0.1...v2.1.0) (2026-04-14)
 
 
