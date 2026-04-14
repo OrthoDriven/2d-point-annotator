@@ -30,12 +30,20 @@ import pandas as pd
 from PIL import Image, ImageTk
 
 from auth import OneDriveBackup  # pyright: ignore[reportImplicitRelativeImport]
-from dataset_config import load_datasets_config, get_data_dir, get_dataset_dest  # pyright: ignore[reportImplicitRelativeImport]
-from downloader import download_dataset  # pyright: ignore[reportImplicitRelativeImport]
+from dataset_config import (  # pyright: ignore[reportImplicitRelativeImport]
+    get_data_dir,
+    get_dataset_dest,
+    load_datasets_config,
+)
 from dirs import BASE_DIR, PLATFORM  # pyright: ignore[reportImplicitRelativeImport]
+from downloader import download_dataset  # pyright: ignore[reportImplicitRelativeImport]
+from landmark_reference import (
+    LandmarkReference,  # pyright: ignore[reportImplicitRelativeImport]
+)
+from landmark_reference_dialog import (
+    LandmarkReferenceDialog,  # pyright: ignore[reportImplicitRelativeImport]
+)
 from path_utils import extract_filename  # pyright: ignore[reportImplicitRelativeImport]
-from landmark_reference import LandmarkReference  # pyright: ignore[reportImplicitRelativeImport]
-from landmark_reference_dialog import LandmarkReferenceDialog  # pyright: ignore[reportImplicitRelativeImport]
 
 AnnotationPoint = Tuple[float, float]
 AnnotationValue = Union[AnnotationPoint, List[AnnotationPoint]]
@@ -591,8 +599,10 @@ class AnnotationGUI(tk.Tk):
         if not self._maybe_save_before_destructive_action("load another data file"):
             return
 
+        data_dir = get_data_dir()
+        initial = data_dir if data_dir.is_dir() else BASE_DIR
         json_file = filedialog.askopenfilename(
-            initialdir=BASE_DIR,
+            initialdir=initial,
             filetypes=[("JSON File", "*.json")],
             title="Load annotation data JSON",
         )
@@ -5440,6 +5450,5 @@ if __name__ == "__main__":
     # Feature 2 change
     # Testing Tags
     app = AnnotationGUI()
-    print(app._get_protocol_version())
     app.option_add("*Label.font", "helvetica 20 bold")
     app.mainloop()
