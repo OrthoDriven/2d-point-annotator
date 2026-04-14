@@ -34,6 +34,8 @@ from dataset_config import load_datasets_config, get_data_dir, get_dataset_dest 
 from downloader import download_dataset  # pyright: ignore[reportImplicitRelativeImport]
 from dirs import BASE_DIR, PLATFORM  # pyright: ignore[reportImplicitRelativeImport]
 from path_utils import extract_filename  # pyright: ignore[reportImplicitRelativeImport]
+from landmark_reference import LandmarkReference  # pyright: ignore[reportImplicitRelativeImport]
+from landmark_reference_dialog import LandmarkReferenceDialog  # pyright: ignore[reportImplicitRelativeImport]
 
 AnnotationPoint = Tuple[float, float]
 AnnotationValue = Union[AnnotationPoint, List[AnnotationPoint]]
@@ -86,6 +88,16 @@ class AnnotationGUI(tk.Tk):
         self.path_var = tk.StringVar(value="No image loaded")
         self.quality_var = tk.StringVar(value="N/A")
         self.selected_landmark = tk.StringVar(value="")
+        self._landmark_ref: LandmarkReference | None = None
+        self._landmark_ref_dialog: LandmarkReferenceDialog | None = None
+        _lm_json = Path(__file__).parent.parent / "docs" / "landmarks.json"
+        if _lm_json.exists():
+            try:
+                self._landmark_ref = LandmarkReference(_lm_json)
+            except Exception:
+                logger.warning(
+                    "Failed to load landmark reference: %s", _lm_json, exc_info=True
+                )
         self.current_view_var = tk.StringVar(value="")
         self.view_dropdown: ttk.Combobox | None = None
         self.image_flag_var = tk.BooleanVar(value=False)
@@ -190,6 +202,7 @@ class AnnotationGUI(tk.Tk):
         self._bind_shortcut("3", self._on_3_press)
         self._bind_shortcut("4", self._on_4_press)
         self._bind_shortcut("<h>", self._on_h_press)
+        self._bind_shortcut("<question>", self._open_landmark_reference)
         self.queue_mode = False
         self.unannotated_queue: List[Path] = []
         self.queue_index = 0
@@ -1218,7 +1231,21 @@ class AnnotationGUI(tk.Tk):
         self.image_tree.bind("<Enter>", lambda _e: self._bind_image_list_scroll(True))
         self.image_tree.bind("<Leave>", lambda _e: self._bind_image_list_scroll(False))
 
-        tk.Label(ctrl, text="Landmarks:", font=self.heading_font).pack(anchor="w")
+        lm_heading_row = tk.Frame(ctrl)
+        lm_heading_row.pack(fill="x")
+        tk.Label(lm_heading_row, text="Landmarks:", font=self.heading_font).pack(
+            side="left"
+        )
+        if self._landmark_ref is not None:
+            tk.Button(
+                lm_heading_row,
+                text="?",
+                command=self._open_landmark_reference,
+                font=self.dialogue_font,
+                width=2,
+                padx=0,
+                pady=0,
+            ).pack(side="left", padx=(4, 0))
         lp_header = tk.Frame(ctrl)
         lp_header.pack(fill="x", padx=2)
         lp_header.grid_columnconfigure(0, minsize=55)
@@ -2355,6 +2382,8 @@ class AnnotationGUI(tk.Tk):
             self._clear_line_preview()
         self._update_femoral_axis_overlay()
         self.after_idle(self._scroll_landmark_into_view, lm)
+        if self._landmark_ref_dialog is not None:
+            self._landmark_ref_dialog.update_landmark(lm)
 
     def _get_landmark_meta(self, lm: str) -> Dict[str, Union[bool, str]]:
         if self.current_image_path is None:
@@ -4904,6 +4933,7 @@ class AnnotationGUI(tk.Tk):
             ("1–4", "Set image quality (1-worst, 4-best)"),
             ("Backspace", "Delete selected landmark"),
             ("h", "Show this help"),
+            ("?", "Show landmark reference"),
             ("Mouse click", "Place landmark"),
             ("Mouse wheel", "Adjust hover radius"),
         ]
@@ -4946,6 +4976,31 @@ class AnnotationGUI(tk.Tk):
             text="Close",
             command=win.destroy,
         ).pack(anchor="e", pady=(10, 0))
+
+    def _open_landmark_reference(self, event=None) -> None:
+        """Open or focus the landmark reference popup."""
+        if self._landmark_ref is None:
+            return
+
+        if self._landmark_ref_dialog is not None:
+            try:
+                self._landmark_ref_dialog.lift()
+                self._landmark_ref_dialog.focus_force()
+                return
+            except tk.TclError:
+                # Window was destroyed outside our tracking
+                self._landmark_ref_dialog = None
+
+        self._landmark_ref_dialog = LandmarkReferenceDialog(
+            parent=self,
+            reference=self._landmark_ref,
+            current_landmark=self.selected_landmark.get() or None,
+            on_close=self._on_landmark_ref_dialog_closed,
+        )
+
+    def _on_landmark_ref_dialog_closed(self) -> None:
+        """Clear the dialog reference when the popup is closed."""
+        self._landmark_ref_dialog = None
 
     def _configure_linux_fonts(self) -> None:
         # (optional) scaling tweak, only on Linux

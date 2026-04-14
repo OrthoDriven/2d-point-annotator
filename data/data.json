@@ -1,4 +1,6 @@
 {
+  "app_version": "2.0.1",
+  "protocol_version": "0.0.2",
   "landmarks": [
     "L-LIP",
     "R-LIP",
@@ -115,20 +117,23 @@
     {
       "image_path": "tutorial_image_1.tif",
       "image_flag": false,
-      "view": null,
-      "annotations": {}
+      "view": "AP Bilateral",
+      "annotations": {},
+      "image_direction": "AP"
     },
     {
       "image_path": "tutorial_image_2.tif",
       "image_flag": false,
-      "view": null,
-      "annotations": {}
+      "view": "AP Bilateral",
+      "annotations": {},
+      "image_direction": "AP"
     },
     {
       "image_path": "tutorial_image_3.tif",
       "image_flag": false,
-      "view": null,
-      "annotations": {}
+      "view": "AP Bilateral",
+      "annotations": {},
+      "image_direction": "AP"
     },
     {
       "image_path": "tutorial_image_4.tif",
