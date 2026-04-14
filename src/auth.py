@@ -42,6 +42,7 @@ CLIENT_ID = "d6a282f7-2887-4e76-b92c-e8ca63ea5c8b"
 TENANT_ID = "f59bcc9c-bb13-4ca4-a6ec-ac126b6ec4b9"
 SCOPES = ["Files.ReadWrite.All"]
 
+
 # SharePoint drive ID for backup storage
 SHAREPOINT_DRIVE_ID = (
     "b!KMPrFjP2-EyF3_IAVjRxqwRrQzp7wJ5Bj5GN_uL5GeVd5oQt5J70S4Ie1tl8qDeE"
