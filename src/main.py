@@ -1163,58 +1163,58 @@ class AnnotationGUI(tk.Tk):
         self.view_dropdown.pack(side="left", fill="x", expand=True)
         self.view_dropdown.bind("<<ComboboxSelected>>", self._on_view_selected)
 
-        tk.Button(
-            ctrl,
-            text="Find Unannotated Images",
-            command=self._find_unannotated_images,
-        ).pack(fill="x", pady=5)
+        # tk.Button(
+        #     ctrl,
+        #     text="Find Unannotated Images",
+        #     command=self._find_unannotated_images,
+        # ).pack(fill="x", pady=5)
 
-        # Add status label (update the Image frame to show queue status)
-        self.queue_status_var = tk.StringVar(value="")
-        tk.Label(
-            img_frame, textvariable=self.queue_status_var, fg="blue", font="16"
-        ).pack(fill="x", padx=6, pady=(0, 6))
-        self.exit_queue_btn = tk.Button(
-            ctrl,
-            text="Exit Queue Mode",
-            command=self._exit_queue_mode,
-            state="disabled",  # Only enabled when in queue mode
-        )
-        self.exit_queue_btn.pack(fill="x", pady=5)
+        # # Add status label (update the Image frame to show queue status)
+        # self.queue_status_var = tk.StringVar(value="")
+        # tk.Label(
+        #     img_frame, textvariable=self.queue_status_var, fg="blue", font="16"
+        # ).pack(fill="x", padx=6, pady=(0, 6))
+        # self.exit_queue_btn = tk.Button(
+        #     ctrl,
+        #     text="Exit Queue Mode",
+        #     command=self._exit_queue_mode,
+        #     state="disabled",  # Only enabled when in queue mode
+        # )
+        # self.exit_queue_btn.pack(fill="x", pady=5)
 
-        tk.Button(
-            ctrl,
-            text="Check CSV Images",
-            command=self._check_csv_images,
-        ).pack(fill="x", pady=5)
+        # tk.Button(
+        #     ctrl,
+        #     text="Check CSV Images",
+        #     command=self._check_csv_images,
+        # ).pack(fill="x", pady=5)
 
-        self.exit_csv_check_btn = tk.Button(
-            ctrl,
-            text="Exit CSV Check Mode",
-            command=self._exit_csv_check_mode,
-            state="disabled",
-        )
-        self.exit_csv_check_btn.pack(fill="x", pady=5)
+        # self.exit_csv_check_btn = tk.Button(
+        #     ctrl,
+        #     text="Exit CSV Check Mode",
+        #     command=self._exit_csv_check_mode,
+        #     state="disabled",
+        # )
+        # self.exit_csv_check_btn.pack(fill="x", pady=5)
 
-        path_entry = tk.Entry(
-            row,
-            textvariable=self.path_var,
-            state="readonly",
-            relief="sunken",
-            font=self.dialogue_font,
-        )
-        path_entry.pack(side="left", fill="x", expand=True)
+        # path_entry = tk.Entry(
+        #     row,
+        #     textvariable=self.path_var,
+        #     state="readonly",
+        #     relief="sunken",
+        #     font=self.dialogue_font,
+        # )
+        # path_entry.pack(side="left", fill="x", expand=True)
 
-        quality_entry = tk.Entry(
-            row,
-            textvariable=self.quality_var,
-            state="readonly",
-            relief="sunken",
-            width=10,
-            justify="center",
-            font=self.dialogue_font,
-        )
-        quality_entry.pack(side="right", padx=(6, 0))
+        # quality_entry = tk.Entry(
+        #     row,
+        #     textvariable=self.quality_var,
+        #     state="readonly",
+        #     relief="sunken",
+        #     width=10,
+        #     justify="center",
+        #     font=self.dialogue_font,
+        # )
+        # quality_entry.pack(side="right", padx=(6, 0))
 
         tk.Label(ctrl, text="Images in JSON:", font=self.heading_font).pack(anchor="w")
 
@@ -1342,12 +1342,12 @@ class AnnotationGUI(tk.Tk):
         self.note_text.bind("<<Modified>>", self._on_note_text_modified)
         self._set_note_editor_enabled(False)
 
-        ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
-        seg_wrap = ttk.LabelFrame(ctrl, text="Fill Tool (Obturator)")
-        seg_wrap.pack(fill="x", pady=(8, 0))
-        row1 = tk.Frame(seg_wrap)
-        row1.pack(fill="x", padx=6, pady=(6, 2))
-        tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
+        # ttk.Separator(ctrl, orient="horizontal").pack(fill="x", pady=(6, 6))
+        # seg_wrap = ttk.LabelFrame(ctrl, text="Fill Tool (Obturator)")
+        # seg_wrap.pack(fill="x", pady=(8, 0))
+        # row1 = tk.Frame(seg_wrap)
+        # row1.pack(fill="x", padx=6, pady=(6, 2))
+        # tk.Label(row1, text="Method:", font=self.heading_font).pack(side="left")
         # self.fill_box = ttk.Combobox(
         #     row1,
         #     textvariable=self.method,
@@ -1357,64 +1357,64 @@ class AnnotationGUI(tk.Tk):
         # )
         # self.fill_box.pack(side="left", padx=(6, 0))
         # self.fill_box.bind_class("ComboboxListbox", "<KeyRelease>", self.focus_set())
-        self.ff_button = tk.Checkbutton(
-            row1,
-            text="FF",
-            variable=self.use_ff,
-            font=self.dialogue_font,
-            command=self._change_method_to_ff,
-        )
+        # self.ff_button = tk.Checkbutton(
+        #     row1,
+        #     text="FF",
+        #     variable=self.use_ff,
+        #     font=self.dialogue_font,
+        #     command=self._change_method_to_ff,
+        # )
 
-        self.ff_button.pack(side="left")
-        self.adap_cc_button = tk.Checkbutton(
-            row1,
-            text="ACC",
-            variable=self.use_adap_cc,
-            font=self.dialogue_font,
-            command=self._change_method_to_acc,
-        )
-        self.adap_cc_button.pack(side="left")
+        # self.ff_button.pack(side="left")
+        # self.adap_cc_button = tk.Checkbutton(
+        #     row1,
+        #     text="ACC",
+        #     variable=self.use_adap_cc,
+        #     font=self.dialogue_font,
+        #     command=self._change_method_to_acc,
+        # )
+        # self.adap_cc_button.pack(side="left")
 
-        tk.Checkbutton(
-            row1,
-            text="CLAHE",
-            variable=self.use_clahe,
-            command=lambda: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(side="left", padx=(10, 0))
-        tk.Scale(
-            seg_wrap,
-            from_=1,
-            to=50,
-            orient="horizontal",
-            label="Sensitivity",
-            variable=self.fill_sensitivity,
-            command=lambda _v: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(fill="x", padx=6, pady=(6, 4))
-        tk.Checkbutton(
-            seg_wrap,
-            text="Edge lock (flood fill)",
-            variable=self.edge_lock,
-            command=lambda: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(anchor="w", padx=6)
-        tk.Scale(
-            seg_wrap,
-            from_=1,
-            to=5,
-            orient="horizontal",
-            label="Edge lock width",
-            variable=self.edge_lock_width,
-            command=lambda _v: self._resegment_selected_if_needed(),
-            font=self.dialogue_font,
-        ).pack(fill="x", padx=6, pady=(2, 6))
-        tk.Button(
-            seg_wrap,
-            text="Re-segment (use current sliders)",
-            command=lambda: self._resegment_for(self.selected_landmark.get()),
-            font=self.dialogue_font,
-        ).pack(fill="x", padx=6, pady=(0, 8))
+        # tk.Checkbutton(
+        #     row1,
+        #     text="CLAHE",
+        #     variable=self.use_clahe,
+        #     command=lambda: self._resegment_selected_if_needed(),
+        #     font=self.dialogue_font,
+        # ).pack(side="left", padx=(10, 0))
+        # tk.Scale(
+        #     seg_wrap,
+        #     from_=1,
+        #     to=50,
+        #     orient="horizontal",
+        #     label="Sensitivity",
+        #     variable=self.fill_sensitivity,
+        #     command=lambda _v: self._resegment_selected_if_needed(),
+        #     font=self.dialogue_font,
+        # ).pack(fill="x", padx=6, pady=(6, 4))
+        # tk.Checkbutton(
+        #     seg_wrap,
+        #     text="Edge lock (flood fill)",
+        #     variable=self.edge_lock,
+        #     command=lambda: self._resegment_selected_if_needed(),
+        #     font=self.dialogue_font,
+        # ).pack(anchor="w", padx=6)
+        # tk.Scale(
+        #     seg_wrap,
+        #     from_=1,
+        #     to=5,
+        #     orient="horizontal",
+        #     label="Edge lock width",
+        #     variable=self.edge_lock_width,
+        #     command=lambda _v: self._resegment_selected_if_needed(),
+        #     font=self.dialogue_font,
+        # ).pack(fill="x", padx=6, pady=(2, 6))
+        # tk.Button(
+        #     seg_wrap,
+        #     text="Re-segment (use current sliders)",
+        #     command=lambda: self._resegment_for(self.selected_landmark.get()),
+        #     font=self.dialogue_font,
+        # ).pack(fill="x", padx=6, pady=(0, 8))
 
     def _detect_path_column(self, df: pd.DataFrame) -> str:
         """Detect which column contains image paths."""
