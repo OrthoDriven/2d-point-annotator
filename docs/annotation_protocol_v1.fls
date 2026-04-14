@@ -146,6 +146,7 @@ OUTPUT annotation_protocol_v1.toc
 INPUT /usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/ec-lmbx12.tfm
 INPUT /usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/ts1-lmr10.tfm
 INPUT ./landmarks.tex
+INPUT /usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/ec-lmri10.tfm
 INPUT ./annotation_protocol_v1.aux
 INPUT ./annotation_protocol_v1.out
 INPUT /usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmbx10.pfb
@@ -153,3 +154,4 @@ INPUT /usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmbx12.pfb
 INPUT /usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmr10.pfb
 INPUT /usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmr12.pfb
 INPUT /usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmr17.pfb
+INPUT /usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmri10.pfb

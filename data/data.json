@@ -1,7 +1,7 @@
 {
   "landmarks": [
-    "L-ASIS",
-    "R-ASIS",
+    "L-LIP",
+    "R-LIP",
     "L-POD",
     "R-POD",
     "L-PT",
@@ -37,8 +37,8 @@
   ],
   "views": {
     "AP Bilateral": [
-      "L-ASIS",
-      "R-ASIS",
+      "L-LIP",
+      "R-LIP",
       "L-POD",
       "R-POD",
       "L-PT",
@@ -73,7 +73,7 @@
       "R-FA"
     ],
     "AP Unilateral (Left)": [
-      "L-ASIS",
+      "L-LIP",
       "L-POD",
       "L-PT",
       "L-IT",
@@ -92,7 +92,7 @@
       "L-FA"
     ],
     "AP Unilateral (Right)": [
-      "R-ASIS",
+      "R-LIP",
       "R-POD",
       "R-PT",
       "R-IT",

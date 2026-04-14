@@ -1,0 +1,258 @@
+{
+  "metadata": {
+    "version": "0.0.2",
+    "product": "HipGuide",
+    "view": "AP",
+    "last_updated": "2026-04-14",
+    "notes": "Landmark definitions derived from Scott Banks clinical review emails (March-April 2026). Second email (with Dr. Cole input) supersedes first where conflicts exist."
+  },
+  "landmarks": [
+    {
+      "name": "Lateral Innominate Point",
+      "acronym": "LIP",
+      "formerly": "ASIS",
+      "anatomical_feature": "Lateral aspect of the pelvic wing (innominate bone)",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Select the most lateral visible point of the innominate bone on the AP view. The anatomic ASIS has proven difficult to identify consistently; this landmark replaces it with the most lateral point/ridge visible on the AP view."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Pelvic Outlet Diameter",
+      "acronym": "POD",
+      "anatomical_feature": null,
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Select the most lateral edges of the pelvic outlet bilaterally."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Pelvic Teardrop",
+      "acronym": "PT",
+      "anatomical_feature": null,
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Select the most inferior edge at the bottom of the teardrop, on the visible edge. If the inferior feature is flat-ish, center the point along the flat region."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Ischial Tuberosity",
+      "acronym": "IT",
+      "anatomical_feature": null,
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Select the most inferior point bilaterally. If the distal region is more-or-less horizontal rather than a clear apex, select the center of that horizontal region. Attempt to identify the true bone edge at the most distal point, avoiding diffuse bone signal in the musculotendinous junction where calcification may be present."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Pubic Symphysis",
+      "acronym": "{S,I}PS",
+      "formerly": "SMPS",
+      "anatomical_feature": null,
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 4,
+        "labels": ["right_superior", "left_superior", "right_inferior", "left_inferior"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Select the four corner points of the symphysis. Each corner point is placed at the apparent intersection between the medial wall and the superior or inferior margin of the pubis. This replaces the previous single-point approach (fitting a circle astride the superior features)."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Distal Sacroiliac Joint",
+      "acronym": "DSI",
+      "anatomical_feature": "Distal termination of the sacroiliac joint",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Select the point at the visible distal termination of the sacroiliac joint, placing the cursor between the visible bone edges. The feature is small enough that it is likely within the convolution kernel size; a single-point approach is sufficient."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Acetabular Center",
+      "acronym": "AC",
+      "anatomical_feature": "Center of the acetabulum",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "native": "Use the hover circle to approximate the visible bony acetabular rim, fitting to the inner edge of the visible acetabular bony surface.",
+        "prosthetic": "Use the hover circle to fit to the outer margin of the acetabular shell."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Superior/Lateral Acetabular Point",
+      "acronym": "SAB",
+      "anatomical_feature": "Superior/lateral extent of the acetabular articular surface",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "native": "Identify the most superior/lateral extent of the acetabular articular surface — the point where the native articular 'cup' is visualized to terminate. Do not include osteophytes or non-articular features.",
+        "prosthetic": "Identify the superior/lateral point defining the major axis of the cup (the line that defines cup abduction)."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Distal Acetabular Point",
+      "acronym": "DAB",
+      "anatomical_feature": "Distal/lateral extent of the acetabular articular surface",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "native": "Identify the most distal/lateral extent of the acetabular articular surface — the inferior point where the native articular 'cup' is visualized to terminate. Do not include osteophytes or non-articular features.",
+        "prosthetic": "Identify the inferior point defining the major axis of the cup (the line that defines cup abduction)."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Femoral Head Center",
+      "acronym": "FHC",
+      "anatomical_feature": "Center of the femoral head",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "native": "Use the hover circle to approximate the visible bony femoral head.",
+        "prosthetic": "Use the hover circle to fit to the outer margin of the femoral head component."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Superior Greater Trochanter",
+      "acronym": "SGT",
+      "anatomical_feature": "Superior tip of the greater trochanter",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Select the most superior visible point of the greater trochanter. Note: this point is highly dependent on femoral rotation. The anterior aspect of the feature may be removed during surgery to allow more lateral positioning of the stem."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Lateral Greater Trochanter",
+      "acronym": "LGT",
+      "anatomical_feature": "Lateral aspect of the greater trochanter",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Select the most lateral visible aspect of the greater trochanter. (The curvature inflection point was considered but rejected as not a specific anatomical point; it varies with rotation. The most lateral point is more repeatable.)"
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Lesser Trochanter",
+      "acronym": "{P,M,D}LT",
+      "anatomical_feature": "Lesser trochanter and its junction with the medial femoral cortex",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "point",
+        "count": 6,
+        "labels": [
+          "left_proximal", "left_medial", "left_distal",
+          "right_proximal", "right_medial", "right_distal"
+        ]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Visualize the lesser trochanter as a volcano tipped 90 degrees. Select three points per side:\n- Medial (apex): The most medial visible point of the lesser trochanter (apex of the volcano).\n- Proximal: The proximal point where the visible lesser trochanter merges with the medial femoral cortex (where the volcano emerges from the landscape).\n- Distal: The distal point where the visible lesser trochanter merges with the medial femoral cortex (where the volcano emerges from the landscape)."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    },
+    {
+      "name": "Femoral Axis",
+      "acronym": "FA",
+      "anatomical_feature": "Central axis of the femoral shaft",
+      "views": ["AP"],
+      "prediction_geometry": {
+        "type": "line",
+        "count": 2,
+        "labels": ["left", "right"]
+      },
+      "landmark_type": "primary",
+      "placement_rules": {
+        "general": "Use the two-point tool with variable-width whiskers to select two points and precisely center them on the femoral shaft. Focus on the femoral shaft just distal to the conical metaphysis. Avoid more distal shaft that may show coronal plane bowing."
+      },
+      "edge_cases": null,
+      "escalate_when": null
+    }
+  ]
+}

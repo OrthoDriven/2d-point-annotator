@@ -50,33 +50,36 @@
 \contentsline {subsubsection}{\numberline {3.4.3}Measurements}{13}{subsubsection.3.4.3}%
 \contentsline {subsection}{\numberline {3.5}Annotation Instructions by Landmark}{13}{subsection.3.5}%
 \contentsline {subsubsection}{\numberline {3.5.1}Example Landmark Entry Template}{14}{subsubsection.3.5.1}%
-\contentsline {subsubsection}{\numberline {3.5.2}Acetabular Center}{14}{subsubsection.3.5.2}%
-\contentsline {subsubsection}{\numberline {3.5.3}Anterior Superior Iliac Spine}{14}{subsubsection.3.5.3}%
-\contentsline {subsubsection}{\numberline {3.5.4}Femoral Head Centerr}{14}{subsubsection.3.5.4}%
-\contentsline {subsubsection}{\numberline {3.5.5}Ischial Tuberositiy}{15}{subsubsection.3.5.5}%
-\contentsline {subsubsection}{\numberline {3.5.6}Superior Greater Trochanter}{15}{subsubsection.3.5.6}%
-\contentsline {subsubsection}{\numberline {3.5.7}Lateral Greater Trochanter}{15}{subsubsection.3.5.7}%
-\contentsline {subsubsection}{\numberline {3.5.8}Lesser Trochanter}{15}{subsubsection.3.5.8}%
-\contentsline {subsubsection}{\numberline {3.5.9}Pelvic Outlet Diameter}{16}{subsubsection.3.5.9}%
-\contentsline {subsubsection}{\numberline {3.5.10}Superior Margin of the Pubic Symphysis}{16}{subsubsection.3.5.10}%
-\contentsline {subsubsection}{\numberline {3.5.11}Pelvic Teardrop}{16}{subsubsection.3.5.11}%
-\contentsline {subsubsection}{\numberline {3.5.12}Femoral Axis}{16}{subsubsection.3.5.12}%
-\contentsline {subsection}{\numberline {3.6}Blinding and Independence}{17}{subsection.3.6}%
-\contentsline {subsubsection}{\numberline {3.6.1}Blinding Policy}{17}{subsubsection.3.6.1}%
-\contentsline {subsubsection}{\numberline {3.6.2}Independence of Reads}{17}{subsubsection.3.6.2}%
-\contentsline {subsection}{\numberline {3.7}Adjudication and Consensus Rules}{17}{subsection.3.7}%
-\contentsline {subsubsection}{\numberline {3.7.1}Triggers for Review}{17}{subsubsection.3.7.1}%
-\contentsline {subsubsection}{\numberline {3.7.2}Adjudication Workflow}{17}{subsubsection.3.7.2}%
-\contentsline {subsubsection}{\numberline {3.7.3}Consensus Rules}{17}{subsubsection.3.7.3}%
-\contentsline {subsection}{\numberline {3.8}Uncertainty, Not-Visible, and Equivocal Handling}{17}{subsection.3.8}%
-\contentsline {subsubsection}{\numberline {3.8.1}Not Visible}{17}{subsubsection.3.8.1}%
-\contentsline {subsubsection}{\numberline {3.8.2}Equivocal Cases}{18}{subsubsection.3.8.2}%
-\contentsline {subsubsection}{\numberline {3.8.3}Confidence / Uncertainty Capture}{18}{subsubsection.3.8.3}%
-\contentsline {subsection}{\numberline {3.9}QC and Reliability Assessment}{18}{subsection.3.9}%
-\contentsline {subsubsection}{\numberline {3.9.1}Routine QC}{18}{subsubsection.3.9.1}%
-\contentsline {subsubsection}{\numberline {3.9.2}Reliability Assessment}{18}{subsubsection.3.9.2}%
-\contentsline {subsubsection}{\numberline {3.9.3}Corrective Action}{18}{subsubsection.3.9.3}%
-\contentsline {subsection}{\numberline {3.10}Bias and Representativeness Plan}{19}{subsection.3.10}%
-\contentsline {subsubsection}{\numberline {3.10.1}Target Population Representation}{19}{subsubsection.3.10.1}%
-\contentsline {subsubsection}{\numberline {3.10.2}Monitoring for Imbalance}{19}{subsubsection.3.10.2}%
-\contentsline {subsubsection}{\numberline {3.10.3}Performance-Relevant Subgroups}{19}{subsubsection.3.10.3}%
+\contentsline {subsubsection}{\numberline {3.5.2}Lateral Innominate Point}{14}{subsubsection.3.5.2}%
+\contentsline {subsubsection}{\numberline {3.5.3}Pelvic Outlet Diameter}{14}{subsubsection.3.5.3}%
+\contentsline {subsubsection}{\numberline {3.5.4}Pelvic Teardrop}{14}{subsubsection.3.5.4}%
+\contentsline {subsubsection}{\numberline {3.5.5}Ischial Tuberosity}{15}{subsubsection.3.5.5}%
+\contentsline {subsubsection}{\numberline {3.5.6}Pubic Symphysis}{15}{subsubsection.3.5.6}%
+\contentsline {subsubsection}{\numberline {3.5.7}Distal Sacroiliac Joint}{15}{subsubsection.3.5.7}%
+\contentsline {subsubsection}{\numberline {3.5.8}Acetabular Center}{15}{subsubsection.3.5.8}%
+\contentsline {subsubsection}{\numberline {3.5.9}Superior/Lateral Acetabular Point}{16}{subsubsection.3.5.9}%
+\contentsline {subsubsection}{\numberline {3.5.10}Distal Acetabular Point}{16}{subsubsection.3.5.10}%
+\contentsline {subsubsection}{\numberline {3.5.11}Femoral Head Center}{17}{subsubsection.3.5.11}%
+\contentsline {subsubsection}{\numberline {3.5.12}Superior Greater Trochanter}{17}{subsubsection.3.5.12}%
+\contentsline {subsubsection}{\numberline {3.5.13}Lateral Greater Trochanter}{17}{subsubsection.3.5.13}%
+\contentsline {subsubsection}{\numberline {3.5.14}Lesser Trochanter}{17}{subsubsection.3.5.14}%
+\contentsline {subsubsection}{\numberline {3.5.15}Femoral Axis}{18}{subsubsection.3.5.15}%
+\contentsline {subsection}{\numberline {3.6}Blinding and Independence}{18}{subsection.3.6}%
+\contentsline {subsubsection}{\numberline {3.6.1}Blinding Policy}{18}{subsubsection.3.6.1}%
+\contentsline {subsubsection}{\numberline {3.6.2}Independence of Reads}{18}{subsubsection.3.6.2}%
+\contentsline {subsection}{\numberline {3.7}Adjudication and Consensus Rules}{19}{subsection.3.7}%
+\contentsline {subsubsection}{\numberline {3.7.1}Triggers for Review}{19}{subsubsection.3.7.1}%
+\contentsline {subsubsection}{\numberline {3.7.2}Adjudication Workflow}{19}{subsubsection.3.7.2}%
+\contentsline {subsubsection}{\numberline {3.7.3}Consensus Rules}{19}{subsubsection.3.7.3}%
+\contentsline {subsection}{\numberline {3.8}Uncertainty, Not-Visible, and Equivocal Handling}{19}{subsection.3.8}%
+\contentsline {subsubsection}{\numberline {3.8.1}Not Visible}{19}{subsubsection.3.8.1}%
+\contentsline {subsubsection}{\numberline {3.8.2}Equivocal Cases}{19}{subsubsection.3.8.2}%
+\contentsline {subsubsection}{\numberline {3.8.3}Confidence / Uncertainty Capture}{19}{subsubsection.3.8.3}%
+\contentsline {subsection}{\numberline {3.9}QC and Reliability Assessment}{20}{subsection.3.9}%
+\contentsline {subsubsection}{\numberline {3.9.1}Routine QC}{20}{subsubsection.3.9.1}%
+\contentsline {subsubsection}{\numberline {3.9.2}Reliability Assessment}{20}{subsubsection.3.9.2}%
+\contentsline {subsubsection}{\numberline {3.9.3}Corrective Action}{20}{subsubsection.3.9.3}%
+\contentsline {subsection}{\numberline {3.10}Bias and Representativeness Plan}{20}{subsection.3.10}%
+\contentsline {subsubsection}{\numberline {3.10.1}Target Population Representation}{20}{subsubsection.3.10.1}%
+\contentsline {subsubsection}{\numberline {3.10.2}Monitoring for Imbalance}{20}{subsubsection.3.10.2}%
+\contentsline {subsubsection}{\numberline {3.10.3}Performance-Relevant Subgroups}{21}{subsubsection.3.10.3}%

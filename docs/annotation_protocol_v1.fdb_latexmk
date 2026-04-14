@@ -1,5 +1,5 @@
 # Fdb version 4
-["lualatex"] 1776123744.6111 "annotation_protocol_v1.tex" "annotation_protocol_v1.pdf" "annotation_protocol_v1" 1776123745.42279 0
+["lualatex"] 1776171890.44058 "annotation_protocol_v1.tex" "annotation_protocol_v1.pdf" "annotation_protocol_v1" 1776171891.20462 0
   "/home/ajj/.config/luaotfload/luaotfload.conf" 1774469003.88179 85 7763d43d4e048c0617917b11f17c3149 ""
   "/home/ajj/.texlive2026/texmf-var/luatex-cache/generic/fonts/otl/lmroman10-regular.luc" 1773008645.67395 127327 bb05cc850edf5447a76a9cb72263daaf ""
   "/home/ajj/.texlive2026/texmf-var/luatex-cache/generic/names/luaotfload-names.luc.gz" 1774539689.76974 773112 188797bc0bdb35e54a93da32cb84aea4 ""
@@ -8,6 +8,7 @@
   "/usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/ec-lmr10.tfm" 1254269338 12056 7e13df7fe4cbce21b072ba7c4f4deb6e ""
   "/usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/ec-lmr12.tfm" 1254269338 12092 7b1546e2d096cfd5dcbd4049b0b1ec2e ""
   "/usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/ec-lmr17.tfm" 1254269338 12156 ca1ae6a3c8564e89597f1f993fba1608 ""
+  "/usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/ec-lmri10.tfm" 1254269338 17148 9556e1b5f936b77a796f68d2d559ba99 ""
   "/usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/lmex10.tfm" 1148093231 992 ce925c9346c7613270a79afbee98c070 ""
   "/usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/lmmi10.tfm" 1148093231 1528 6d36b2385e0ca062a654de6ac59cb34f ""
   "/usr/local/texlive/2026/texmf-dist/fonts/tfm/public/lm/lmmi12.tfm" 1148093231 1524 753b192b18f2991794f9d41a8228510b ""
@@ -26,6 +27,7 @@
   "/usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmr10.pfb" 1255129361 119235 f35b44530a1d90eb90fe15d9cba67ea0 ""
   "/usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmr12.pfb" 1255129361 113634 f99c44d58bae0863375faf0e1d74d612 ""
   "/usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmr17.pfb" 1255129361 119752 1bd8d06e4079df624bf59ce3ad7c9aa6 ""
+  "/usr/local/texlive/2026/texmf-dist/fonts/type1/public/lm/lmri10.pfb" 1255129361 112593 fda2373ba4420af33949610de4c28fe8 ""
   "/usr/local/texlive/2026/texmf-dist/tex/context/base/mkii/supp-pdf.mkii" 1461363279 71627 94eb9990bed73c364d7f53f960cc8c5b ""
   "/usr/local/texlive/2026/texmf-dist/tex/generic/bigintcalc/bigintcalc.sty" 1576625341 40635 c40361e206be584d448876bba8a64a3b ""
   "/usr/local/texlive/2026/texmf-dist/tex/generic/bitset/bitset.sty" 1576016050 33961 6b5c75130e435b2bfdb9f480a09a39f9 ""
@@ -130,13 +132,13 @@
   "/usr/local/texlive/2026/texmf-dist/tex/luatex/luaotfload/luaotfload-tounicode.lua" 1740687098 7529 21fe79d2526f3c3d789a9cc0366347ab ""
   "/usr/local/texlive/2026/texmf-dist/tex/luatex/luaotfload/luaotfload-unicode.lua" 1740687098 7918 4272855a25780b80472f3b58edd95e33 ""
   "/usr/local/texlive/2026/texmf-dist/tex/luatex/luaotfload/luaotfload.lua" 1740687098 13566 16df94dd2de231b2bca0aaa0190941fe ""
-  "/usr/local/texlive/2026/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1776085213 5573038 b99aad5e4898a9034e953632f940512b ""
+  "/usr/local/texlive/2026/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1776169111 5573038 b99aad5e4898a9034e953632f940512b ""
   "/usr/local/texlive/2026/texmf-var/web2c/luahbtex/lualatex.fmt" 1775055842 5673249 b19bcebdb246780c53aea4157ff21065 ""
-  "annotation_protocol_v1.aux" 1776123745.35068 11599 d0e6e4426634f5979da0c0d9f74ec5be "lualatex"
-  "annotation_protocol_v1.out" 1776123745.35168 15192 d383fbfae15338ae52557a028098a746 "lualatex"
+  "annotation_protocol_v1.aux" 1776171891.13767 12008 173771f8b8e9b91441edd265bb776b91 "lualatex"
+  "annotation_protocol_v1.out" 1776171891.13767 15647 6cd49b866018afcb42f0df64d98c58ee "lualatex"
   "annotation_protocol_v1.tex" 1776123546.87275 27548 1b2e9ece5d436341d9aeb78b19054ab2 ""
-  "annotation_protocol_v1.toc" 1776123745.35168 7938 b4f147b3c01f9ed2e4050911439dda09 "lualatex"
-  "landmarks.tex" 1776123697.35346 5904 23fb9ed25058f0427bbcfe69a3af1998 ""
+  "annotation_protocol_v1.toc" 1776171891.13826 8224 50bbf3c52a096b0cfa90f5a0a2226d0f "lualatex"
+  "landmarks.tex" 1776171881.75392 6958 873689a876c4bc4d1ea2462e5e41c849 ""
   (generated)
   "annotation_protocol_v1.aux"
   "annotation_protocol_v1.log"
