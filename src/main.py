@@ -478,6 +478,8 @@ class AnnotationGUI(tk.Tk):
 
             images_to_save: List[Dict] = []
             save_data = {
+                "app_version": self._get_app_version(),
+                "protocol_version": self._get_protocol_version(),
                 "landmarks": list(self.json_data.get("landmarks", [])),
                 "views": dict(self.allowed_views),
                 "images": images_to_save,
@@ -742,6 +744,15 @@ class AnnotationGUI(tk.Tk):
         except Exception:
             return "dev"
 
+    @staticmethod
+    def _get_protocol_version() -> str:
+        path = Path("docs/landmarks.json")
+        try:
+            with path.open() as f:
+                return json.load(f).get("metadata")["version"]
+        except:
+            return "N/A"
+
     def _setup_ui(self) -> None:
         PANEL_WIDTH = 450
         SCROLLBAR_WIDTH = 18
@@ -901,10 +912,11 @@ class AnnotationGUI(tk.Tk):
 
         tk.Label(
             left_tools,
-            text=f"v{self._get_app_version()}\n NOT FDA APPROVED",
+            text=f"App: v{self._get_app_version()}\nProtocol: v{self._get_protocol_version()}\nNOT FDA APPROVED",
             font=self.dialogue_font,
             fg="grey50",
             anchor="w",
+            justify="left",
         ).pack(side="bottom", fill="x", padx=6, pady=(0, 4))
 
         tk.Button(
@@ -5240,5 +5252,6 @@ if __name__ == "__main__":
     # Feature 2 change
     # Testing Tags
     app = AnnotationGUI()
+    print(app._get_protocol_version())
     app.option_add("*Label.font", "helvetica 20 bold")
     app.mainloop()
