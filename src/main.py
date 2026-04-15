@@ -55,24 +55,49 @@ AnnotationValue = Union[AnnotationPoint, List[AnnotationPoint]]
 # This lets us extend view definitions for all users (including those with old JSONs) without
 # touching their annotation data. The symphysis is visible bilaterally even in unilateral shots.
 VIEW_LANDMARK_EXTENSIONS: Dict[str, List[str]] = {
-    "AP Unilateral (Left)":  ["R-SPS", "R-IPS"],
+    "AP Unilateral (Left)": ["R-SPS", "R-IPS"],
     "AP Unilateral (Right)": ["L-SPS", "L-IPS"],
 }
 
 LANDMARK_DISPLAY_ORDER: List[str] = [
     # Bilateral symmetry pairs (assessed together)
-    "L-LIP", "R-LIP",
-    "L-DSI", "R-DSI",
-    "L-POD", "R-POD",
-    "L-IT",  "R-IT",
+    "L-LIP",
+    "R-LIP",
+    "L-DSI",
+    "R-DSI",
+    "L-POD",
+    "R-POD",
+    "L-IT",
+    "R-IT",
     # Symphysis (four points, bilateral)
-    "L-SPS", "R-SPS", "L-IPS", "R-IPS",
+    "L-SPS",
+    "R-SPS",
+    "L-IPS",
+    "R-IPS",
     # Left side-specific
-    "L-PT", "L-AC", "L-SAB", "L-DAB", "L-FHC",
-    "L-SGT", "L-LGT", "L-PLT", "L-MLT", "L-DLT", "L-FA",
+    "L-PT",
+    "L-AC",
+    "L-SAB",
+    "L-DAB",
+    "L-FHC",
+    "L-SGT",
+    "L-LGT",
+    "L-PLT",
+    "L-MLT",
+    "L-DLT",
+    "L-FA",
     # Right side-specific
-    "R-PT", "R-AC", "R-SAB", "R-DAB", "R-FHC",
-    "R-SGT", "R-LGT", "R-PLT", "R-MLT", "R-DLT", "R-FA",
+    "R-PT",
+    "R-AC",
+    "R-SAB",
+    "R-DAB",
+    "R-FHC",
+    "R-SGT",
+    "R-LGT",
+    "R-PLT",
+    "R-MLT",
+    "R-DLT",
+    "R-FA",
 ]
 
 
@@ -358,6 +383,8 @@ class AnnotationGUI(tk.Tk):
         record["image_direction"] = self.current_image_direction
         record["view"] = self.current_view_var.get().strip() or None
         record["annotations"] = self._prepare_landmark_data(for_json=True)
+        record["app_version"] = self._get_app_version()
+        record["protocol_version"] = self._get_protocol_version()
 
         key = self._path_key(self.current_image_path)
         record["resolved_image_path"] = key
@@ -377,9 +404,13 @@ class AnnotationGUI(tk.Tk):
         stale_in_display = display_set - json_set
         problems = []
         if missing_from_display:
-            problems.append(f"In JSON but missing from LANDMARK_DISPLAY_ORDER: {sorted(missing_from_display)}")
+            problems.append(
+                f"In JSON but missing from LANDMARK_DISPLAY_ORDER: {sorted(missing_from_display)}"
+            )
         if stale_in_display:
-            problems.append(f"In LANDMARK_DISPLAY_ORDER but not in JSON: {sorted(stale_in_display)}")
+            problems.append(
+                f"In LANDMARK_DISPLAY_ORDER but not in JSON: {sorted(stale_in_display)}"
+            )
         if problems:
             msg = "Landmark display order mismatch:\n\n" + "\n\n".join(problems)
             logger.warning(msg)
@@ -563,8 +594,6 @@ class AnnotationGUI(tk.Tk):
 
             images_to_save: List[Dict] = []
             save_data = {
-                "app_version": self._get_app_version(),
-                "protocol_version": self._get_protocol_version(),
                 "landmarks": list(self.json_data.get("landmarks", [])),
                 "views": dict(self.allowed_views),
                 "images": images_to_save,
@@ -2710,7 +2739,9 @@ class AnnotationGUI(tk.Tk):
             return
         current = self.selected_landmark.get()
         allowed_set = self._get_allowed_landmarks_for_current_view()
-        allowed = self._display_ordered([lm for lm in self.landmarks if lm in allowed_set])
+        allowed = self._display_ordered(
+            [lm for lm in self.landmarks if lm in allowed_set]
+        )
         if current in allowed:
             idx = allowed.index(current)
         else:
