@@ -48,6 +48,33 @@ from path_utils import extract_filename  # pyright: ignore[reportImplicitRelativ
 AnnotationPoint = Tuple[float, float]
 AnnotationValue = Union[AnnotationPoint, List[AnnotationPoint]]
 
+# Display order for the landmark panel and keyboard navigation.
+# Landmarks not listed here are appended at the end in their original JSON order.
+# Changing this list does NOT affect how annotations are stored or read.
+# Extra landmarks injected into specific views regardless of what the project JSON says.
+# This lets us extend view definitions for all users (including those with old JSONs) without
+# touching their annotation data. The symphysis is visible bilaterally even in unilateral shots.
+VIEW_LANDMARK_EXTENSIONS: Dict[str, List[str]] = {
+    "AP Unilateral (Left)":  ["R-SPS", "R-IPS"],
+    "AP Unilateral (Right)": ["L-SPS", "L-IPS"],
+}
+
+LANDMARK_DISPLAY_ORDER: List[str] = [
+    # Bilateral symmetry pairs (assessed together)
+    "L-LIP", "R-LIP",
+    "L-DSI", "R-DSI",
+    "L-POD", "R-POD",
+    "L-IT",  "R-IT",
+    # Symphysis (four points, bilateral)
+    "L-SPS", "R-SPS", "L-IPS", "R-IPS",
+    # Left side-specific
+    "L-PT", "L-AC", "L-SAB", "L-DAB", "L-FHC",
+    "L-SGT", "L-LGT", "L-PLT", "L-MLT", "L-DLT", "L-FA",
+    # Right side-specific
+    "R-PT", "R-AC", "R-SAB", "R-DAB", "R-FHC",
+    "R-SGT", "R-LGT", "R-PLT", "R-MLT", "R-DLT", "R-FA",
+]
+
 
 class AnnotationGUI(tk.Tk):
     # Initializes the main GUI, state, and loads landmarks from CSV.
@@ -336,11 +363,35 @@ class AnnotationGUI(tk.Tk):
         record["resolved_image_path"] = key
         self.annotations[key] = self._parse_annotations_for_record(record)
 
+    def _display_ordered(self, landmarks: List[str]) -> List[str]:
+        """Return landmarks sorted by LANDMARK_DISPLAY_ORDER; unknowns appended in original order."""
+        order_index = {lm: i for i, lm in enumerate(LANDMARK_DISPLAY_ORDER)}
+        known = [lm for lm in LANDMARK_DISPLAY_ORDER if lm in set(landmarks)]
+        unknown = [lm for lm in landmarks if lm not in order_index]
+        return known + unknown
+
+    def _check_landmark_display_order(self) -> None:
+        json_set = set(self.landmarks)
+        display_set = set(LANDMARK_DISPLAY_ORDER)
+        missing_from_display = json_set - display_set
+        stale_in_display = display_set - json_set
+        problems = []
+        if missing_from_display:
+            problems.append(f"In JSON but missing from LANDMARK_DISPLAY_ORDER: {sorted(missing_from_display)}")
+        if stale_in_display:
+            problems.append(f"In LANDMARK_DISPLAY_ORDER but not in JSON: {sorted(stale_in_display)}")
+        if problems:
+            msg = "Landmark display order mismatch:\n\n" + "\n\n".join(problems)
+            logger.warning(msg)
+            messagebox.showwarning("Landmark Order Mismatch", msg)
+
     def _get_allowed_landmarks_for_current_view(self) -> set[str]:
         view = self.current_view_var.get().strip()
         if not view:
             return set()
-        return set(self.allowed_views.get(view, []))
+        base = set(self.allowed_views.get(view, []))
+        extensions = set(VIEW_LANDMARK_EXTENSIONS.get(view, []))
+        return base | extensions
 
     def _get_current_view(self) -> str:
         record = self._get_current_image_record()
@@ -676,6 +727,7 @@ class AnnotationGUI(tk.Tk):
             "images": [],
         }
         self.landmarks = list(landmarks)
+        self._check_landmark_display_order()
         self.images = []
         self.image_index_map = {}
         self.current_image_index = -1
@@ -2172,9 +2224,9 @@ class AnnotationGUI(tk.Tk):
         meta = self.landmark_meta.get(key, {})
 
         allowed = self._get_allowed_landmarks_for_current_view()
-        visible_landmarks = [
-            lm for lm in getattr(self, "landmarks", []) if lm in allowed
-        ]
+        visible_landmarks = self._display_ordered(
+            [lm for lm in getattr(self, "landmarks", []) if lm in allowed]
+        )
 
         for i, lm in enumerate(visible_landmarks, start=0):
             vis_var = tk.BooleanVar(value=True)
@@ -2657,14 +2709,16 @@ class AnnotationGUI(tk.Tk):
         if not self.landmarks:
             return
         current = self.selected_landmark.get()
-        if current in self.landmarks:
-            idx = self.landmarks.index(current)
+        allowed_set = self._get_allowed_landmarks_for_current_view()
+        allowed = self._display_ordered([lm for lm in self.landmarks if lm in allowed_set])
+        if current in allowed:
+            idx = allowed.index(current)
         else:
             idx = 0
         idx = idx + step
-        if idx < 0 or idx >= len(self.landmarks):
+        if idx < 0 or idx >= len(allowed):
             return
-        new_lm = self.landmarks[idx]
+        new_lm = allowed[idx]
         if new_lm != current:
             self.selected_landmark.set(new_lm)
             self._on_landmark_selected()
