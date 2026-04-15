@@ -22,6 +22,7 @@ import threading
 import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from unittest.mock import patch
 
 import pytest
 
@@ -36,6 +37,38 @@ from auth import (
     BASE_BACKUP_FOLDER,
     SHAREPOINT_DRIVE_ID,
 )
+
+
+# =============================================================================
+# Safety: prevent interactive auth from ever triggering during tests.
+#
+# get_graph_client() can launch a device-code flow that opens a Tkinter
+# dialog and blocks indefinitely waiting for user input.  If the cached
+# token is expired / missing this will hang the test runner (and possibly
+# the whole machine if Tk grabs focus).
+#
+# We replace the prompt_callback with one that immediately raises so any
+# code path that would show the interactive dialog fails fast instead.
+# =============================================================================
+
+
+class _InteractiveAuthBlocked(RuntimeError):
+    """Raised when a test would trigger interactive device-code auth."""
+
+
+def _blocking_prompt_callback(uri, code, expires_on):
+    raise _InteractiveAuthBlocked(
+        f"Test tried to trigger interactive auth (code={code}).  "
+        "Delete the cached auth record and re-authenticate via the app, "
+        "not via the test suite."
+    )
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _prevent_interactive_auth():
+    """Globally prevent device-code UI from appearing during tests."""
+    with patch("auth._prompt_callback", _blocking_prompt_callback):
+        yield
 
 
 # =============================================================================
@@ -164,9 +197,10 @@ class TestAuthInitialization:
         """_create_fresh_client should work or fail gracefully."""
         print("[TEST] Testing _create_fresh_client...")
 
-        # First ensure we have auth
-        backup_instance._ensure_initialized()
-
+        # _create_fresh_client only needs an auth record on disk,
+        # not a fully initialized instance.  Skip _ensure_initialized()
+        # which can be slow (network round-trip to Azure) and is already
+        # tested above.
         client = backup_instance._create_fresh_client()
         print(f"[TEST] Fresh client created: {client is not None}")
         # Client may be None if no auth record exists
