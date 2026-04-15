@@ -841,25 +841,34 @@ class AnnotationGUI(tk.Tk):
     def _get_app_version() -> str:
         import platform as _platform
 
-        if _platform.system() == "Windows":
-            try:
-                import platformdirs
-
-                state_path = (
-                    Path(platformdirs.user_documents_dir())
-                    / "2D-Point-Annotator"
-                    / "update_state.json"
-                )
-            except Exception:
-                state_path = Path.home() / "2D-Point-Annotator" / "update_state.json"
-        else:
-            state_path = Path.home() / "2d-point-annotator" / "update_state.json"
+        try:
+            manifest_path = Path(__file__).parent.parent / ".release-please-manifest.json"
+            with manifest_path.open() as f:
+                base_version = json.load(f).get(".", "dev")
+        except Exception:
+            base_version = "dev"
 
         try:
+            if _platform.system() == "Windows":
+                try:
+                    import platformdirs
+                    state_path = Path(platformdirs.user_documents_dir()) / "2D-Point-Annotator" / "update_state.json"
+                except Exception:
+                    state_path = Path.home() / "2D-Point-Annotator" / "update_state.json"
+            else:
+                state_path = Path.home() / "2d-point-annotator" / "update_state.json"
+
             with state_path.open() as f:
-                return json.load(f).get("version", "dev")
+                state = json.load(f)
+
+            if state.get("channel") == "nightly":
+                sha = state.get("sha", "")
+                if sha:
+                    return f"{base_version}-{sha[:7]}"
         except Exception:
-            return "dev"
+            pass
+
+        return base_version
 
     @staticmethod
     def _get_protocol_version() -> str:
