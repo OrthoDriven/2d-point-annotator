@@ -842,7 +842,9 @@ class AnnotationGUI(tk.Tk):
         import platform as _platform
 
         try:
-            manifest_path = Path(__file__).parent.parent / ".release-please-manifest.json"
+            manifest_path = (
+                Path(__file__).parent.parent / ".release-please-manifest.json"
+            )
             with manifest_path.open() as f:
                 base_version = json.load(f).get(".", "dev")
         except Exception:
@@ -852,9 +854,16 @@ class AnnotationGUI(tk.Tk):
             if _platform.system() == "Windows":
                 try:
                     import platformdirs
-                    state_path = Path(platformdirs.user_documents_dir()) / "2D-Point-Annotator" / "update_state.json"
+
+                    state_path = (
+                        Path(platformdirs.user_documents_dir())
+                        / "2D-Point-Annotator"
+                        / "update_state.json"
+                    )
                 except Exception:
-                    state_path = Path.home() / "2D-Point-Annotator" / "update_state.json"
+                    state_path = (
+                        Path.home() / "2D-Point-Annotator" / "update_state.json"
+                    )
             else:
                 state_path = Path.home() / "2d-point-annotator" / "update_state.json"
 
@@ -1070,7 +1079,7 @@ class AnnotationGUI(tk.Tk):
             from_=1,
             to=20,
             orient="horizontal",
-            label="N Orthogonal Projections",
+            label="Num whiskers/Orthogonal Projections",
             variable=self.femoral_axis_count,
             command=self._on_femoral_axis_count_change,
             font=self.dialogue_font,
