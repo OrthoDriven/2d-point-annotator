@@ -2657,14 +2657,16 @@ class AnnotationGUI(tk.Tk):
         if not self.landmarks:
             return
         current = self.selected_landmark.get()
-        if current in self.landmarks:
-            idx = self.landmarks.index(current)
+        allowed_set = self._get_allowed_landmarks_for_current_view()
+        allowed = [lm for lm in self.landmarks if lm in allowed_set]
+        if current in allowed:
+            idx = allowed.index(current)
         else:
             idx = 0
         idx = idx + step
-        if idx < 0 or idx >= len(self.landmarks):
+        if idx < 0 or idx >= len(allowed):
             return
-        new_lm = self.landmarks[idx]
+        new_lm = allowed[idx]
         if new_lm != current:
             self.selected_landmark.set(new_lm)
             self._on_landmark_selected()
