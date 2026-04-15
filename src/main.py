@@ -51,6 +51,14 @@ AnnotationValue = Union[AnnotationPoint, List[AnnotationPoint]]
 # Display order for the landmark panel and keyboard navigation.
 # Landmarks not listed here are appended at the end in their original JSON order.
 # Changing this list does NOT affect how annotations are stored or read.
+# Extra landmarks injected into specific views regardless of what the project JSON says.
+# This lets us extend view definitions for all users (including those with old JSONs) without
+# touching their annotation data. The symphysis is visible bilaterally even in unilateral shots.
+VIEW_LANDMARK_EXTENSIONS: Dict[str, List[str]] = {
+    "AP Unilateral (Left)":  ["R-SPS", "R-IPS"],
+    "AP Unilateral (Right)": ["L-SPS", "L-IPS"],
+}
+
 LANDMARK_DISPLAY_ORDER: List[str] = [
     # Bilateral symmetry pairs (assessed together)
     "L-LIP", "R-LIP",
@@ -381,7 +389,9 @@ class AnnotationGUI(tk.Tk):
         view = self.current_view_var.get().strip()
         if not view:
             return set()
-        return set(self.allowed_views.get(view, []))
+        base = set(self.allowed_views.get(view, []))
+        extensions = set(VIEW_LANDMARK_EXTENSIONS.get(view, []))
+        return base | extensions
 
     def _get_current_view(self) -> str:
         record = self._get_current_image_record()
