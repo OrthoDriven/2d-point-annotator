@@ -5,6 +5,7 @@ Cross-platform updater for 2D Point Annotator.
 Runs outside the app directory to safely replace it.
 """
 
+import argparse
 import contextlib
 import json
 import os
@@ -28,6 +29,8 @@ from requests import ConnectionError, HTTPError, JSONDecodeError
 
 
 REPO_URL = "https://api.github.com/repos/OrthoDriven/2d-point-annotator/releases"
+NIGHTLY_COMMITS_URL = "https://api.github.com/repos/OrthoDriven/2d-point-annotator/commits/main"
+NIGHTLY_ZIP_URL = "https://github.com/OrthoDriven/2d-point-annotator/archive/refs/heads/main.zip"
 SYSTEM = platform.system()
 APP_DIR_NAME_UNIX = "2d-point-annotator"
 APP_DIR_NAME_WINDOWS = "2D-Point-Annotator"
@@ -261,6 +264,76 @@ def should_check_for_updates(state, min_interval):
         return True, 0
 
 
+def run_nightly_update(config, state, state_path):
+    """Update from latest commit on main branch."""
+    app_dir = config["APP_DIR"]
+    user_agent = config["USER_AGENT"]
+    timeout = int(config["REQUEST_TIMEOUT_SEC"])
+
+    headers = {"User-Agent": user_agent}
+    if state.get("etag"):
+        headers["If-None-Match"] = state["etag"]
+
+    try:
+        response = requests.get(NIGHTLY_COMMITS_URL, headers=headers, timeout=timeout)
+
+        if response.status_code == 304:
+            print(f"[info] Already up-to-date ({state.get('sha', 'unknown')[:7]})")
+            save_state(state_path, update_last_check=True)
+            return
+
+        response.raise_for_status()
+        data = response.json()
+        new_sha = data.get("sha", "")
+        new_etag = response.headers.get("ETag", "")
+
+        if not new_sha:
+            print("[warn] GitHub response did not include sha")
+            save_state(state_path, update_last_check=True)
+            return
+
+        if state.get("sha") == new_sha:
+            print(f"[info] Already up-to-date ({new_sha[:7]})")
+            save_state(state_path, update_last_check=True)
+            return
+
+        print(f"[info] New commit detected ({new_sha[:7]}). Updating...")
+
+    except Exception as e:
+        print(f"[warn] Could not check for nightly update: {e}")
+        save_state(state_path, update_last_check=True)
+        return
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            zip_path = temp_path / "annotator.zip"
+
+            download_release_zip(
+                zip_url=NIGHTLY_ZIP_URL,
+                download_path=zip_path,
+                timeout=timeout * 6,
+            )
+
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(temp_path)
+
+            project_root = find_project_root(temp_path)
+            if not project_root:
+                print("[error] Cannot find project root in downloaded archive")
+                return
+
+            atomic_swap(project_root, app_dir)
+
+        save_state(state_path, sha=new_sha, etag=new_etag)
+        print(f"[info] Update complete -> {new_sha[:7]}")
+
+    except Exception as e:
+        print(f"[error] Nightly update failed: {e}")
+        save_state(state_path, update_last_check=True)
+        raise
+
+
 def run_update():
     """Main update routine."""
     config = load_config()
@@ -273,6 +346,11 @@ def run_update():
 
     # Load state
     state = load_state(state_path)
+
+    channel = state.get("channel", "stable")
+    if channel == "nightly":
+        run_nightly_update(config, state, state_path)
+        return
 
     # Check if we should run
     # should_check, delta = should_check_for_updates(
@@ -302,7 +380,7 @@ def run_update():
             print(f"[info] Already up-to-date ({state.get('sha', 'unknown')})")
             return
 
-        current_version = V(state.get("version", "0.0.0"))
+        current_version = V(state.get("version") or "0.0.0")
         new_version = V(result.get("version", "0.0.0"))
 
         if current_version == new_version:
@@ -351,6 +429,27 @@ def run_update():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="2D Point Annotator updater")
+    parser.add_argument(
+        "--set-channel",
+        choices=["stable", "nightly"],
+        dest="set_channel",
+        help="Switch update channel and reset update state",
+    )
+    args = parser.parse_args()
+
+    if args.set_channel:
+        _config = load_config()
+        _state = load_state(_config["STATE_PATH"])
+        _state["channel"] = args.set_channel
+        _state["sha"] = ""
+        _state["etag"] = ""
+        _state["version"] = ""
+        with open(_config["STATE_PATH"], "w") as _f:
+            json.dump(_state, _f, indent=2)
+        print(f"[info] Channel set to '{args.set_channel}'. Next launch will fetch from {args.set_channel}.")
+        sys.exit(0)
+
     try:
         run_update()
     except KeyboardInterrupt:
