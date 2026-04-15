@@ -1,0 +1,242 @@
+#+TITLE: Panoptes Research: SharePoint Authentication for External Users Without Microsoft Accounts
+#+DATE: 2026-04-15
+#+RESEARCH_ANGLES: 5 (4 completed, 1 cancelled)
+#+STATUS: complete
+
+* Executive Summary
+
+Your current setup — DeviceCodeCredential with delegated Files.ReadWrite.All — is
+actually the RIGHT pattern for users who have Microsoft accounts. The problem is
+purely that external collaborators don't have accounts in your tenant.
+
+Your proposed solution — distributing a shared "application password" (client
+secret) that external users enter — is explicitly warned against by Microsoft:
+
+#+BEGIN_QUOTE
+"Never publish that credential in your source code, embed it in web pages, or
+use it in a widely distributed native application."
+— Microsoft Entra ID documentation
+#+END_QUOTE
+
+Whether you embed the secret in the binary or have users type it in, the security
+profile is identical: anyone with the secret gets full app-level access to your
+SharePoint, with no audit trail linking actions to individuals, no MFA, and no
+Conditional Access enforcement.
+
+*The recommended approach is one of three alternatives*, ranked by fit for your
+scenario (5-20 external medical researchers, small JSON files, frequent uploads):
+
+1. *Azure AD B2B Guest Invitations + Email OTP* (simplest UX change, keeps current architecture)
+2. *Azure Function Proxy* (most secure for truly external users, moderate infrastructure)
+3. *Azure Blob Storage + SAS Tokens* (simplest if you can move off SharePoint)
+
+* Key Findings
+
+** Finding 1: Client Credentials Flow Works Technically But Is a Security Anti-Pattern for Desktop Apps
+
+/Synthesized from angles 1, 3/
+
+~ClientSecretCredential~ from azure-identity works perfectly for server-side
+applications. The app authenticates as itself (no user sign-in), gets application
+permissions, and can upload to SharePoint.
+
+However, for desktop apps distributed to end users:
+- Microsoft classifies desktop apps as "public clients" that "can't be trusted to safely keep application secrets"
+- A shared secret means ALL users share ONE identity — no per-user audit trail
+- Client credentials flow bypasses Conditional Access, MFA, and location policies
+- If one copy is compromised, you must rotate the secret for ALL users
+- There is NO security difference between embedding the secret vs. having users type it
+
+The threat model for your scenario: a malicious collaborator could extract the
+secret, generate their own Graph tokens, and upload/modify/delete annotation data
+with no way to attribute the action to them specifically.
+
+** Finding 2: Files.ReadWrite.All (Delegated) Is Overly Broad — But the Fix Is Simple
+
+/Synthesized from angles 1, 2, 5/
+
+Your current delegated scope ~Files.ReadWrite.All~ grants the signed-in user
+access to all files they can already access — it doesn't grant tenant-wide access
+beyond the user's own permissions. So it's less dangerous than the name implies.
+
+However, if you move to application permissions (app-only), ~Files.ReadWrite.All~
+becomes tenant-wide. The modern best practice is:
+
+- *Sites.Selected* (application permission): Scopes app access to ONE specific
+  SharePoint site. Requires admin PowerShell setup but is the least-privilege
+  option for app-only auth.
+- As of 2026, ~Sites.ReadWrite.All~ (application) is considered a security
+  anti-pattern — it grants access to every SharePoint site in the tenant.
+
+Configuration requires PowerShell:
+#+BEGIN_SRC powershell
+# Grant Sites.Selected to app, then assign site-level write access
+New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $app.Id ...
+Invoke-MgGraphRequest -Method POST -Uri ".../sites/$siteId/permissions" -Body @{
+    roles = @("write")
+    grantedToIdentities = @(@{ application = @{ id = $app.AppId } })
+}
+#+END_SRC
+
+** Finding 3: Azure AD B2B Guest Accounts + Email OTP May Be the Simplest Path
+
+/Synthesized from angles 1, 3, 5/
+
+Microsoft Entra External ID (formerly Azure AD External Identities) supports
+*email one-time passcode (OTP) authentication* for guest users. This means:
+
+- You invite external collaborators as B2B guests in your tenant
+- They authenticate using their email + a one-time code (no MS account needed)
+- They get their own identity in your tenant with full audit trail
+- Your existing DeviceCodeCredential flow continues to work
+- Conditional Access, MFA policies all apply normally
+
+This is the *lowest-effort change* because your current auth architecture stays
+intact. The only change is how external users authenticate (email OTP instead of
+MS account password).
+
+Setup: Azure Portal → Entra ID → External Identities → enable "Email one-time
+passcode" as an identity provider, then invite users via B2B invitation.
+
+** Finding 4: Azure Function Proxy Is the Community Consensus for Truly External Users
+
+/Synthesized from angles 3, 5/
+
+If B2B guest invitations don't work for your scenario, the community consensus
+(2025-2026) is:
+
+#+BEGIN_EXAMPLE
+Desktop App → HTTP POST with file + API key → Azure Function → MS Graph → SharePoint
+#+END_EXAMPLE
+
+The Function:
+1. Validates the caller (per-user API key, or a simple shared key)
+2. Authenticates to MS Graph using server-side ~ClientSecretCredential~ (secret in Key Vault, never exposed)
+3. Uploads the file to the specific SharePoint drive
+4. Logs which user uploaded what
+
+Security advantages:
+- Client secret never leaves the server
+- Per-user API keys enable individual audit trail
+- Keys can be rotated per-user without affecting others
+- Function can validate file content/size before uploading
+- ~Sites.Selected~ permission scopes the Function to one SharePoint site
+
+Cost: Azure Functions consumption plan — for your volume (5-20 users, small files)
+this would be essentially free (well within free tier).
+
+** Finding 5: Azure Blob Storage + SAS Tokens Is the Simplest If You Can Leave SharePoint
+
+/Synthesized from angles 3, 5/
+
+If you don't strictly need SharePoint:
+1. Create an Azure Blob Storage container for backups
+2. Your app requests a short-lived SAS token from a lightweight backend
+3. SAS token grants write-only access to one container, expires in 15-60 minutes
+4. App uploads directly to Blob Storage using the SAS URL
+5. Token expires automatically — no credential to compromise
+
+This is the most secure option but requires migrating from SharePoint to Blob
+Storage for the backup destination.
+
+* Contradictions and Open Questions
+
+** Email OTP Availability
+The research confirmed email OTP exists for B2B guests, but we didn't deeply
+verify whether it works seamlessly with the device-code flow specifically (vs.
+interactive browser flows). Worth testing before committing.
+
+** Sites.Selected + Client Credentials in Desktop Apps
+Even with Sites.Selected scoping (minimal permissions), Microsoft still warns
+against distributing client secrets in desktop apps. The scoping limits blast
+radius but doesn't address the fundamental credential exposure problem.
+
+** Conditional Access for Workload Identities
+This is an evolving feature in Entra ID. As of 2026, Conditional Access has
+limited support for app-only (client credentials) auth. Location-based and
+device-compliance policies do NOT apply to service principals.
+
+* Recommendations
+
+** For your specific scenario: Start with B2B Guest + Email OTP
+
+| Step | Action                                                     | Effort                     |
+|------+------------------------------------------------------------+----------------------------|
+|    1 | Enable email OTP in Entra External Identities              | 10 min admin portal change |
+|    2 | Invite external collaborators as B2B guests                | 5 min per user             |
+|    3 | Test that DeviceCodeCredential works with email OTP guests | 30 min                     |
+|    4 | If it works: done. No code changes needed.                 | —                          |
+
+This preserves your entire existing architecture. External users authenticate
+with their email + one-time code instead of an MS account password.
+
+** If B2B doesn't work: Azure Function Proxy
+
+| Step | Action                                                                     | Effort          |
+|------+----------------------------------------------------------------------------+-----------------|
+|    1 | Create Azure Function (Python, HTTP trigger)                               | 2-4 hours       |
+|    2 | Configure Sites.Selected permission for the Function's app registration    | 1 hour          |
+|    3 | Store client secret in Azure Key Vault                                     | 30 min          |
+|    4 | Generate per-user API keys, distribute to external users                   | 30 min per user |
+|    5 | Modify desktop app: if user is external, POST to Function instead of Graph | 2-4 hours       |
+
+** Regardless: Tighten existing permissions
+
+| Step | Action                                                                               | Effort |
+|------+--------------------------------------------------------------------------------------+--------|
+|    1 | Switch from Files.ReadWrite.All (delegated) to Sites.ReadWrite.All or Sites.Selected | 1 hour |
+|    2 | Verify your app still works with the tighter permission                              | 30 min |
+
+** Do NOT do: Distribute a shared client secret
+
+This is explicitly against Microsoft's guidance and provides no meaningful
+security, whether embedded in the binary or entered by the user.
+
+* Per-Angle Summaries
+
+** Angle 1: Client Credentials Flow for MS Graph
+Comprehensive analysis of ClientSecretCredential, application permissions,
+admin consent requirements, and Python code examples. Clear finding that
+client credentials flow works technically but Microsoft explicitly warns
+against embedding secrets in distributed native apps.
+Full report: [[file:angle-1-client-credentials-flow.md]]
+
+** Angle 2: MS Graph Permission Scoping
+This angle went recursive (librarian tried to spawn sub-librarians via Panoptes
+skill instead of doing direct research). Content is thin — only the decomposition
+plan, not actual findings. Permission scoping is covered well by angles 1 and 5.
+Full report: [[file:angle-2-permission-scoping.md]]
+
+** Angle 3: Security Risks and Hardening
+Deep security analysis including threat modeling for shared credentials in desktop
+apps, Microsoft's official guidance against distributing secrets, ranked
+alternatives (SAS tokens > Azure Function > user auth > client credentials),
+and practical hardening measures if client credentials must be used.
+Full report: [[file:angle-3-security-hardening.md]]
+
+** Angle 4: Alternative Auth Patterns (CANCELLED)
+Cancelled after 5.5 minutes — appeared stuck in recursive sub-agent spawning.
+Alternative patterns are well-covered by angles 1, 3, and 5.
+
+** Angle 5: Real-World Implementations
+Collection of 10 real-world examples from GitHub, Microsoft samples, and blog
+posts. Found community consensus on Azure Function proxy pattern for external
+users, Sites.Selected as the 2025-2026 standard for least privilege, and
+practical code examples for each approach.
+Full report: [[file:angle-5-real-world-implementations.md]]
+
+* Methodology
+
+Research conducted by Panoptes on 2026-04-15.
+5 parallel librarian sub-agents dispatched (4 completed, 1 cancelled).
+
+Angles investigated:
+1. Client Credentials Flow for MS Graph (Conceptual/Docs) — COMPLETED
+2. MS Graph Permission Scoping (Security/Docs) — COMPLETED (thin, went recursive)
+3. Security Risks and Hardening (Security) — COMPLETED
+4. Alternative Auth Patterns for External Users (Alternatives) — CANCELLED
+5. Real-World Implementations (Community/Examples) — COMPLETED
+
+Known issue: Angles 2 and 4 attempted to recursively spawn sub-librarians via
+the Panoptes skill instead of conducting research directly. This is a skill
+configuration issue — librarian sub-agents should not load the Panoptes skill.

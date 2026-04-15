@@ -33,6 +33,11 @@ from msgraph import GraphServiceClient
 from msgraph.generated.models.drive_item import DriveItem
 from msgraph.generated.models.folder import Folder
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).parents[1]))
+
 from dirs import AUTH_DIR
 
 logger = logging.getLogger(__name__)

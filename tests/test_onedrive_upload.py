@@ -67,7 +67,7 @@ def _blocking_prompt_callback(uri, code, expires_on):
 @pytest.fixture(autouse=True, scope="session")
 def _prevent_interactive_auth():
     """Globally prevent device-code UI from appearing during tests."""
-    with patch("auth._prompt_callback", _blocking_prompt_callback):
+    with patch("auth.internal._prompt_callback", _blocking_prompt_callback):
         yield
 
 

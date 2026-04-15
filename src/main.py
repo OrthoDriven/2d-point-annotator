@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageTk
 
-from auth import OneDriveBackup  # pyright: ignore[reportImplicitRelativeImport]
+from auth import create_backup_manager  # pyright: ignore[reportImplicitRelativeImport]
 from dataset_config import (  # pyright: ignore[reportImplicitRelativeImport]
     get_data_dir,
     get_dataset_dest,
@@ -277,7 +277,7 @@ class AnnotationGUI(tk.Tk):
         self.csv_local_image_directory_path: Optional[str] = None
 
         # OneDrive backup integration - initialize early to check/prompt for credentials
-        self.onedrive_backup = OneDriveBackup()
+        self.onedrive_backup = create_backup_manager()
         # Trigger credential check at startup (will show auth dialog if needed)
         self.after(100, self._init_onedrive_credentials)
 
