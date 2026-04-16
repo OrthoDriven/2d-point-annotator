@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.2.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.1.1...v2.2.0) (2026-04-16)
+
+
+### Features
+
+* **dev:** Added a nightly feature so that dev can pull from main ([1f9950e](https://github.com/OrthoDriven/2d-point-annotator/commit/1f9950e3cb7cf1c1904f4b733d5f072e7b6b3e31))
+
+
+### Bug Fixes
+
+* **auth:** fixed auth file locks ([4e201f8](https://github.com/OrthoDriven/2d-point-annotator/commit/4e201f8335687859ab5b4065b7a050bfdb183df6))
+* **docs:** storing app version per-image, not on full json ([f6fb908](https://github.com/OrthoDriven/2d-point-annotator/commit/f6fb908f4131a1506dd09e4c419edc9545ab5ad4))
+* **docs:** storing app version per-image, not on full json ([b3b5ff6](https://github.com/OrthoDriven/2d-point-annotator/commit/b3b5ff6ea719a7f0b8cd21d5995dd810b16d8f81))
+* **landmark:** Add L/R PS landmarks in unilateral views. ([c868256](https://github.com/OrthoDriven/2d-point-annotator/commit/c868256674ca062e1eaff5f0062a7eed8fe133ef))
+* **test:** Fixing onedrive tests that hang when no auth client provided ([1034084](https://github.com/OrthoDriven/2d-point-annotator/commit/103408483b406a48ad10a1db15ddb551d3f7d19e))
+* **test:** Fixing onedrive tests that hang when no auth client provided ([6684a8b](https://github.com/OrthoDriven/2d-point-annotator/commit/6684a8b22d1cc8ff6bea909aa649e25314bc32a1))
+* **ui:** Added "whiskers" to femoral axis tool description ([3fd086c](https://github.com/OrthoDriven/2d-point-annotator/commit/3fd086c39a86896d19a234fa9a42cd61ba08c521))
+* **ui:** Landmark display order ([9350a40](https://github.com/OrthoDriven/2d-point-annotator/commit/9350a40ee770d589994806fe071e01257d34f79b))
+* **ux:** Single-sided landmark keyboard navigation includes full set ([4872163](https://github.com/OrthoDriven/2d-point-annotator/commit/4872163850e413ee983deec2a14ee778f8d966cb))
+* **version:** Adding .release-please-manifest.json as version GT ([4bdf277](https://github.com/OrthoDriven/2d-point-annotator/commit/4bdf27701695c579b25d9f32463f8f481ff69175))
+
 ## [2.1.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.1.0...v2.1.1) (2026-04-14)
 
 
