@@ -221,6 +221,7 @@ class AnnotationGUI(tk.Tk):
         self.zoom_canvas: tk.Canvas | None = None
         self.zoom_percent = tk.IntVar(value=8)
         self.show_selected_landmark_in_zoom: tk.BooleanVar = tk.BooleanVar(value=True)
+        self.enable_zoom_contrast: tk.BooleanVar = tk.BooleanVar(value=False)
         self.zoom_img_obj: ImageTk.PhotoImage | None = None
         self.zoom_base_item: Optional[int] = None
         self.zoom_src_rect: Tuple[float, float, float, float] | None = None
@@ -1039,6 +1040,16 @@ class AnnotationGUI(tk.Tk):
             command=self._refresh_zoom_landmark_overlay,
             font=self.dialogue_font,
         ).pack(anchor="w", padx=6, pady=(0, 6))
+        tk.Checkbutton(
+            zoom_wrap,
+            text="Enhance Contrast (CLAHE)",
+            variable=self.enable_zoom_contrast,
+            command=lambda: self._update_zoom_view(
+                self.last_mouse_canvas_pos[0] if self.last_mouse_canvas_pos else None,
+                self.last_mouse_canvas_pos[1] if self.last_mouse_canvas_pos else None,
+            ),
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(0, 6))
         self.after(0, self._render_black_zoom_view)
 
         hover_wrap = ttk.LabelFrame(left_tools, text="Hover Circle Tool")
@@ -1645,6 +1656,13 @@ class AnnotationGUI(tk.Tk):
                 self.zoom_src_rect,
                 resample=Image.Resampling.BICUBIC,
             )
+
+        if self.enable_zoom_contrast.get():
+            out_gray = out.convert("L")
+            img_np = np.array(out_gray)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            cl = clahe.apply(img_np)
+            out = Image.fromarray(cl)
 
         self.zoom_img_obj = ImageTk.PhotoImage(out)
 
