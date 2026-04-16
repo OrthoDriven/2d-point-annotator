@@ -50,6 +50,11 @@ BASE_BACKUP_FOLDER = "pelvic-2d-points-backup"
 
 AUTH_RECORD_PATH = AUTH_DIR / "auth_record.json"
 
+# Module-level cached credential to avoid MSAL token-cache file-lock
+# contention when many DeviceCodeCredential instances are created rapidly.
+_shared_credential: Optional[DeviceCodeCredential] = None
+_credential_lock = threading.Lock()
+
 # Global reference to auth dialog (to prevent garbage collection)
 _auth_dialog: Optional[tk.Toplevel] = None
 
@@ -207,6 +212,58 @@ def get_date_folder() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
+def _get_or_create_credential(
+    prompt_callback_fn=None,
+) -> DeviceCodeCredential:
+    """
+    Get or create the module-level cached DeviceCodeCredential.
+
+    MSAL's persistent token cache (``onedrive-ml``) uses file-based locking.
+    Creating many DeviceCodeCredential instances rapidly causes lock contention
+    and hangs.  We keep a single process-wide credential and reuse it.
+
+    Parameters
+    ----------
+    prompt_callback_fn : callable, optional
+        Callback for device-code prompts.  Only used when a *new* credential
+        is created (i.e., the first call).  Subsequent calls return the
+        cached credential regardless of this parameter.
+    """
+    global _shared_credential
+
+    if _shared_credential is not None:
+        return _shared_credential
+
+    with _credential_lock:
+        if _shared_credential is not None:
+            return _shared_credential
+
+        # Load cached auth record if exists
+        record = None
+        if AUTH_RECORD_PATH.exists():
+            try:
+                record = AuthenticationRecord.deserialize(AUTH_RECORD_PATH.read_text())
+                logger.info("Loaded existing auth record")
+            except Exception as e:
+                logger.warning("Failed to load auth record: %s", e)
+                record = None
+
+        # Setup credential with token cache
+        cache_opts = TokenCachePersistenceOptions(
+            name="onedrive-ml", allow_unencrypted_storage=True
+        )
+
+        _shared_credential = DeviceCodeCredential(
+            client_id=CLIENT_ID,
+            tenant_id=TENANT_ID,
+            cache_persistence_options=cache_opts,
+            authentication_record=record,
+            prompt_callback=prompt_callback_fn or _prompt_callback,
+        )
+        logger.info("Module-level credential created")
+        return _shared_credential
+
+
 def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
     """
     Create an authenticated Graph client, triggering device-code auth if needed.
@@ -230,31 +287,7 @@ def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
     Exception
         If authentication fails completely.
     """
-    if prompt_callback_fn is None:
-        prompt_callback_fn = _prompt_callback
-
-    # Load cached auth record if exists
-    record = None
-    if AUTH_RECORD_PATH.exists():
-        try:
-            record = AuthenticationRecord.deserialize(AUTH_RECORD_PATH.read_text())
-            logger.info("Loaded existing auth record")
-        except Exception as e:
-            logger.warning(f"Failed to load auth record: {e}")
-            record = None
-
-    # Setup credential with token cache
-    cache_opts = TokenCachePersistenceOptions(
-        name="onedrive-ml", allow_unencrypted_storage=True
-    )
-
-    credential = DeviceCodeCredential(
-        client_id=CLIENT_ID,
-        tenant_id=TENANT_ID,
-        cache_persistence_options=cache_opts,
-        authentication_record=record,
-        prompt_callback=prompt_callback_fn,
-    )
+    credential = _get_or_create_credential(prompt_callback_fn)
 
     # Always try to get a token to verify/refresh credentials
     try:
@@ -263,7 +296,7 @@ def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
         logger.info("Token acquired (expires: %s)", token.expires_on)
 
         # If we didn't have a record before, save one now
-        if record is None:
+        if not AUTH_RECORD_PATH.exists():
             logger.info("No auth record existed, creating one...")
             record = credential.authenticate(scopes=SCOPES)
             AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -319,6 +352,20 @@ class OneDriveBackup:
             except Exception as e:
                 logger.error("Failed to initialize OneDrive client: %s", e)
                 return False
+
+    def _get_shared_credential(self) -> Optional[DeviceCodeCredential]:
+        """
+        Get the module-level shared credential for token acquisition.
+
+        Delegates to ``_get_or_create_credential`` which maintains a single
+        process-wide DeviceCodeCredential to avoid MSAL token-cache
+        file-lock contention.
+        """
+        try:
+            return _get_or_create_credential()
+        except Exception as e:
+            logger.error("Failed to get credential: %s", e)
+            return None
 
     async def _ensure_folder_exists(self, folder_path: str) -> bool:
         """
@@ -453,55 +500,24 @@ class OneDriveBackup:
         Create a fresh Graph client for the current thread.
 
         The MS Graph SDK uses httpx which has thread/event-loop affinity,
-        so we need a fresh client for each thread that does uploads.
+        so we need a fresh GraphServiceClient for each thread. However,
+        the DeviceCodeCredential is reused — creating many credential
+        instances causes MSAL token-cache file-lock contention and hangs.
         """
-        # Use lock to prevent race conditions when multiple threads
-        # try to access the token cache simultaneously
-        with self._lock:
-            try:
-                logger.info("Creating fresh client for this thread...")
+        try:
+            logger.info("Creating fresh client for this thread...")
 
-                # Load cached auth record
-                record = None
-                if AUTH_RECORD_PATH.exists():
-                    try:
-                        record = AuthenticationRecord.deserialize(
-                            AUTH_RECORD_PATH.read_text()
-                        )
-                    except Exception as e:
-                        logger.warning("Failed to load auth record: %s", e)
-                        return None
-
-                if record is None:
-                    logger.warning(
-                        "No auth record found - user needs to authenticate first"
-                    )
-                    return None
-
-                # Setup credential with cached token
-                # We use the auth record which enables silent token refresh
-                # No prompt_callback = won't show device code UI if interactive auth needed
-                # But silent refresh (using refresh token) will still work
-                cache_opts = TokenCachePersistenceOptions(
-                    name="onedrive-ml", allow_unencrypted_storage=True
-                )
-
-                credential = DeviceCodeCredential(
-                    client_id=CLIENT_ID,
-                    tenant_id=TENANT_ID,
-                    cache_persistence_options=cache_opts,
-                    authentication_record=record,
-                    # No prompt_callback - if interactive auth is truly needed,
-                    # it will fail gracefully rather than hang waiting for user input
-                )
-
-                client = GraphServiceClient(credentials=credential, scopes=SCOPES)
-                logger.info("Fresh client created successfully")
-                return client
-
-            except Exception as e:
-                logger.error("Failed to create fresh client: %s", e)
+            credential = self._get_shared_credential()
+            if credential is None:
                 return None
+
+            client = GraphServiceClient(credentials=credential, scopes=SCOPES)
+            logger.info("Fresh client created successfully")
+            return client
+
+        except Exception as e:
+            logger.error("Failed to create fresh client: %s", e)
+            return None
 
     def upload_backup_sync(self, file_path: str | Path, timeout: float = 30.0) -> bool:
         """
