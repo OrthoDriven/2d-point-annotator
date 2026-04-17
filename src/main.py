@@ -2,7 +2,10 @@ from __future__ import annotations
 
 # pyright: reportMissingImports=false, reportMissingTypeArgument=false, reportUninitializedInstanceVariable=false, reportOperatorIssue=false
 import ast
+import asyncio
 import datetime
+import getpass
+import io
 import json
 import logging
 import sqlite3
@@ -29,7 +32,10 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageTk
 
-from auth import OneDriveBackup  # pyright: ignore[reportImplicitRelativeImport]
+from auth import (  # pyright: ignore[reportImplicitRelativeImport]
+    SHAREPOINT_DRIVE_ID,
+    OneDriveBackup,
+)
 from dataset_config import (  # pyright: ignore[reportImplicitRelativeImport]
     get_data_dir,
     get_dataset_dest,
@@ -1238,6 +1244,13 @@ class AnnotationGUI(tk.Tk):
             ctrl,
             text="Save Annotations",
             command=self.save_annotations,
+            font=self.heading_font,
+        ).pack(fill="x", pady=5)
+
+        tk.Button(
+            ctrl,
+            text="Submit for Review",
+            command=self.submit_for_review,
             font=self.heading_font,
         ).pack(fill="x", pady=5)
 
@@ -3722,6 +3735,403 @@ class AnnotationGUI(tk.Tk):
         if PLATFORM == "Windows":
             messagebox.showinfo("Saved", "Annotations saved")
         return True
+
+    def submit_for_review(self) -> None:
+        """Submit current image for review via OneDrive upload."""
+        if not self.current_image_path:
+            messagebox.showwarning("Submit", "No image loaded.")
+            return
+
+        pts, _quality = self._get_annotations()
+        available_landmarks = [lm for lm in pts.keys() if lm not in ("LOB", "ROB")]
+        if not available_landmarks:
+            messagebox.showwarning("Submit", "No landmarks placed yet.")
+            return
+
+        weird_landmarks = self._prompt_weird_landmarks(available_landmarks)
+        if weird_landmarks is None:
+            return
+
+        note_dialog = tk.Toplevel(self)
+        note_dialog.title("Review Note")
+        note_dialog.geometry("500x200")
+        note_dialog.resizable(False, False)
+        note_dialog.transient(self)
+        note_dialog.grab_set()
+
+        note_dialog.update_idletasks()
+        x = (note_dialog.winfo_screenwidth() - 500) // 2
+        y = (note_dialog.winfo_screenheight() - 200) // 2
+        note_dialog.geometry(f"500x200+{x}+{y}")
+
+        frame = ttk.Frame(note_dialog, padding=20)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(frame, text="Review Note:", font=self.heading_font).pack(anchor="w")
+        note_text = tk.Text(frame, height=6, font=self.dialogue_font)
+        note_text.pack(fill="x", pady=(5, 10))
+
+        result = {"note": "", "confirmed": False}
+
+        def confirm():
+            result["note"] = note_text.get("1.0", "end").strip()
+            result["confirmed"] = True
+            note_dialog.grab_release()
+            note_dialog.destroy()
+
+        def cancel():
+            note_dialog.grab_release()
+            note_dialog.destroy()
+
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(fill="x")
+        tk.Button(
+            btn_frame,
+            text="Cancel",
+            command=cancel,
+            font=self.dialogue_font,
+            padx=20,
+            pady=8,
+        ).pack(side="right", padx=5)
+        tk.Button(
+            btn_frame,
+            text="Submit",
+            command=confirm,
+            font=self.dialogue_font,
+            padx=20,
+            pady=8,
+        ).pack(side="right")
+
+        note_dialog.wait_window(note_dialog)
+
+        if not result["confirmed"]:
+            return
+
+        review_note: str
+        note_val = result["note"]
+        if isinstance(note_val, str):
+            review_note = note_val
+        else:
+            review_note = ""
+
+        review_data = self._prepare_review_data(review_note, weird_landmarks)
+
+        import tempfile
+
+        temp_dir = Path(tempfile.gettempdir()) / "2d_point_annotator_review"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        image_name = PurePath(self.current_image_path).stem
+
+        original_img_path = temp_dir / f"{image_name}_original.tif"
+        review_json_path = temp_dir / f"{image_name}_review.json"
+
+        try:
+            import shutil
+
+            shutil.copy2(self.current_image_path, original_img_path)
+            with open(review_json_path, "w") as f:
+                json.dump(review_data, f, indent=2)
+        except Exception as e:
+            messagebox.showerror("Submit", f"Failed to prepare files:\n{e}")
+            return
+
+        zoom_paths = self._capture_zoom_views_for_landmarks(
+            weird_landmarks, temp_dir, image_name
+        )
+
+        success = self._upload_for_review(
+            original_img_path,
+            zoom_paths,
+            review_json_path,
+            image_name,
+        )
+
+        if success:
+            messagebox.showinfo(
+                "Submitted",
+                f"Image submitted for review.\nNote: {review_note[:50]}{'...' if len(review_note) > 50 else ''}",
+            )
+        else:
+            messagebox.showerror("Submit", "Failed to upload to OneDrive. Check logs.")
+
+    def _prompt_weird_landmarks(
+        self, available_landmarks: List[str]
+    ) -> Optional[List[str]]:
+        dialog = tk.Toplevel(self)
+        dialog.title("Select Landmarks to Review")
+        dialog.geometry("400x350")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() - 400) // 2
+        y = (dialog.winfo_screenheight() - 350) // 2
+        dialog.geometry(f"400x350+{x}+{y}")
+
+        frame = ttk.Frame(dialog, padding=20)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(
+            frame,
+            text="Select landmarks to highlight in review:",
+            font=self.heading_font,
+        ).pack(anchor="w", pady=(0, 10))
+
+        var_map: Dict[str, tk.BooleanVar] = {}
+        for lm in available_landmarks:
+            var_map[lm] = tk.BooleanVar(value=False)
+            tk.Checkbutton(frame, text=lm, variable=var_map[lm]).pack(anchor="w")
+
+        result = {"selected": None}
+
+        def confirm():
+            result["selected"] = [lm for lm, v in var_map.items() if v.get()]
+            dialog.grab_release()
+            dialog.destroy()
+
+        def cancel():
+            dialog.grab_release()
+            dialog.destroy()
+
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(fill="x", pady=(15, 0))
+        tk.Button(
+            btn_frame,
+            text="Cancel",
+            command=cancel,
+            font=self.dialogue_font,
+            padx=20,
+            pady=8,
+        ).pack(side="right", padx=5)
+        tk.Button(
+            btn_frame,
+            text="OK",
+            command=confirm,
+            font=self.dialogue_font,
+            padx=20,
+            pady=8,
+        ).pack(side="right")
+
+        dialog.wait_window(dialog)
+
+        return result["selected"]
+
+    def _capture_zoom_views_for_landmarks(
+        self, landmarks: List[str], temp_dir: Path, image_name: str
+    ) -> List[Path]:
+        zoom_paths = []
+        pts, _quality = self._get_annotations()
+
+        for lm in landmarks:
+            if lm not in pts:
+                continue
+            point = pts[lm]
+            if self._is_line_landmark(lm):
+                continue
+            x, y = point[0], point[1]
+
+            xi, yi = self._screen_to_img(float(x), float(y))
+            zoom_img = self._generate_zoom_at_point(xi, yi)
+            if zoom_img:
+                zoom_path = temp_dir / f"zoom_{lm}.png"
+                zoom_img.save(zoom_path, "PNG")
+                zoom_paths.append(zoom_path)
+
+        return zoom_paths
+
+    def _generate_zoom_at_point(self, xi: float, yi: float) -> Optional["Image.Image"]:
+        if self.current_image is None:
+            return None
+
+        iw, ih = self.current_image.size
+        if not (0 <= xi < iw and 0 <= yi < ih):
+            return None
+
+        zoom_lev = max(2, min(40, float(self.zoom_percent.get())))
+        half_w = max(1.0, iw / (zoom_lev * 2.0))
+        half_h = max(1.0, ih / (zoom_lev * 2.0))
+
+        src_left = float(xi) - half_w
+        src_top = float(yi) - half_h
+        src_right = float(xi) + half_w
+        src_bottom = float(yi) + half_h
+
+        size = 300
+
+        try:
+            out = self.current_image.transform(
+                (size, size),
+                Image.Transform.EXTENT,
+                (src_left, src_top, src_right, src_bottom),
+                resample=Image.Resampling.BICUBIC,
+                fill=0,
+            )
+        except TypeError:
+            out = self.current_image.transform(
+                (size, size),
+                Image.Transform.EXTENT,
+                (src_left, src_top, src_right, src_bottom),
+                resample=Image.Resampling.BICUBIC,
+            )
+
+        if self.enable_zoom_contrast.get():
+            out_gray = out.convert("L")
+            img_np = np.array(out_gray)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            cl = clahe.apply(img_np)
+            out = Image.fromarray(cl)
+
+        return out
+
+    def _prepare_review_data(
+        self, review_note: str, weird_landmarks: List[str]
+    ) -> dict:
+        """Prepare review submission data JSON."""
+        pts, quality = self._get_annotations()
+        key = (
+            self._path_key(self.current_image_path)
+            if self.json_path is not None and self.current_image_path is not None
+            else str(self.current_image_path)
+        )
+        per_img_meta = self.landmark_meta.get(key, {})
+
+        # Get all annotations with flags and notes
+        annotations_data = {}
+        for lm, point in pts.items():
+            meta = per_img_meta.get(lm, {})
+            is_flagged = bool(meta.get("flag", False))
+            note = str(meta.get("note", ""))
+            if self._is_line_landmark(lm):
+                line_pts = self._get_line_points(lm)
+                value = (
+                    [[float(px), float(py)] for px, py in line_pts]
+                    if line_pts
+                    else None
+                )
+            else:
+                pt = point
+                x, y = pt[0], pt[1]
+                value = [float(x), float(y)]
+            annotations_data[lm] = {
+                "value": value,
+                "flag": is_flagged,
+                "note": note,
+            }
+
+        return {
+            "image_path": str(self.current_image_path),
+            "image_name": PurePath(self.current_image_path).name,
+            "image_flag": self.current_image_flag,
+            "image_direction": self.current_image_direction,
+            "image_quality": quality,
+            "review_note": review_note,
+            "submitted_by": getpass.getuser(),
+            "submitted_at": datetime.now().isoformat(),
+            "weird_landmarks": weird_landmarks,
+            "annotations": annotations_data,
+        }
+
+    def _upload_for_review(
+        self,
+        original_img_path: Path,
+        zoom_img_paths: List[Path],
+        review_json_path: Path,
+        image_name: str,
+    ) -> bool:
+        """
+        Upload review files to OneDrive to_review folder.
+
+        Structure: to_review/<image_name>/<files>
+        """
+        status_dialog = tk.Toplevel(self)
+        status_dialog.title("Uploading")
+        status_dialog.geometry("300x80")
+        status_dialog.resizable(False, False)
+        status_dialog.transient(self)
+        status_dialog.grab_set()
+
+        status_dialog.update_idletasks()
+        x = (status_dialog.winfo_screenwidth() - 300) // 2
+        y = (status_dialog.winfo_screenheight() - 80) // 2
+        status_dialog.geometry(f"300x80+{x}+{y}")
+
+        frame = ttk.Frame(status_dialog, padding=20)
+        frame.pack(fill="both", expand=True)
+
+        status_label = ttk.Label(
+            frame, text="Uploading to OneDrive...", font=self.dialogue_font
+        )
+        status_label.pack(pady=(0, 10))
+
+        progress = ttk.Progressbar(frame, mode="indeterminate", length=260)
+        progress.pack()
+        progress.start()
+
+        try:
+            client = self.onedrive_backup._create_fresh_client()
+            if not client:
+                logger.error("No Graph client available for review upload")
+                return False
+
+            loop = asyncio.SelectorEventLoop()
+
+            async def do_upload():
+                base_folder = "pelvic-2d-points-backup/to_review"
+                img_folder = f"{base_folder}/{image_name}"
+
+                # Ensure folder exists
+                await self.onedrive_backup._ensure_folder_exists(img_folder)
+
+                async def upload_file(
+                    local_path: Optional[Path], remote_name: str
+                ) -> bool:
+                    if local_path is None:
+                        return True
+                    try:
+                        with open(local_path, "rb") as f:
+                            file_content = f.read()
+                        drive_item_path = f"root:/{img_folder}/{remote_name}:"
+                        await (
+                            client.drives.by_drive_id(SHAREPOINT_DRIVE_ID)
+                            .items.by_drive_item_id(drive_item_path)
+                            .content.put(file_content)
+                        )
+                        logger.info(f"Uploaded review file: {remote_name}")
+                        return True
+                    except Exception as e:
+                        logger.error(f"Failed to upload {remote_name}: {e}")
+                        return False
+
+                # Upload original image and review JSON
+                success = await upload_file(
+                    original_img_path, f"{image_name}_original.tif"
+                )
+                success = (
+                    await upload_file(review_json_path, f"{image_name}_review.json")
+                    and success
+                )
+                for zoom_path in zoom_img_paths:
+                    zoom_name = zoom_path.name
+                    success = await upload_file(zoom_path, zoom_name) and success
+                return success
+
+            try:
+                success = loop.run_until_complete(do_upload())
+            finally:
+                loop.close()
+                progress.stop()
+                status_dialog.grab_release()
+                status_dialog.destroy()
+            return success
+
+        except Exception as e:
+            logger.error(f"Review upload failed: {e}", exc_info=True)
+            progress.stop()
+            status_dialog.grab_release()
+            status_dialog.destroy()
+            return False
 
     def _init_onedrive_credentials(self) -> None:
         """
