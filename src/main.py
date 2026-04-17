@@ -15,7 +15,7 @@ import tkinter.font as tkfont
 from datetime import datetime
 from pathlib import Path, PurePath
 from tkinter import filedialog, messagebox, ttk
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 # Configure logging - writes to file for debugging without disrupting users
 logging.basicConfig(
@@ -3762,13 +3762,13 @@ class AnnotationGUI(tk.Tk):
         note_dialog.update_idletasks()
         x = (note_dialog.winfo_screenwidth() - 500) // 2
         y = (note_dialog.winfo_screenheight() - 200) // 2
-        note_dialog.geometry(f"500x200+{x}+{y}")
+        note_dialog.geometry(f"500x280+{x}+{y}")
 
-        frame = ttk.Frame(note_dialog, padding=20)
+        frame = tk.Frame(note_dialog, padx=20, pady=20)
         frame.pack(fill="both", expand=True)
 
-        ttk.Label(frame, text="Review Note:", font=self.heading_font).pack(anchor="w")
-        note_text = tk.Text(frame, height=6, font=self.dialogue_font)
+        tk.Label(frame, text="Review Note:", font=self.heading_font).pack(anchor="w")
+        note_text = tk.Text(frame, height=8, font=self.dialogue_font)
         note_text.pack(fill="x", pady=(5, 10))
 
         result = {"note": "", "confirmed": False}
@@ -3783,23 +3783,21 @@ class AnnotationGUI(tk.Tk):
             note_dialog.grab_release()
             note_dialog.destroy()
 
-        btn_frame = ttk.Frame(frame)
-        btn_frame.pack(fill="x")
+        btn_frame = tk.Frame(frame)
+        btn_frame.pack(fill="x", pady=(10, 0))
         tk.Button(
             btn_frame,
             text="Cancel",
             command=cancel,
             font=self.dialogue_font,
-            padx=20,
-            pady=8,
+            width=12,
         ).pack(side="right", padx=5)
         tk.Button(
             btn_frame,
             text="Submit",
             command=confirm,
             font=self.dialogue_font,
-            padx=20,
-            pady=8,
+            width=12,
         ).pack(side="right")
 
         note_dialog.wait_window(note_dialog)
@@ -3870,7 +3868,7 @@ class AnnotationGUI(tk.Tk):
         y = (dialog.winfo_screenheight() - 350) // 2
         dialog.geometry(f"400x350+{x}+{y}")
 
-        frame = ttk.Frame(dialog, padding=20)
+        frame = tk.Frame(dialog, padx=20, pady=20)
         frame.pack(fill="both", expand=True)
 
         tk.Label(
@@ -3879,12 +3877,34 @@ class AnnotationGUI(tk.Tk):
             font=self.heading_font,
         ).pack(anchor="w", pady=(0, 10))
 
-        var_map: Dict[str, tk.BooleanVar] = {}
-        for lm in available_landmarks:
-            var_map[lm] = tk.BooleanVar(value=False)
-            tk.Checkbutton(frame, text=lm, variable=var_map[lm]).pack(anchor="w")
+        canvas_frame = tk.Frame(frame, height=200)
+        canvas_frame.pack(fill="x")
+        canvas_frame.pack_propagate(False)
 
-        result = {"selected": None}
+        canvas = tk.Canvas(canvas_frame, highlightthickness=0)
+        scrollbar = tk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all")),
+        )
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        var_map: Dict[str, tk.BooleanVar] = {}
+        cols = 3
+        for i, lm in enumerate(available_landmarks):
+            var_map[lm] = tk.BooleanVar(value=False)
+            row_frame = tk.Frame(scrollable_frame)
+            row_frame.grid(row=i // cols, column=i % cols, sticky="w", padx=5, pady=2)
+            tk.Checkbutton(row_frame, text=lm, variable=var_map[lm]).pack(side="left")
+
+        result: Dict[str, Any] = {"selected": None}
 
         def confirm():
             result["selected"] = [lm for lm, v in var_map.items() if v.get()]
@@ -3895,23 +3915,21 @@ class AnnotationGUI(tk.Tk):
             dialog.grab_release()
             dialog.destroy()
 
-        btn_frame = ttk.Frame(frame)
-        btn_frame.pack(fill="x", pady=(15, 0))
+        btn_frame = tk.Frame(frame)
+        btn_frame.pack(fill="x", pady=(10, 0))
         tk.Button(
             btn_frame,
             text="Cancel",
             command=cancel,
             font=self.dialogue_font,
-            padx=20,
-            pady=8,
+            width=12,
         ).pack(side="right", padx=5)
         tk.Button(
             btn_frame,
             text="OK",
             command=confirm,
             font=self.dialogue_font,
-            padx=20,
-            pady=8,
+            width=12,
         ).pack(side="right")
 
         dialog.wait_window(dialog)
@@ -4047,27 +4065,37 @@ class AnnotationGUI(tk.Tk):
         """
         status_dialog = tk.Toplevel(self)
         status_dialog.title("Uploading")
-        status_dialog.geometry("300x80")
+        status_dialog.geometry("300x100")
         status_dialog.resizable(False, False)
         status_dialog.transient(self)
         status_dialog.grab_set()
 
         status_dialog.update_idletasks()
         x = (status_dialog.winfo_screenwidth() - 300) // 2
-        y = (status_dialog.winfo_screenheight() - 80) // 2
-        status_dialog.geometry(f"300x80+{x}+{y}")
+        y = (status_dialog.winfo_screenheight() - 100) // 2
+        status_dialog.geometry(f"300x100+{x}+{y}")
 
-        frame = ttk.Frame(status_dialog, padding=20)
+        frame = tk.Frame(status_dialog, padx=20, pady=20)
         frame.pack(fill="both", expand=True)
 
-        status_label = ttk.Label(
+        status_label = tk.Label(
             frame, text="Uploading to OneDrive...", font=self.dialogue_font
         )
         status_label.pack(pady=(0, 10))
 
-        progress = ttk.Progressbar(frame, mode="indeterminate", length=260)
-        progress.pack()
-        progress.start()
+        progress = tk.Canvas(frame, width=260, height=20, bg="white", highlightthickness=1, relief="sunken")
+        progress.pack(pady=5)
+
+        canvas_item = progress.create_rectangle(0, 0, 0, 20, fill="#0078D4", outline="")
+
+        def animate():
+            current = progress.coords(canvas_item)[2]
+            if current >= 260:
+                current = 0
+            progress.coords(canvas_item, 0, 0, current, 20)
+            progress.after(30, animate)
+
+        anim_id = progress.after(30, animate)
 
         try:
             client = self.onedrive_backup._create_fresh_client()
@@ -4121,14 +4149,14 @@ class AnnotationGUI(tk.Tk):
                 success = loop.run_until_complete(do_upload())
             finally:
                 loop.close()
-                progress.stop()
+                progress.after_cancel(anim_id)
                 status_dialog.grab_release()
                 status_dialog.destroy()
             return success
 
         except Exception as e:
             logger.error(f"Review upload failed: {e}", exc_info=True)
-            progress.stop()
+            progress.after_cancel(anim_id)
             status_dialog.grab_release()
             status_dialog.destroy()
             return False
