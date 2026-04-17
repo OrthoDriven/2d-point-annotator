@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.3.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.2.0...v2.3.0) (2026-04-17)
+
+
+### Features
+
+* **canvas:** add pixel-art scaling (Scale2x) toggle for zoom window ([e3ee687](https://github.com/OrthoDriven/2d-point-annotator/commit/e3ee687341effeffb7eadd1805577d1a8eb43e23))
+* **canvas:** apply CLAHE to zoom view when enabled ([c6f9199](https://github.com/OrthoDriven/2d-point-annotator/commit/c6f919972169b065ffc97362d9c8be634e2df5de))
+* **ui:** add zoom contrast toggle to left panel ([c6f9199](https://github.com/OrthoDriven/2d-point-annotator/commit/c6f919972169b065ffc97362d9c8be634e2df5de))
+
 ## [2.2.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.1.1...v2.2.0) (2026-04-16)
 
 
