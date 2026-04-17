@@ -221,6 +221,8 @@ class AnnotationGUI(tk.Tk):
         self.zoom_canvas: tk.Canvas | None = None
         self.zoom_percent = tk.IntVar(value=8)
         self.show_selected_landmark_in_zoom: tk.BooleanVar = tk.BooleanVar(value=True)
+        self.enable_zoom_contrast: tk.BooleanVar = tk.BooleanVar(value=False)
+        self.enable_zoom_pixel_art: tk.BooleanVar = tk.BooleanVar(value=False)
         self.zoom_img_obj: ImageTk.PhotoImage | None = None
         self.zoom_base_item: Optional[int] = None
         self.zoom_src_rect: Tuple[float, float, float, float] | None = None
@@ -1039,6 +1041,27 @@ class AnnotationGUI(tk.Tk):
             command=self._refresh_zoom_landmark_overlay,
             font=self.dialogue_font,
         ).pack(anchor="w", padx=6, pady=(0, 6))
+        tk.Checkbutton(
+            zoom_wrap,
+            text="Enhance Contrast (CLAHE)",
+            variable=self.enable_zoom_contrast,
+            command=lambda: self._update_zoom_view(
+                self.last_mouse_canvas_pos[0] if self.last_mouse_canvas_pos else None,
+                self.last_mouse_canvas_pos[1] if self.last_mouse_canvas_pos else None,
+            ),
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(0, 6))
+        tk.Checkbutton(
+            zoom_wrap,
+            text="Pixel-Art Scaling (Scale2x)",
+            variable=self.enable_zoom_pixel_art,
+            command=lambda: self._update_zoom_view(
+                self.last_mouse_canvas_pos[0] if self.last_mouse_canvas_pos else None,
+                self.last_mouse_canvas_pos[1] if self.last_mouse_canvas_pos else None,
+            ),
+            font=self.dialogue_font,
+            takefocus=False,
+        ).pack(anchor="w", padx=6, pady=(0, 6))
         self.after(0, self._render_black_zoom_view)
 
         hover_wrap = ttk.LabelFrame(left_tools, text="Hover Circle Tool")
@@ -1595,6 +1618,59 @@ class AnnotationGUI(tk.Tk):
         self._update_zoom_crosshair()
         self._clear_zoom_landmark_overlay()
 
+    def _scale2x_numpy(self, img_array):
+        """
+        Scale2x (EPX) algorithm using vectorized NumPy.
+        Scales a 2D (grayscale) or 3D (RGB) image array by 2x.
+        """
+        h, w = img_array.shape[:2]
+        is_rgb = img_array.ndim == 3
+
+        if is_rgb:
+            out = np.zeros((h * 2, w * 2, img_array.shape[2]), dtype=img_array.dtype)
+            padded = np.pad(img_array, ((1, 1), (1, 1), (0, 0)), mode="edge")
+        else:
+            out = np.zeros((h * 2, w * 2), dtype=img_array.dtype)
+            padded = np.pad(img_array, ((1, 1), (1, 1)), mode="edge")
+
+        # Neighbor extraction (A=top, B=right, C=bottom, D=left, P=center)
+        A = padded[0:-2, 1:-1]
+        D = padded[1:-1, 0:-2]
+        P = padded[1:-1, 1:-1]
+        B = padded[1:-1, 2:]
+        C = padded[2:, 1:-1]
+
+        # Scale2x / EPX rules:
+        #   IF C==A AND C!=D AND A!=B => top-left=A
+        #   IF A==B AND A!=C AND B!=D => top-right=B
+        #   IF D==C AND D!=B AND C!=A => bottom-left=C
+        #   IF B==D AND B!=A AND D!=C => bottom-right=D
+        if is_rgb:
+            eq = lambda x, y: np.all(x == y, axis=-1)
+        else:
+            eq = lambda x, y: x == y
+
+        # Default all output pixels to P
+        out[0::2, 0::2] = P
+        out[0::2, 1::2] = P
+        out[1::2, 0::2] = P
+        out[1::2, 1::2] = P
+
+        cond = eq(C, A) & ~eq(C, D) & ~eq(A, B)
+        mask = cond & eq(C, A)
+        out[0::2, 0::2] = np.where(mask[..., None] if is_rgb else mask, A, P)
+
+        cond = eq(A, B) & ~eq(A, C) & ~eq(B, D)
+        out[0::2, 1::2] = np.where(cond[..., None] if is_rgb else cond, B, P)
+
+        cond = eq(D, C) & ~eq(D, B) & ~eq(C, A)
+        out[1::2, 0::2] = np.where(cond[..., None] if is_rgb else cond, C, P)
+
+        cond = eq(B, D) & ~eq(B, A) & ~eq(D, C)
+        out[1::2, 1::2] = np.where(cond[..., None] if is_rgb else cond, D, P)
+
+        return out
+
     def _update_zoom_view(
         self, mouse_x: Optional[float] = None, mouse_y: Optional[float] = None
     ) -> None:
@@ -1630,21 +1706,44 @@ class AnnotationGUI(tk.Tk):
 
         self.zoom_src_rect = (src_left, src_top, src_right, src_bottom)
 
-        try:
-            out = self.current_image.transform(
-                (size, size),
-                Image.Transform.EXTENT,
-                self.zoom_src_rect,
-                resample=Image.Resampling.BICUBIC,
-                fill=0,
+        if self.enable_zoom_pixel_art.get():
+            crop_box = (
+                int(np.floor(src_left)),
+                int(np.floor(src_top)),
+                int(np.ceil(src_right)),
+                int(np.ceil(src_bottom)),
             )
-        except TypeError:
-            out = self.current_image.transform(
-                (size, size),
-                Image.Transform.EXTENT,
-                self.zoom_src_rect,
-                resample=Image.Resampling.BICUBIC,
-            )
+            patch = self.current_image.crop(crop_box).convert("L")
+            patch_np = np.array(patch)
+
+            patch_np = self._scale2x_numpy(patch_np)
+            patch_np = self._scale2x_numpy(patch_np)
+
+            out = Image.fromarray(patch_np)
+            out = out.resize((size, size), Image.Resampling.NEAREST)
+        else:
+            try:
+                out = self.current_image.transform(
+                    (size, size),
+                    Image.Transform.EXTENT,
+                    self.zoom_src_rect,
+                    resample=Image.Resampling.BICUBIC,
+                    fill=0,
+                )
+            except TypeError:
+                out = self.current_image.transform(
+                    (size, size),
+                    Image.Transform.EXTENT,
+                    self.zoom_src_rect,
+                    resample=Image.Resampling.BICUBIC,
+                )
+
+        if self.enable_zoom_contrast.get():
+            out_gray = out.convert("L")
+            img_np = np.array(out_gray)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            cl = clahe.apply(img_np)
+            out = Image.fromarray(cl)
 
         self.zoom_img_obj = ImageTk.PhotoImage(out)
 
