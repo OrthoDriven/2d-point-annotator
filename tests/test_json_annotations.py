@@ -40,6 +40,7 @@ def make_gui_stub(tmp_path: Path):
     gui.current_image_flag = True
     gui.current_view_var = FakeVar("ap")
     gui.saved_image_snapshots = {}
+    gui.hover_radii = {}
     gui.method = FakeVar("Flood Fill")
     gui.fill_sensitivity = FakeVar(18)
     gui.edge_lock = FakeVar(True)

@@ -37,10 +37,10 @@ from dataset_config import (  # pyright: ignore[reportImplicitRelativeImport]
 )
 from dirs import BASE_DIR, PLATFORM  # pyright: ignore[reportImplicitRelativeImport]
 from downloader import download_dataset  # pyright: ignore[reportImplicitRelativeImport]
-from landmark_reference import (
+from landmark_reference import (  # pyright: ignore[reportImplicitRelativeImport]
     LandmarkReference,  # pyright: ignore[reportImplicitRelativeImport]
 )
-from landmark_reference_dialog import (
+from landmark_reference_dialog import (  # pyright: ignore[reportImplicitRelativeImport]
     LandmarkReferenceDialog,  # pyright: ignore[reportImplicitRelativeImport]
 )
 from path_utils import extract_filename  # pyright: ignore[reportImplicitRelativeImport]
@@ -102,7 +102,7 @@ LANDMARK_DISPLAY_ORDER: List[str] = [
 
 
 class AnnotationGUI(tk.Tk):
-    # Initializes the main GUI, state, and loads landmarks from CSV.
+    HOVER_CIRCLE_LANDMARKS: Set[str] = {"L-FHC", "R-FHC", "L-AC", "R-AC"}
 
     def __init__(self) -> None:
         super().__init__()
@@ -176,7 +176,11 @@ class AnnotationGUI(tk.Tk):
         self.json_data: Dict = {"landmarks": [], "views": {}, "images": []}
         self.allowed_views: Dict[str, List[str]] = {}
         self.landmark_meta: Dict[str, Dict[str, Dict[str, Union[bool, str]]]] = {}
+        self.hover_radii: Dict[str, Dict[str, int]] = {}
         self.saved_image_snapshots: Dict[str, str] = {}
+        self.queue_status_var = tk.StringVar(value="")
+        self.exit_queue_btn: tk.Button | None = None
+        self.exit_csv_check_btn: tk.Button | None = None
         self.image_tree: ttk.Treeview | None = None
         self._suspend_image_tree_select = False
         self._navigation_in_progress = False
@@ -236,7 +240,6 @@ class AnnotationGUI(tk.Tk):
         self.zoom_crosshair_ids: list[int] = []
         self.zoom_extended_crosshair_ids: list[int] = []
         self.zoom_landmark_overlay_ids: list[int] = []
-        self.zoom_hover_circle_id: Optional[int] = None
         self.zoom_hover_circle_id: Optional[int] = None
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.note_text: Optional[tk.Text] = None
@@ -455,11 +458,13 @@ class AnnotationGUI(tk.Tk):
         key = self._path_key(self.current_image_path)
         pts = self.annotations.setdefault(key, {})
         meta = self.landmark_meta.setdefault(key, {})
+        radii = getattr(self, "hover_radii", {}).get(key, {})
 
         to_delete = [lm for lm in pts if lm not in allowed]
         for lm in to_delete:
             del pts[lm]
             meta.pop(lm, None)
+            radii.pop(lm, None)
 
     def _rebuild_landmark_panel_for_view(self) -> None:
         allowed = self._get_allowed_landmarks_for_current_view()
@@ -632,6 +637,7 @@ class AnnotationGUI(tk.Tk):
         annotations = record.get("annotations", {}) or {}
         per_img_settings: Dict[str, Dict] = {}
         per_img_meta: Dict[str, Dict[str, Union[bool, str]]] = {}
+        per_img_radius: Dict[str, int] = {}
 
         for lm in self.landmarks:
             raw = annotations.get(lm)
@@ -644,6 +650,11 @@ class AnnotationGUI(tk.Tk):
                     "flag": bool(raw.get("flag", False)),
                     "note": str(raw.get("note", "")),
                 }
+                if lm in self.HOVER_CIRCLE_LANDMARKS and "radius" in raw:
+                    try:
+                        per_img_radius[lm] = int(raw["radius"])
+                    except (TypeError, ValueError):
+                        pass
             else:
                 val = raw
                 per_img_meta[lm] = {"flag": False, "note": ""}
@@ -687,6 +698,7 @@ class AnnotationGUI(tk.Tk):
             key = self._path_key(self.current_image_path)
             self.lm_settings[key] = per_img_settings
             self.landmark_meta[key] = per_img_meta
+            getattr(self, "hover_radii", {})[key] = per_img_radius
 
         return pts
 
@@ -764,7 +776,7 @@ class AnnotationGUI(tk.Tk):
         self.images = []
         self.image_index_map = {}
         self.current_image_index = -1
-        self.saved_image_snapshots = {}
+        self.saved_image_snapshots.clear()
         self.annotations.clear()
         self.lm_settings.clear()
         self.landmark_meta.clear()
@@ -772,6 +784,10 @@ class AnnotationGUI(tk.Tk):
         self.last_seed.clear()
         self.queue_mode = False
         self.check_csv_mode = False
+        try:
+            self.hover_radii.clear()
+        except AttributeError:
+            pass
         self.current_view_var.set("")
 
         if self.view_dropdown is not None:
@@ -2325,6 +2341,27 @@ class AnnotationGUI(tk.Tk):
                 tags="zoom_landmark_overlay",
             )
             overlay_ids.extend([circle_id, hline_id, vline_id])
+            if lm in self.HOVER_CIRCLE_LANDMARKS and abs(self.disp_scale) > 1e-12:
+                key = (
+                    self._path_key(self.current_image_path)
+                    if self.json_path is not None
+                    else str(self.current_image_path)
+                )
+                saved_radius = getattr(self, "hover_radii", {}).get(key, {}).get(lm)
+                if saved_radius is not None:
+                    img_r = saved_radius / self.disp_scale
+                    zoom_r = img_r * (size / src_w)
+                    overlay_ids.append(
+                        self.zoom_canvas.create_oval(
+                            zx - zoom_r,
+                            zy - zoom_r,
+                            zx + zoom_r,
+                            zy + zoom_r,
+                            outline="orange",
+                            width=2,
+                            tags="zoom_landmark_overlay",
+                        )
+                    )
 
         self.zoom_landmark_overlay_ids = overlay_ids
 
@@ -2687,6 +2724,8 @@ class AnnotationGUI(tk.Tk):
             )
             if key in self.landmark_meta:
                 self.landmark_meta[key].pop(lm, None)
+            if key in getattr(self, "hover_radii", {}):
+                self.hover_radii[key].pop(lm, None)
 
             if self._is_line_landmark(lm):
                 self._clear_line_preview()
@@ -2811,10 +2850,9 @@ class AnnotationGUI(tk.Tk):
     def _sync_auto_tools_for_selected_landmark(self) -> None:
         lm = self.selected_landmark.get().strip()
 
-        hover_landmarks = {"L-FHC", "R-FHC", "L-AC", "R-AC"}
         femoral_axis_landmarks = {"L-FA", "R-FA"}
 
-        want_hover = lm in hover_landmarks
+        want_hover = lm in self.HOVER_CIRCLE_LANDMARKS
         want_femoral_axis = lm in femoral_axis_landmarks
 
         if want_hover:
@@ -2906,6 +2944,10 @@ class AnnotationGUI(tk.Tk):
         self.image_index_map = {}
         self.current_image_index = -1
         self.saved_image_snapshots.clear()
+        try:
+            self.hover_radii.clear()
+        except AttributeError:
+            pass
         self.current_view_var.set("")
         if self.view_dropdown is not None:
             self.view_dropdown["values"] = ()
@@ -3367,6 +3409,7 @@ class AnnotationGUI(tk.Tk):
                 self.image_direction_var.set("AP")
                 self.annotations[key] = {}
                 self.landmark_meta[key] = {}
+                self.hover_radii[key] = {}
             self.current_image_quality = 0
             self.current_view_var.set(self._get_current_view())
         else:
@@ -3403,6 +3446,7 @@ class AnnotationGUI(tk.Tk):
         )
         self.lm_settings.setdefault(current_key, {})
         self.annotations.setdefault(current_key, {})
+        self.hover_radii.setdefault(current_key, {})
 
         if not json_record_loaded:
             self.load_points(show_message=False)
@@ -3495,11 +3539,15 @@ class AnnotationGUI(tk.Tk):
             if use_json_format:
                 if value is None and not is_flagged and not note.strip():
                     continue
-                landmark_data[lm] = {
+                entry: Dict[str, object] = {
                     "value": value,
                     "flag": is_flagged,
                     "note": note,
                 }
+                saved_radius = getattr(self, "hover_radii", {}).get(key, {}).get(lm)
+                if lm in self.HOVER_CIRCLE_LANDMARKS and saved_radius is not None:
+                    entry["radius"] = saved_radius
+                landmark_data[lm] = entry
             elif value is not None:
                 landmark_data[lm] = value
 
@@ -3953,6 +4001,7 @@ class AnnotationGUI(tk.Tk):
 
             if found_filename is False:
                 self.annotations[str(self.current_image_path)] = {}
+                self.hover_radii.pop(str(self.current_image_path), None)
                 self._update_found_checks({})
                 if show_message:
                     messagebox.showinfo(
@@ -3962,6 +4011,7 @@ class AnnotationGUI(tk.Tk):
         row: pd.DataFrame = rowdf.iloc[0]
         pts = {}
         per_img_settings = self.lm_settings.setdefault(str(self.current_image_path), {})
+        self.hover_radii.pop(str(self.current_image_path), None)
         for lm in self.landmarks:
             val = row.get(lm, "")
             if isinstance(val, str) and val.startswith("[") and val.endswith("]"):
@@ -4217,6 +4267,18 @@ class AnnotationGUI(tk.Tk):
                 width=2,
                 tags="marker",
             )
+            if lm in self.HOVER_CIRCLE_LANDMARKS:
+                saved_radius = self.hover_radii.get(key, {}).get(lm)
+                if saved_radius is not None:
+                    self.canvas.create_oval(
+                        xs - saved_radius,
+                        ys - saved_radius,
+                        xs + saved_radius,
+                        ys + saved_radius,
+                        outline="orange",
+                        width=2,
+                        tags="marker",
+                    )
             if self.check_csv_mode and drawing_current_selected:
                 self.canvas.create_oval(
                     xs - 10 * r,
@@ -4619,6 +4681,9 @@ class AnnotationGUI(tk.Tk):
         if self.hover_circle_id is not None:
             self.canvas.delete(self.hover_circle_id)
             self.hover_circle_id = None
+        if self.zoom_hover_circle_id is not None and self.zoom_canvas is not None:
+            self.zoom_canvas.delete(self.zoom_hover_circle_id)
+            self.zoom_hover_circle_id = None
 
     # Clears all segmentation overlays and connector lines.
     def _remove_all_overlays(self):
@@ -4706,6 +4771,8 @@ class AnnotationGUI(tk.Tk):
         x0, y0, x1, y1 = self._display_rect()
         if not self.current_image:
             return
+        if self.current_image_path is None:
+            return
         if not (x0 <= event.x < x1 and y0 <= event.y < y1):
             return
 
@@ -4766,6 +4833,13 @@ class AnnotationGUI(tk.Tk):
             return
 
         self.annotations.setdefault(str(self.current_image_path), {})[lm] = (x, y)
+        if lm in self.HOVER_CIRCLE_LANDMARKS:
+            img_key = (
+                self._path_key(self.current_image_path)
+                if self.json_path is not None
+                else str(self.current_image_path)
+            )
+            self.hover_radii.setdefault(img_key, {})[lm] = self.hover_radius.get()
         if lm in self.landmark_found:
             self.landmark_found[lm].set(True)
         self._draw_points()
@@ -4958,11 +5032,19 @@ class AnnotationGUI(tk.Tk):
                 "No Landmark", "Please select a landmark in the list"
             )
             return
+        if self.current_image_path is None:
+            return
 
         current_pts = self.annotations.setdefault(str(self.current_image_path), {})
         if lm in current_pts:
             # Delete it if it does
             del current_pts[lm]
+            img_key = (
+                self._path_key(self.current_image_path)
+                if self.json_path is not None
+                else str(self.current_image_path)
+            )
+            self.hover_radii.get(img_key, {}).pop(lm, None)
 
         if self._is_line_landmark(lm):
             self._clear_line_preview()
@@ -5634,7 +5716,8 @@ class AnnotationGUI(tk.Tk):
             f"Use Next/Prev (or N/B keys) to cycle through them.\n"
             f"Click 'Exit Queue Mode' to return to normal browsing.",
         )
-        self.exit_queue_btn.config(state="normal")
+        if self.exit_queue_btn is not None:
+            self.exit_queue_btn.config(state="normal")
         return
 
     def _update_queue_status(self) -> None:
@@ -5656,7 +5739,8 @@ class AnnotationGUI(tk.Tk):
         self.unannotated_queue.clear()
         self.queue_index = 0
         self._update_queue_status()
-        self.exit_queue_btn.config(state="disabled")
+        if self.exit_queue_btn is not None:
+            self.exit_queue_btn.config(state="disabled")
         messagebox.showinfo("Queue Mode", "Returned to normal directory browsing.")
 
     def _change_method_to_ff(self) -> None:
@@ -5702,7 +5786,8 @@ class AnnotationGUI(tk.Tk):
         self.check_csv_mode = False
         self.csv_path_queue.clear()
         self.csv_index = 0
-        self.exit_csv_check_btn.config(state="disabled")
+        if self.exit_csv_check_btn is not None:
+            self.exit_csv_check_btn.config(state="disabled")
         self._update_queue_status()
 
         return
