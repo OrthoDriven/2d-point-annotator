@@ -236,6 +236,8 @@ class AnnotationGUI(tk.Tk):
         self.zoom_crosshair_ids: list[int] = []
         self.zoom_extended_crosshair_ids: list[int] = []
         self.zoom_landmark_overlay_ids: list[int] = []
+        self.zoom_hover_circle_id: Optional[int] = None
+        self.zoom_hover_circle_id: Optional[int] = None
         self.lm_settings: Dict[str, Dict[str, Dict]] = {}
         self.note_text: Optional[tk.Text] = None
         self.note_text_internal_update: bool = False
@@ -1757,6 +1759,7 @@ class AnnotationGUI(tk.Tk):
 
         self._update_zoom_crosshair()
         self._refresh_zoom_landmark_overlay()
+        self._update_zoom_hover_circle()
 
     def _on_zoom_change(self, _value) -> None:
         if self.last_mouse_canvas_pos is None:
@@ -4504,6 +4507,53 @@ class AnnotationGUI(tk.Tk):
             )
         else:
             self.canvas.coords(self.hover_circle_id, x0, y0, x1, y1)
+
+    # Creates or updates the hover circle in the zoom view.
+    # The zoom hover circle is always centered since the zoom view
+    # is centered on the mouse position. The radius scales with zoom.
+    def _update_zoom_hover_circle(self) -> None:
+        if self.zoom_canvas is None:
+            return
+
+        # Only show if hover tool is enabled
+        if not self.hover_enabled.get():
+            if self.zoom_hover_circle_id is not None:
+                self.zoom_canvas.delete(self.zoom_hover_circle_id)
+                self.zoom_hover_circle_id = None
+            return
+
+        # Need valid zoom source rect to compute scale
+        if self.zoom_src_rect is None:
+            return
+
+        size = self._get_zoom_canvas_size()
+        src_left, src_top, src_right, src_bottom = self.zoom_src_rect
+        src_w = src_right - src_left
+        src_h = src_bottom - src_top
+
+        if abs(src_w) < 1e-12 or abs(src_h) < 1e-12:
+            return
+
+        # Calculate scaled radius:
+        # hover_radius is in screen pixels, convert to image pixels, then to zoom canvas pixels
+        # img_radius = screen_radius / disp_scale
+        # zoom_radius = img_radius * (size / src_w)
+        screen_radius = float(self.hover_radius.get())
+        disp_scale = self.disp_scale or 1.0
+        img_radius = screen_radius / disp_scale
+        zoom_radius = img_radius * (size / src_w)
+
+        # Center of zoom canvas
+        cx, cy = size / 2.0, size / 2.0
+        x0, y0 = cx - zoom_radius, cy - zoom_radius
+        x1, y1 = cx + zoom_radius, cy + zoom_radius
+
+        if self.zoom_hover_circle_id is None:
+            self.zoom_hover_circle_id = self.zoom_canvas.create_oval(
+                x0, y0, x1, y1, outline="cyan", width=1, tags="zoom_hover_circle"
+            )
+        else:
+            self.zoom_canvas.coords(self.zoom_hover_circle_id, x0, y0, x1, y1)
 
     def _update_mouse_crosshair(self, x: float, y: float) -> None:
         circle_r = 8
