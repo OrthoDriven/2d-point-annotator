@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.4.0...v2.4.1) (2026-04-18)
+
+
+### Bug Fixes
+
+* **ui:** zoom window hover circle update on scroll ([8c57bdd](https://github.com/OrthoDriven/2d-point-annotator/commit/8c57bddbd4a01a2c63f33600308964b16cf985d3))
+
 ## [2.4.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.3.0...v2.4.0) (2026-04-18)
 
 
