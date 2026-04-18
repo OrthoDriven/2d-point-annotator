@@ -143,6 +143,8 @@ class AnnotationGUI(tk.Tk):
             ".TIFF",
             ".TIF",
         ]
+        self._panel_width = 450
+        self._scrollbar_width = 18
         self._start_min_w = 0
         self._start_min_h = 0
         self.use_ff = tk.BooleanVar(value=True)
@@ -996,9 +998,12 @@ class AnnotationGUI(tk.Tk):
 
     # -------------------------------------------------------------------------
 
+    def _compute_panel_width(self) -> int:
+        screen_w = self.winfo_screenwidth()
+        return max(300, min(450, int(screen_w * 0.25)))
+
     def _setup_ui(self) -> None:
-        PANEL_WIDTH = 450
-        SCROLLBAR_WIDTH = 18
+        self._panel_width = self._compute_panel_width()
         IMAGE_LIST_HEIGHT = 180
         CANVAS_HEIGHT = 220
 
@@ -1011,7 +1016,7 @@ class AnnotationGUI(tk.Tk):
         main = tk.Frame(self)
         main.pack(fill="both", expand=True)
 
-        left_tools = tk.Frame(main, width=PANEL_WIDTH)
+        left_tools = tk.Frame(main, width=self._panel_width)
         left_tools.pack(side=tk.LEFT, fill="y", padx=(10, 5), pady=10)
         left_tools.pack_propagate(False)
         self._left_tools = left_tools
@@ -1030,13 +1035,14 @@ class AnnotationGUI(tk.Tk):
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.canvas.bind("<Button-4>", lambda e: self._on_scroll_linux(1))
         self.canvas.bind("<Button-5>", lambda e: self._on_scroll_linux(-1))
+        self.bind("<Configure>", self._on_panel_resize)
 
         self.landmark_font = tkfont.Font(
             family="Liberation Sans", size=18, weight="bold"
         )
         self.shadow_font = tkfont.Font(family="Liberation Sans", size=20, weight="bold")
 
-        ctrl = tk.Frame(main, width=PANEL_WIDTH)
+        ctrl = tk.Frame(main, width=self._panel_width)
         ctrl.pack(side=tk.RIGHT, fill="y", padx=(5, 10), pady=10)
         ctrl.pack_propagate(False)
         self._ctrl = ctrl
@@ -1045,7 +1051,7 @@ class AnnotationGUI(tk.Tk):
         zoom_wrap.pack(fill="x", pady=(0, 8))
         self.zoom_canvas = tk.Canvas(
             zoom_wrap,
-            width=450,
+            width=self._panel_width,
             height=450,
             bg="black",
             highlightthickness=0,
@@ -1246,15 +1252,16 @@ class AnnotationGUI(tk.Tk):
         )
 
         self._dl_status_var = tk.StringVar(value=self._initial_dl_status())
-        tk.Label(
+        self._dl_status_label = tk.Label(
             dl_frame,
             textvariable=self._dl_status_var,
             font=self.dialogue_font,
             fg="grey40",
             anchor="w",
-            wraplength=420,
+            wraplength=max(1, self._panel_width - 30),
             justify="left",
-        ).pack(fill="x", padx=6, pady=(2, 2))
+        )
+        self._dl_status_label.pack(fill="x", padx=6, pady=(2, 2))
 
         self._dl_button = tk.Button(
             dl_frame,
@@ -1412,18 +1419,18 @@ class AnnotationGUI(tk.Tk):
 
         tk.Label(ctrl, text="Images in JSON:", font=self.heading_font).pack(anchor="w")
 
-        image_container = tk.Frame(
+        self._image_container = tk.Frame(
             ctrl,
             bd=1,
             relief="sunken",
-            width=PANEL_WIDTH,
+            width=self._panel_width,
             height=IMAGE_LIST_HEIGHT,
         )
-        image_container.pack(fill="x", pady=(2, 8))
-        image_container.pack_propagate(False)
+        self._image_container.pack(fill="x", pady=(2, 8))
+        self._image_container.pack_propagate(False)
 
         self.image_tree = ttk.Treeview(
-            image_container,
+            self._image_container,
             columns=("image", "progress"),
             show="headings",
             height=8,
@@ -1435,7 +1442,7 @@ class AnnotationGUI(tk.Tk):
         self.image_tree.pack(side=tk.LEFT, fill="both", expand=True)
 
         image_scrollbar = tk.Scrollbar(
-            image_container,
+            self._image_container,
             orient="vertical",
             command=self.image_tree.yview,
         )
@@ -1479,21 +1486,21 @@ class AnnotationGUI(tk.Tk):
         tk.Label(lp_header, text="Flag", anchor="w", font=self.heading_font).grid(
             row=0, column=3, sticky="w", padx=(2, 4)
         )
-        self.landmark_panel_container = tk.Frame(
-            ctrl, bd=1, relief="sunken", width=PANEL_WIDTH, height=CANVAS_HEIGHT
+        self._landmark_panel_container = tk.Frame(
+            ctrl, bd=1, relief="sunken", width=self._panel_width, height=CANVAS_HEIGHT
         )
-        self.landmark_panel_container.pack(fill="x", pady=(0, 0))
-        self.landmark_panel_container.pack_propagate(False)
+        self._landmark_panel_container.pack(fill="x", pady=(0, 0))
+        self._landmark_panel_container.pack_propagate(False)
 
         self.lp_canvas = tk.Canvas(
-            self.landmark_panel_container,
+            self._landmark_panel_container,
             height=CANVAS_HEIGHT,
-            width=PANEL_WIDTH - SCROLLBAR_WIDTH,
+            width=self._panel_width - self._scrollbar_width,
             highlightthickness=0,
         )
         self.lp_canvas.pack(side=tk.LEFT, fill="both")
         self.lp_scrollbar = tk.Scrollbar(
-            self.landmark_panel_container,
+            self._landmark_panel_container,
             orient="vertical",
             command=self.lp_canvas.yview,
         )
@@ -2595,6 +2602,38 @@ class AnnotationGUI(tk.Tk):
             self._hide_extended_crosshair()
             self._hide_zoom_extended_crosshair()
 
+    def _on_panel_resize(self, event=None) -> None:
+        if event is None:
+            return
+        if event.widget is not self:
+            return
+        new_w = self._compute_panel_width()
+        if new_w == self._panel_width:
+            return
+
+        self._panel_width = new_w
+
+        # Update panels
+        self._left_tools.config(width=new_w)
+        self._ctrl.config(width=new_w)
+
+        # Update zoom canvas (stay square)
+        self.zoom_canvas.config(width=new_w, height=new_w)
+
+        # Update containers
+        self._image_container.config(width=new_w)
+        self._landmark_panel_container.config(width=new_w)
+
+        # Update landmark canvas
+        self.lp_canvas.config(width=new_w - self._scrollbar_width)
+
+        # Update status label wraplength
+        if hasattr(self, '_dl_status_label'):
+            self._dl_status_label.config(wraplength=max(1, new_w - 30))
+
+        # Update minsize and re-layout
+        self._fit_window_and_set_min()
+
     # Locks the initial window min-size after the first layout pass.
     def _lock_initial_minsize(self) -> None:
         self.update_idletasks()
@@ -2608,8 +2647,8 @@ class AnnotationGUI(tk.Tk):
         self.update_idletasks()
         req_w = self.winfo_reqwidth()
         req_h = self.winfo_reqheight()
-        target_w = max(req_w, self._start_min_w)
-        target_h = max(req_h, self._start_min_h)
+        target_w = req_w
+        target_h = req_h
         self.geometry(f"{target_w}x{target_h}")
         self.update_idletasks()
         self.minsize(target_w, target_h)
