@@ -1823,7 +1823,7 @@ class AnnotationGUI(tk.Tk):
                 img_np = out
             else:
                 img_np = np.array(out)
-            
+
             low = self.zoom_percentile_low.get()
             high = self.zoom_percentile_high.get()
             img_np = self._percentile_contrast_stretch(img_np, low, high)
@@ -4136,7 +4136,14 @@ class AnnotationGUI(tk.Tk):
         )
         status_label.pack(pady=(0, 10))
 
-        progress = tk.Canvas(frame, width=260, height=20, bg="white", highlightthickness=1, relief="sunken")
+        progress = tk.Canvas(
+            frame,
+            width=260,
+            height=20,
+            bg="white",
+            highlightthickness=1,
+            relief="sunken",
+        )
         progress.pack(pady=5)
 
         canvas_item = progress.create_rectangle(0, 0, 0, 20, fill="#0078D4", outline="")
@@ -4958,6 +4965,7 @@ class AnnotationGUI(tk.Tk):
             cx = (x0 + x1) / 2
             cy = (y0 + y1) / 2
             self._update_hover_circle(cx, cy)
+            self._update_zoom_hover_circle()
 
     # Moves the hover circle with the mouse within image bounds.
     def _on_mouse_move(self, event) -> None:
@@ -5582,13 +5590,15 @@ class AnnotationGUI(tk.Tk):
     def _segment_with_fallback(self, x: int, y: int, lm: str) -> np.ndarray | None:
         return None
 
-    def _percentile_contrast_stretch(self, img: np.ndarray, low_percent: int, high_percent: int) -> np.ndarray:
+    def _percentile_contrast_stretch(
+        self, img: np.ndarray, low_percent: int, high_percent: int
+    ) -> np.ndarray:
         gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY) if len(img.shape) == 3 else img
         p_low, p_high = np.percentile(gray, (low_percent, high_percent))
-        
+
         if p_high <= p_low:
             return img
-        
+
         return np.clip((img - p_low) / (p_high - p_low) * 255, 0, 255).astype(np.uint8)
 
     # Converts image to preprocessed grayscale (CLAHE + blur).
