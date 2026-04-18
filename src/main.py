@@ -233,6 +233,9 @@ class AnnotationGUI(tk.Tk):
         self.show_selected_landmark_in_zoom: tk.BooleanVar = tk.BooleanVar(value=True)
         self.enable_zoom_contrast: tk.BooleanVar = tk.BooleanVar(value=False)
         self.enable_zoom_pixel_art: tk.BooleanVar = tk.BooleanVar(value=False)
+        self.enable_zoom_percentile_stretch: tk.BooleanVar = tk.BooleanVar(value=False)
+        self.zoom_percentile_low: tk.IntVar = tk.IntVar(value=1)
+        self.zoom_percentile_high: tk.IntVar = tk.IntVar(value=99)
         self.zoom_img_obj: ImageTk.PhotoImage | None = None
         self.zoom_base_item: Optional[int] = None
         self.zoom_src_rect: Tuple[float, float, float, float] | None = None
@@ -1086,6 +1089,44 @@ class AnnotationGUI(tk.Tk):
             font=self.dialogue_font,
             takefocus=False,
         ).pack(anchor="w", padx=6, pady=(0, 6))
+        tk.Checkbutton(
+            zoom_wrap,
+            text="Percentile Stretch (ignore outliers)",
+            variable=self.enable_zoom_percentile_stretch,
+            command=lambda: self._update_zoom_view(
+                self.last_mouse_canvas_pos[0] if self.last_mouse_canvas_pos else None,
+                self.last_mouse_canvas_pos[1] if self.last_mouse_canvas_pos else None,
+            ),
+            font=self.dialogue_font,
+        ).pack(anchor="w", padx=6, pady=(6, 0))
+        tk.Scale(
+            zoom_wrap,
+            from_=0,
+            to=49,
+            orient="horizontal",
+            label="Low Percentile",
+            variable=self.zoom_percentile_low,
+            command=lambda v: self._update_zoom_view(
+                self.last_mouse_canvas_pos[0] if self.last_mouse_canvas_pos else None,
+                self.last_mouse_canvas_pos[1] if self.last_mouse_canvas_pos else None,
+            ),
+            font=self.dialogue_font,
+            takefocus=False,
+        ).pack(fill="x", padx=6, pady=(0, 0))
+        tk.Scale(
+            zoom_wrap,
+            from_=51,
+            to=100,
+            orient="horizontal",
+            label="High Percentile",
+            variable=self.zoom_percentile_high,
+            command=lambda v: self._update_zoom_view(
+                self.last_mouse_canvas_pos[0] if self.last_mouse_canvas_pos else None,
+                self.last_mouse_canvas_pos[1] if self.last_mouse_canvas_pos else None,
+            ),
+            font=self.dialogue_font,
+            takefocus=False,
+        ).pack(fill="x", padx=6, pady=(0, 6))
         self.after(0, self._render_black_zoom_view)
 
         hover_wrap = ttk.LabelFrame(left_tools, text="Hover Circle Tool")
@@ -1773,8 +1814,20 @@ class AnnotationGUI(tk.Tk):
             out_gray = out.convert("L")
             img_np = np.array(out_gray)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            cl = clahe.apply(img_np)
-            out = Image.fromarray(cl)
+            img_np = clahe.apply(img_np)
+            out = Image.fromarray(img_np)
+
+        if self.enable_zoom_percentile_stretch.get():
+            # Convert to numpy array if not already from CLAHE
+            if not isinstance(out, Image.Image):
+                img_np = out
+            else:
+                img_np = np.array(out)
+            
+            low = self.zoom_percentile_low.get()
+            high = self.zoom_percentile_high.get()
+            img_np = self._percentile_contrast_stretch(img_np, low, high)
+            out = Image.fromarray(img_np)
 
         self.zoom_img_obj = ImageTk.PhotoImage(out)
 
@@ -5528,6 +5581,15 @@ class AnnotationGUI(tk.Tk):
 
     def _segment_with_fallback(self, x: int, y: int, lm: str) -> np.ndarray | None:
         return None
+
+    def _percentile_contrast_stretch(self, img: np.ndarray, low_percent: int, high_percent: int) -> np.ndarray:
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY) if len(img.shape) == 3 else img
+        p_low, p_high = np.percentile(gray, (low_percent, high_percent))
+        
+        if p_high <= p_low:
+            return img
+        
+        return np.clip((img - p_low) / (p_high - p_low) * 255, 0, 255).astype(np.uint8)
 
     # Converts image to preprocessed grayscale (CLAHE + blur).
     def _preprocess_gray(self):
