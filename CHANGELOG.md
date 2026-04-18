@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.4.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.3.0...v2.4.0) (2026-04-18)
+
+
+### Features
+
+* annotation progress report ([ef73b7d](https://github.com/OrthoDriven/2d-point-annotator/commit/ef73b7d9adf75284d03067bf9547cdbce2f043cc))
+* **review:** Adding a button to submit an image for review ([0a16316](https://github.com/OrthoDriven/2d-point-annotator/commit/0a1631615a35ea6f91b86a779077907939b3fe76))
+* **ui:** Add hover circle in zoom view. ([20b26a8](https://github.com/OrthoDriven/2d-point-annotator/commit/20b26a85dfe3854d39080a4ad9de15ebe3232c2c))
+* **ui:** Add persistent hover circle for FHC and AC landmarks. ([3153efd](https://github.com/OrthoDriven/2d-point-annotator/commit/3153efd7250325119a532d2ae082971ebadcf54a))
+* **ui:** Percentile based contrast enhancement. ([f73f5fb](https://github.com/OrthoDriven/2d-point-annotator/commit/f73f5fb90b7adaac78e75f715af73fd7795a5a69))
+
+
+### Bug Fixes
+
+* Fixed landmark overflow in "upload for review" ([52426fd](https://github.com/OrthoDriven/2d-point-annotator/commit/52426fda319d67486060687c8f3fd2ba6218f668))
+* **report:** fixed some hard-coded paths in the progress report ([be5e83b](https://github.com/OrthoDriven/2d-point-annotator/commit/be5e83b98e794fe0efde6554567564e67f2ed73f))
+
 ## [2.3.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.2.0...v2.3.0) (2026-04-17)
 
 
