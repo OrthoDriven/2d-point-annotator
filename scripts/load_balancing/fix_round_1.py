@@ -77,7 +77,9 @@ def build_assignments(
                     assignment_set.add(img)
                     still_needed -= 1
 
-        assignments[annotator] = sorted(assignment_set)
+        annotated = sorted(assignment_set & my_annotated)
+        unannotated = sorted(assignment_set - my_annotated)
+        assignments[annotator] = annotated + unannotated
 
     return assignments, shared_pool
 

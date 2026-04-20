@@ -2577,8 +2577,7 @@ class AnnotationGUI(tk.Tk):
                 )
                 saved_radius = getattr(self, "hover_radii", {}).get(key, {}).get(lm)
                 if saved_radius is not None:
-                    img_r = saved_radius / self.disp_scale
-                    zoom_r = img_r * (size / src_w)
+                    zoom_r = saved_radius * (size / src_w)
                     overlay_ids.append(
                         self.zoom_canvas.create_oval(
                             zx - zoom_r,
@@ -4962,11 +4961,12 @@ class AnnotationGUI(tk.Tk):
             if lm in self.HOVER_CIRCLE_LANDMARKS:
                 saved_radius = self.hover_radii.get(key, {}).get(lm)
                 if saved_radius is not None:
+                    screen_r = saved_radius * (self.disp_scale or 1.0)
                     self.canvas.create_oval(
-                        xs - saved_radius,
-                        ys - saved_radius,
-                        xs + saved_radius,
-                        ys + saved_radius,
+                        xs - screen_r,
+                        ys - screen_r,
+                        xs + screen_r,
+                        ys + screen_r,
                         outline="orange",
                         width=2,
                         tags="marker",
@@ -5532,7 +5532,8 @@ class AnnotationGUI(tk.Tk):
                 if self.json_path is not None
                 else str(self.current_image_path)
             )
-            self.hover_radii.setdefault(img_key, {})[lm] = self.hover_radius.get()
+            disp_scale = self.disp_scale or 1.0
+            self.hover_radii.setdefault(img_key, {})[lm] = self.hover_radius.get() / disp_scale
         if lm in self.landmark_found:
             self.landmark_found[lm].set(True)
         self._draw_points()
