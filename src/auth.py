@@ -16,8 +16,21 @@ from __future__ import annotations
 import asyncio
 import getpass
 import logging
+import socket
 import threading
 import tkinter as tk
+
+# Prioritize IPv4 to avoid 5s hangs on broken IPv6 routes (common on some networks)
+_original_getaddrinfo = socket.getaddrinfo
+
+
+def _getaddrinfo_prioritize_ipv4(*args, **kwargs):
+    responses = _original_getaddrinfo(*args, **kwargs)
+    # Sort to put AF_INET (IPv4) first, keeping all responses for fallback
+    return sorted(responses, key=lambda r: r[0] != socket.AF_INET)
+
+
+socket.getaddrinfo = _getaddrinfo_prioritize_ipv4
 import webbrowser
 from datetime import datetime
 from pathlib import Path
