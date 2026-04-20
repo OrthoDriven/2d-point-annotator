@@ -1,0 +1,8 @@
+backup_dir: "data/remote_backups"
+backup_summary: "data/remote_backups/fluoro-r1_summary.json"
+output_dir: "data"
+annotators: ["scott", "andrew", "mark", "paris"]
+shared_pool_size: 20
+target_n: 100
+prefix: "fluoro-r1"
+seed: 1234

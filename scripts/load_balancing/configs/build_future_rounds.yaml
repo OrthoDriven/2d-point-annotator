@@ -1,0 +1,9 @@
+round1_summary: "data/fluoro-r1_round1_summary.json"
+backup_summary: "data/remote_backups/fluoro-r1_summary.json"
+output_dir: "data"
+prefix: "fluoro-r2"
+annotators: ["scott", "andrew", "mark", "paris", "sonia"]
+seed: 5678
+round_shared_count: 25
+unique_per_person: 65
+intra_per_person: 10

@@ -14,6 +14,7 @@ def download_zip(
     url: str,
     dest_dir: Path,
     on_progress: Optional[Callable[[str], None]] = None,
+    skip_existing: bool = False,
 ) -> None:
     def report(msg: str) -> None:
         if on_progress is not None:
@@ -60,6 +61,8 @@ def download_zip(
                 if member.endswith("/"):
                     target.mkdir(parents=True, exist_ok=True)
                 else:
+                    if skip_existing and target.exists():
+                        continue
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(member) as src, open(target, "wb") as dst:
                         dst.write(src.read())

@@ -1,0 +1,816 @@
+{
+  "landmarks": [
+    "L-LIP",
+    "R-LIP",
+    "L-POD",
+    "R-POD",
+    "L-PT",
+    "R-PT",
+    "L-IT",
+    "R-IT",
+    "L-SPS",
+    "R-SPS",
+    "L-IPS",
+    "R-IPS",
+    "L-DSI",
+    "R-DSI",
+    "L-AC",
+    "R-AC",
+    "L-SAB",
+    "R-SAB",
+    "L-DAB",
+    "R-DAB",
+    "L-FHC",
+    "R-FHC",
+    "L-SGT",
+    "R-SGT",
+    "L-LGT",
+    "R-LGT",
+    "L-PLT",
+    "R-PLT",
+    "L-MLT",
+    "R-MLT",
+    "L-DLT",
+    "R-DLT",
+    "L-FA",
+    "R-FA"
+  ],
+  "views": {
+    "AP Bilateral": [
+      "L-LIP",
+      "R-LIP",
+      "L-POD",
+      "R-POD",
+      "L-PT",
+      "R-PT",
+      "L-IT",
+      "R-IT",
+      "L-SPS",
+      "R-SPS",
+      "L-IPS",
+      "R-IPS",
+      "L-DSI",
+      "R-DSI",
+      "L-AC",
+      "R-AC",
+      "L-SAB",
+      "R-SAB",
+      "L-DAB",
+      "R-DAB",
+      "L-FHC",
+      "R-FHC",
+      "L-SGT",
+      "R-SGT",
+      "L-LGT",
+      "R-LGT",
+      "L-PLT",
+      "R-PLT",
+      "L-MLT",
+      "R-MLT",
+      "L-DLT",
+      "R-DLT",
+      "L-FA",
+      "R-FA"
+    ],
+    "AP Unilateral (Left)": [
+      "L-LIP",
+      "L-POD",
+      "L-PT",
+      "L-IT",
+      "L-SPS",
+      "L-IPS",
+      "L-DSI",
+      "L-AC",
+      "L-SAB",
+      "L-DAB",
+      "L-FHC",
+      "L-SGT",
+      "L-LGT",
+      "L-PLT",
+      "L-MLT",
+      "L-DLT",
+      "L-FA"
+    ],
+    "AP Unilateral (Right)": [
+      "R-LIP",
+      "R-POD",
+      "R-PT",
+      "R-IT",
+      "R-SPS",
+      "R-IPS",
+      "R-DSI",
+      "R-AC",
+      "R-SAB",
+      "R-DAB",
+      "R-FHC",
+      "R-SGT",
+      "R-LGT",
+      "R-PLT",
+      "R-MLT",
+      "R-DLT",
+      "R-FA"
+    ]
+  },
+  "images": [
+    {
+      "image_path": "fluoro_images_round_1/img_000241.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000098.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000802.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001322.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000832.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001310.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000407.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000045.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000316.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000919.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001077.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001068.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000247.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000312.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001091.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000124.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000516.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000269.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001208.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000351.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000395.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001176.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000886.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001372.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000287.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000634.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000535.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000031.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000741.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000201.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001348.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000765.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001253.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001136.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000936.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000399.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000364.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000725.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000472.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000444.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000632.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001303.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000705.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000049.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000628.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000012.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000560.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001226.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000594.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000631.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000553.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000044.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000502.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000529.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000196.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001127.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000293.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000739.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000846.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001000.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000917.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000509.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000904.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000686.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000913.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000097.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000706.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000731.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000327.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000168.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001317.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001131.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001232.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000698.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000385.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000105.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000221.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000732.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000348.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000655.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001326.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000835.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000443.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001267.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000925.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000536.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001030.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000793.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000603.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000452.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000177.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000691.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000109.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001165.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000571.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001080.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000977.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001194.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000824.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001110.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    }
+  ]
+}
