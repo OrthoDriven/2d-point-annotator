@@ -9,6 +9,7 @@ def download_dataset(
     method: str,
     on_progress: Optional[Callable[[str], None]] = None,
     on_done: Optional[Callable[[Optional[Exception]], None]] = None,
+    skip_existing: bool = False,
 ) -> threading.Thread:
     """
     Download a dataset using the specified method in a background thread.
@@ -37,7 +38,9 @@ def download_dataset(
                     raise ValueError(
                         f"Dataset '{dataset.name}' has no zip_url configured"
                     )
-                download_zip(dataset.zip_url, dest, on_progress)
+                download_zip(
+                    dataset.zip_url, dest, on_progress, skip_existing
+                )
             elif method == "graph":
                 from download_graph import download_graph
 
@@ -45,7 +48,13 @@ def download_dataset(
                     raise ValueError(
                         f"Dataset '{dataset.name}' missing drive_id or folder_path"
                     )
-                download_graph(dataset.drive_id, dataset.folder_path, dest, on_progress)
+                download_graph(
+                    dataset.drive_id,
+                    dataset.folder_path,
+                    dest,
+                    on_progress,
+                    skip_existing,
+                )
             else:
                 raise ValueError(f"Unknown download method: {method}")
         except Exception as e:

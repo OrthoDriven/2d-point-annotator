@@ -713,22 +713,105 @@ class AnnotationGUI(tk.Tk):
 
         return pts
 
+    def _show_filtered_file_dialog(
+        self, initial_dir: Path, round_num: str
+    ) -> Optional[Path]:
+        dialog = tk.Toplevel(self)
+        dialog.title(f"Select Data File - {round_num}")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        frame = ttk.Frame(dialog, padding=10)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(frame, text=f"Showing files for {round_num}:").pack(anchor="w")
+
+        list_frame = ttk.Frame(frame)
+        list_frame.pack(fill="both", expand=True, pady=5)
+
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        listbox = tk.Listbox(
+            list_frame,
+            yscrollcommand=scrollbar.set,
+            font=self.dialogue_font,
+            selectmode="single",
+            height=15,
+            width=65,  # chars
+        )
+        listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=listbox.yview)
+
+        json_files = sorted(initial_dir.glob("*.json"))
+        round_tag = f"_round{round_num[-1]}_"
+        for root, dirs, files in initial_dir.walk():
+            json_files = [
+                (root / f).relative_to(initial_dir)
+                for f in files
+                if (round_tag in f.lower()) and f.endswith("json")
+            ]
+
+        for f in json_files:
+            listbox.insert(tk.END, f)
+
+        selected = [None]
+
+        def on_select():
+            if listbox.curselection():
+                idx = listbox.curselection()[0]
+                filename = listbox.get(idx)
+                selected[0] = initial_dir / filename
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy()
+
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(fill="x", pady=(10, 0))
+
+        ttk.Button(btn_frame, text="Load", command=on_select).pack(
+            side="right", padx=(5, 0)
+        )
+        ttk.Button(btn_frame, text="Cancel", command=on_cancel).pack(side="right")
+
+        listbox.bind("<Double-1>", lambda e: on_select())
+
+        dialog.update_idletasks()
+        width = 600  # or whatever
+        height = dialog.winfo_height()
+        parent_x = self.winfo_x() + (self.winfo_width() // 2)
+        parent_y = self.winfo_y() + (self.winfo_height() // 2)
+        dialog_x = parent_x - (width // 2)
+        dialog_y = parent_y - (height // 2)
+        # dialog.geometry(f"{width}x{height}+{dialog_x}+{dialog_y}")
+
+        self.wait_window(dialog)
+        return selected[0]
+
     def load_data(self) -> None:
         if not self._maybe_save_before_destructive_action("load another data file"):
             return
 
         data_dir = get_data_dir()
         initial = data_dir if data_dir.is_dir() else BASE_DIR
-        json_file = filedialog.askopenfilename(
-            initialdir=initial,
-            filetypes=[("JSON File", "*.json")],
-            title="Load annotation data JSON",
-        )
-        if not json_file:
-            return
+
+        selected_round = self._annotation_round.get()
+        if selected_round and selected_round != "All":
+            json_path = self._show_filtered_file_dialog(initial, selected_round)
+            if not json_path:
+                return
+        else:
+            json_file = filedialog.askopenfilename(
+                initialdir=initial,
+                filetypes=[("JSON File", "*.json")],
+                title="Load annotation data JSON",
+            )
+            if not json_file:
+                return
+            json_path = Path(json_file)
 
         try:
-            json_path = Path(json_file)
             with json_path.open("r", encoding="utf-8") as handle:
                 data = json.load(handle)
         except Exception as e:
@@ -939,6 +1022,63 @@ class AnnotationGUI(tk.Tk):
             return f"Data folder exists: {dataset.subfolder}"
         return f"Will download to: {dataset.subfolder}"
 
+    def _show_download_options(
+        self, dataset_name: str, n_files: int, dest: Path
+    ) -> str:
+        result = "cancel"
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Dataset Already Exists")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        msg = (
+            f"'{dataset_name}' already has {n_files} file(s) "
+            f"in:\n{dest}\n\nWhat would you like to do?"
+        )
+        tk.Label(
+            dialog, text=msg, wraplength=400, justify="left", padx=20, pady=10
+        ).pack()
+
+        btn_frame = tk.Frame(dialog, pady=10)
+        btn_frame.pack()
+
+        def on_choice(choice: str) -> None:
+            nonlocal result
+            result = choice
+            dialog.destroy()
+
+        tk.Button(
+            btn_frame,
+            text="Download Again (overwrite)",
+            command=lambda: on_choice("overwrite"),
+            width=25,
+        ).pack(pady=2)
+
+        tk.Button(
+            btn_frame,
+            text="Download New",
+            command=lambda: on_choice("new"),
+            width=25,
+        ).pack(pady=2)
+
+        tk.Button(
+            btn_frame,
+            text="Cancel",
+            command=lambda: on_choice("cancel"),
+            width=25,
+        ).pack(pady=2)
+
+        dialog.update_idletasks()
+        parent_x = self.winfo_x() + (self.winfo_width() // 2)
+        parent_y = self.winfo_y() + (self.winfo_height() // 2)
+        dialog_x = parent_x - (dialog.winfo_width() // 2)
+        dialog_y = parent_y - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{dialog_x}+{dialog_y}")
+
+        self.wait_window(dialog)
+        return result
+
     def _on_download_data(self) -> None:
         name = self._selected_ds_name.get()
         dataset = next(
@@ -949,15 +1089,13 @@ class AnnotationGUI(tk.Tk):
 
         # Guard against accidental re-download
         dest = get_dataset_dest(dataset)
+        skip_existing = False
         if dest.exists() and any(dest.iterdir()):
             n_files = sum(1 for _ in dest.rglob("*") if _.is_file())
-            if not messagebox.askyesno(
-                "Dataset Already Exists",
-                f"'{dataset.name}' already has {n_files} file(s) "
-                f"in:\n{dest}\n\nDownload again? "
-                f"(Existing files will be overwritten.)",
-            ):
+            choice = self._show_download_options(dataset.name, n_files, dest)
+            if choice == "cancel":
                 return
+            skip_existing = choice == "new"
 
         self._dl_button.config(state="disabled")
         self._dl_status_var.set("Starting download…")
@@ -994,6 +1132,7 @@ class AnnotationGUI(tk.Tk):
             method=self._datasets_config.download_method,
             on_progress=on_progress,
             on_done=on_done,
+            skip_existing=skip_existing,
         )
 
     # -------------------------------------------------------------------------
@@ -1238,18 +1377,34 @@ class AnnotationGUI(tk.Tk):
         if ds_names:
             self._selected_ds_name.set(ds_names[0])
 
+        dropdown_frame = ttk.Frame(dl_frame)
+        dropdown_frame.pack(fill="x", padx=6, pady=(4, 2))
+
         self._ds_dropdown = ttk.Combobox(
-            dl_frame,
+            dropdown_frame,
             textvariable=self._selected_ds_name,
             values=ds_names,
             state="readonly",
             font=self.dialogue_font,
         )
-        self._ds_dropdown.pack(fill="x", padx=6, pady=(4, 2))
+        self._ds_dropdown.pack(side="left", fill="x", expand=True)
         self._ds_dropdown.bind(
             "<<ComboboxSelected>>",
             lambda _e: self._dl_status_var.set(self._initial_dl_status()),
         )
+
+        self._annotation_round = tk.StringVar()
+        self._annotation_round.set("All")
+        round_options = ["All", "Round 1", "Round 2", "Round 3", "Round 4"]
+        self._round_dropdown = ttk.Combobox(
+            dropdown_frame,
+            textvariable=self._annotation_round,
+            values=round_options,
+            state="readonly",
+            font=self.dialogue_font,
+            width=8,
+        )
+        self._round_dropdown.pack(side="right", padx=(6, 0))
 
         self._dl_status_var = tk.StringVar(value=self._initial_dl_status())
         self._dl_status_label = tk.Label(
@@ -2628,7 +2783,7 @@ class AnnotationGUI(tk.Tk):
         self.lp_canvas.config(width=new_w - self._scrollbar_width)
 
         # Update status label wraplength
-        if hasattr(self, '_dl_status_label'):
+        if hasattr(self, "_dl_status_label"):
             self._dl_status_label.config(wraplength=max(1, new_w - 30))
 
         # Update minsize and re-layout

@@ -63,9 +63,12 @@ async def _download_one(
     sem: asyncio.Semaphore,
     on_progress: Optional[Callable[[str], None]],
     file_count: list[int],
+    skip_existing: bool = False,
 ) -> None:
     """Download a single file, respecting the concurrency semaphore."""
     async with sem:
+        if skip_existing and (dest_dir / item.name).exists():
+            return
         file_count[0] += 1
         if on_progress:
             on_progress(f"Downloading file {file_count[0]}: {item.name}\u2026")
@@ -86,6 +89,7 @@ async def _download_folder_recursive(
     on_progress: Optional[Callable[[str], None]],
     file_count: list[int],
     sem: asyncio.Semaphore,
+    skip_existing: bool = False,
 ) -> None:
     item_path = f"root:/{folder_path.strip('/')}:"
     items = await _list_children(client, drive_id, item_path)
@@ -107,7 +111,8 @@ async def _download_folder_recursive(
         await asyncio.gather(
             *(
                 _download_one(
-                    client, drive_id, f, dest_dir, sem, on_progress, file_count
+                    client, drive_id, f, dest_dir, sem, on_progress, file_count,
+                    skip_existing
                 )
                 for f in files
             )
@@ -124,6 +129,7 @@ async def _download_folder_recursive(
             on_progress,
             file_count,
             sem,
+            skip_existing,
         )
 
 
@@ -132,6 +138,7 @@ def download_graph(
     folder_path: str,
     dest_dir: Path,
     on_progress: Optional[Callable[[str], None]] = None,
+    skip_existing: bool = False,
 ) -> None:
     try:
         if on_progress:
@@ -156,6 +163,7 @@ def download_graph(
                     on_progress,
                     file_count,
                     sem,
+                    skip_existing,
                 )
             )
         finally:

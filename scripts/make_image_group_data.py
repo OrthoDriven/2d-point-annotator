@@ -5,6 +5,7 @@ import json
 import random
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 LANDMARKS = [
     "L-LIP",
@@ -149,6 +150,12 @@ def get_image_files(folder: Path, recursive: bool = False):
     return sorted(files)
 
 
+def shuffle_sorted(items: list[Any], rng: random.Random) -> None:
+    """Sort before shuffling to keep seeded runs reproducible."""
+    items.sort()
+    rng.shuffle(items)
+
+
 def split_evenly(items, n_groups):
     total = len(items)
     base_size = total // n_groups
@@ -208,7 +215,10 @@ def apply_cross_group_copying(groups, m, rng):
             "copied_into_group": {f"group_{i + 1}": [] for i in range(n)},
             "unique_by_group": {f"group_{i + 1}": sorted(groups[i]) for i in range(n)},
             "shared_by_group": {f"group_{i + 1}": [] for i in range(n)},
-            "image_membership": image_membership,
+            "image_membership": {
+                img: sorted(group_list)
+                for img, group_list in sorted(image_membership.items())
+            },
         }
 
     for i, group in enumerate(groups):
@@ -221,7 +231,7 @@ def apply_cross_group_copying(groups, m, rng):
     sampled_by_group = []
 
     for group in original_groups:
-        sampled = rng.sample(group, m)
+        sampled = rng.sample(sorted(group), m)
         sampled_by_group.append(sampled)
 
     final_groups = [list(group) for group in original_groups]
@@ -236,7 +246,7 @@ def apply_cross_group_copying(groups, m, rng):
             copied_into_group[f"group_{target_idx + 1}"].extend(sampled_images)
 
     for i in range(n):
-        rng.shuffle(final_groups[i])
+        shuffle_sorted(final_groups[i], rng)
 
     image_membership = defaultdict(list)
     for i, group in enumerate(final_groups):
@@ -283,7 +293,9 @@ def apply_cross_group_copying(groups, m, rng):
     return final_groups, info
 
 
-def build_summary(original_groups, final_groups, copy_info, total_images):
+def build_round_summary(
+    original_groups, final_groups, copy_info, total_images, round_idx=None
+):
     n = len(original_groups)
 
     initial_sizes = {f"group_{i + 1}": len(original_groups[i]) for i in range(n)}
@@ -358,7 +370,10 @@ def build_summary(original_groups, final_groups, copy_info, total_images):
         global_accounting["unique_counts_match_expected"] = sum_unique == total_images
         global_accounting["final_sizes_match_expected"] = sum_final == total_images
 
+    all_images = sorted(img for group in original_groups for img in group)
+
     return {
+        "round_idx": round_idx,
         "total_original_images": total_images,
         "num_groups": n,
         "copying_enabled": copy_info["copying_enabled"],
@@ -375,20 +390,61 @@ def build_summary(original_groups, final_groups, copy_info, total_images):
         "membership_histogram": dict(sorted(membership_histogram.items())),
         "per_group_accounting": per_group_accounting,
         "global_accounting": global_accounting,
+        "all_images": all_images,
         "notes": notes,
     }
+
+
+def build_overall_summary(all_round_summaries, all_image_paths):
+    """Aggregate per-round summaries; validate no image appears in two rounds."""
+    seen: dict[str, int | None] = {}
+    for rs in all_round_summaries:
+        for img in rs.get("all_images", []):
+            if img in seen:
+                raise ValueError(
+                    f"Image {img!r} appears in round {seen[img]} and round {rs['round_idx']}"
+                )
+            seen[img] = rs["round_idx"]
+
+    return {
+        "num_rounds": len(all_round_summaries),
+        "total_images": len(all_image_paths),
+        "rounds": all_round_summaries,
+        "membership_check": "ok" if len(seen) == len(all_image_paths) else "mismatch",
+    }
+
+
+def build_summary(original_groups, final_groups, copy_info, total_images):
+    """Backward-compatible single-round summary wrapper."""
+    summary = build_round_summary(
+        original_groups=original_groups,
+        final_groups=final_groups,
+        copy_info=copy_info,
+        total_images=total_images,
+        round_idx=None,
+    )
+    summary.pop("round_idx", None)
+    summary.pop("all_images", None)
+    return summary
 
 
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Randomize images, split into N groups, optionally sample M images from each group "
-            "and copy those sampled images to every other group, then write JSON files."
+            "Randomize images, optionally split into multiple rounds, split each round into N "
+            "groups, optionally sample M images from each group and copy those sampled images "
+            "to every other group, then write JSON files."
         )
     )
     parser.add_argument("input_folder", type=str, help="Folder containing images")
     parser.add_argument(
         "num_groups", type=int, help="Number of groups / JSON files to create"
+    )
+    parser.add_argument(
+        "--rounds",
+        type=int,
+        default=1,
+        help="Split images into this many independent rounds before grouping",
     )
     parser.add_argument(
         "--output-dir",
@@ -433,6 +489,9 @@ def main():
     if args.num_groups <= 0:
         raise ValueError("num_groups must be > 0")
 
+    if args.rounds <= 0:
+        raise ValueError("--rounds must be > 0")
+
     if args.share_m < 0:
         raise ValueError("--share-m must be >= 0")
 
@@ -446,51 +505,87 @@ def main():
         raise ValueError(f"No image files found in: {input_folder}")
 
     rng = random.Random(args.seed)
-    rng.shuffle(image_files)
+    shuffle_sorted(image_files, rng)
 
-    raw_groups = split_evenly(image_files, args.num_groups)
-    original_groups = [
-        [rel_display_path(input_folder, img) for img in group] for group in raw_groups
-    ]
+    all_display_paths = [rel_display_path(input_folder, img) for img in image_files]
 
-    final_groups, copy_info = apply_cross_group_copying(
-        original_groups, args.share_m, rng
-    )
+    round_chunks = split_evenly(image_files, args.rounds)
+    all_round_summaries = []
 
-    for idx, group in enumerate(final_groups, start=1):
-        json_data = make_json_template(group)
-        output_file = output_dir / f"{args.prefix}_{idx}.json"
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(json_data, f, indent=2)
-        print(f"Wrote {output_file} with {len(group)} images")
+    for round_idx, round_chunk in enumerate(round_chunks, start=1):
+        raw_groups = split_evenly(round_chunk, args.num_groups)
+        original_groups = [
+            [rel_display_path(input_folder, img) for img in group] for group in raw_groups
+        ]
 
-    summary = build_summary(
-        original_groups=original_groups,
-        final_groups=final_groups,
-        copy_info=copy_info,
-        total_images=len(image_files),
-    )
+        final_groups, copy_info = apply_cross_group_copying(
+            original_groups, args.share_m, rng
+        )
+
+        for idx, group in enumerate(final_groups, start=1):
+            json_data = make_json_template(group)
+            if args.rounds > 1:
+                filename = f"{args.prefix}_round{round_idx}_{idx}.json"
+            else:
+                filename = f"{args.prefix}_{idx}.json"
+            output_file = output_dir / filename
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(json_data, f, indent=2)
+            print(f"Wrote {output_file} with {len(group)} images")
+
+        summary = build_round_summary(
+            original_groups=original_groups,
+            final_groups=final_groups,
+            copy_info=copy_info,
+            total_images=len(round_chunk),
+            round_idx=round_idx,
+        )
+        all_round_summaries.append(summary)
+
+    single_round_summary: dict[str, Any] | None = None
+    overall_summary: dict[str, Any] | None = None
+
+    if args.rounds == 1:
+        single_round_summary = dict(all_round_summaries[0])
+        single_round_summary.pop("round_idx", None)
+        single_round_summary.pop("all_images", None)
+        summary_to_write: dict[str, Any] = single_round_summary
+    else:
+        overall_summary = build_overall_summary(
+            all_round_summaries=all_round_summaries,
+            all_image_paths=all_display_paths,
+        )
+        summary_to_write = overall_summary
 
     summary_file = output_dir / f"{args.prefix}_summary.json"
     with open(summary_file, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2)
+        json.dump(summary_to_write, f, indent=2)
 
     print(f"Wrote summary: {summary_file}")
     print()
     print("=== Summary ===")
-    print(f"Total original images: {len(image_files)}")
-    print(f"Groups: {args.num_groups}")
-    print(f"Copying enabled: {args.share_m > 0}")
-    if args.share_m > 0:
-        print(f"M: {args.share_m}")
-    for i in range(args.num_groups):
-        g = f"group_{i + 1}"
-        print(
-            f"{g}: initial={summary['initial_group_sizes'][g]}, "
-            f"unique={summary['unique_counts_per_group'][g]}, "
-            f"shared={summary['shared_counts_per_group'][g]}, "
-            f"final={summary['final_group_sizes'][g]}"
-        )
+    if args.rounds == 1:
+        assert single_round_summary is not None
+        print(f"Total original images: {len(image_files)}")
+        print(f"Groups: {args.num_groups}")
+        print(f"Copying enabled: {args.share_m > 0}")
+        if args.share_m > 0:
+            print(f"M: {args.share_m}")
+        for i in range(args.num_groups):
+            g = f"group_{i + 1}"
+            print(
+                f"{g}: initial={single_round_summary['initial_group_sizes'][g]}, "
+                f"unique={single_round_summary['unique_counts_per_group'][g]}, "
+                f"shared={single_round_summary['shared_counts_per_group'][g]}, "
+                f"final={single_round_summary['final_group_sizes'][g]}"
+            )
+    else:
+        assert overall_summary is not None
+        print(f"Total images: {overall_summary['total_images']}")
+        print(f"Rounds: {overall_summary['num_rounds']}")
+        print(f"Membership check: {overall_summary['membership_check']}")
+        for rs in overall_summary["rounds"]:
+            print(f"  round {rs['round_idx']}: total={rs['total_original_images']}")
 
 
 if __name__ == "__main__":
