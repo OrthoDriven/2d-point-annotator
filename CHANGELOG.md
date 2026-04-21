@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.5.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.4.1...v2.5.0) (2026-04-21)
+
+
+### Features
+
+* **data:** Load balancing data based on current values in remote ([2180735](https://github.com/OrthoDriven/2d-point-annotator/commit/218073536df9add3587756d90484a98112d59bab))
+
+
+### Bug Fixes
+
+* **auth:** Adding ipv4 fallback for more robust connection. ([5c3e7a5](https://github.com/OrthoDriven/2d-point-annotator/commit/5c3e7a53811bf3cf53fffb3b7b8e1f6a13098a48))
+* **circle:** Fixing circle rendering, fix round_1 image order ([fbfecca](https://github.com/OrthoDriven/2d-point-annotator/commit/fbfecca4fa823a6618a978a6063a552157682538))
+* **circle:** Fixing circle rendering, fix round_1 image order ([1aac5a8](https://github.com/OrthoDriven/2d-point-annotator/commit/1aac5a8dab2c85b674b157030391a83605b696c3))
+* **data:** Some corrections to the load balancing algorithms. ([9912326](https://github.com/OrthoDriven/2d-point-annotator/commit/99123268e733a8312984596c2436c52004b6aa2e))
+* **data:** Some corrections to the load balancing algorithms. ([fb99d3a](https://github.com/OrthoDriven/2d-point-annotator/commit/fb99d3af69d4991f63a425baec7965493c0c9b61))
+* **ui:** dynamic panel width in lower resolution monitors ([b24d757](https://github.com/OrthoDriven/2d-point-annotator/commit/b24d757b7ddbb66de2ef9028a0aea7574a041302))
+
 ## [2.4.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.4.0...v2.4.1) (2026-04-18)
 
 
