@@ -62,7 +62,6 @@ def generate_rounds(
 
     round_num = 2
     while True:
-        needed = round_shared_count + (unique_per_person * len(annotators))
         remaining = len(pool) - pool_offset
 
         if remaining < round_shared_count + len(annotators):
@@ -78,17 +77,19 @@ def generate_rounds(
         pool_offset += r_shared
 
         round_assignments = {}
-        intra_rater_images = {}
         for ann in annotators:
             unique_chunk = pool[pool_offset : pool_offset + r_unique]
             pool_offset += r_unique
 
             if current_history[ann]:
                 repeat_source = sorted(current_history[ann])
-            elif ann == "sonia" and round1_shared:
+                repeat_role = "intra"
+            elif round1_shared:
                 repeat_source = sorted(round1_shared)
+                repeat_role = "calibration"
             else:
                 repeat_source = []
+                repeat_role = None
 
             if len(repeat_source) >= intra_per_person:
                 intra_chunk = rng.sample(repeat_source, intra_per_person)
@@ -96,11 +97,13 @@ def generate_rounds(
                 intra_chunk = list(repeat_source)
 
             intra_from_own_history = [img for img in intra_chunk if img in current_history[ann]]
-            intra_rater_images[ann] = sorted(intra_from_own_history)
 
-            assignment = shared_images + unique_chunk + intra_chunk
-            rng.shuffle(assignment)
-            round_assignments[ann] = assignment
+            records = [{"image_path": img, "role": "shared"} for img in shared_images]
+            records += [{"image_path": img, "role": "unique"} for img in unique_chunk]
+            if repeat_role:
+                records += [{"image_path": img, "role": repeat_role} for img in intra_chunk]
+            rng.shuffle(records)
+            round_assignments[ann] = records
 
             current_history[ann].update(unique_chunk)
             current_history[ann].update(shared_images)
@@ -108,8 +111,6 @@ def generate_rounds(
         rounds.append({
             "round_num": round_num,
             "assignments": round_assignments,
-            "shared_images": shared_images,
-            "intra_rater_images": intra_rater_images,
         })
         round_num += 1
 
@@ -124,13 +125,16 @@ def generate_rounds(
             chunks[i % len(annotators)].append(img)
 
         for i, ann in enumerate(annotators):
-            last["assignments"][ann] = last["assignments"][ann] + leftover_shared + chunks[i]
+            last["assignments"][ann] += [{"image_path": img, "role": "shared"} for img in leftover_shared]
+            last["assignments"][ann] += [{"image_path": img, "role": "unique"} for img in chunks[i]]
             current_history[ann].update(leftover_shared)
             current_history[ann].update(chunks[i])
 
-        last["shared_images"] = last["shared_images"] + leftover_shared
-
     return rounds
+
+
+def _by_role(records, role):
+    return [rec["image_path"] for rec in records if rec["role"] == role]
 
 
 def build_summary(
@@ -144,30 +148,32 @@ def build_summary(
     round_shared_count: int,
     unique_per_person: int,
     intra_per_person: int,
+    seed: int,
 ) -> dict:
     per_annotator_seen = {ann: set(h) for ann, h in annotator_history.items()}
     round_summaries = []
 
     for r in rounds:
         r_num = r["round_num"]
+        assignments = r["assignments"]
+
         image_membership = defaultdict(list)
-        for ann, imgs in r["assignments"].items():
-            for img in imgs:
-                image_membership[img].append(ann)
+        for ann, recs in assignments.items():
+            for rec in recs:
+                image_membership[rec["image_path"]].append(ann)
 
-        unique_by_group = defaultdict(list)
-        shared_by_group = defaultdict(list)
+        shared_by_group = {ann: _by_role(assignments[ann], "shared") for ann in annotators}
+        unique_by_group = {ann: _by_role(assignments[ann], "unique") for ann in annotators}
+        intra_by_group = {ann: _by_role(assignments[ann], "intra") for ann in annotators}
+        calibration_by_group = {ann: _by_role(assignments[ann], "calibration") for ann in annotators}
+
         truly_new_by_group = defaultdict(list)
-        intra_by_group = r["intra_rater_images"]
+        prior_union = set().union(*per_annotator_seen.values()) if per_annotator_seen else set()
 
-        for ann, imgs in r["assignments"].items():
-            for img in imgs:
-                if len(image_membership[img]) > 1:
-                    shared_by_group[ann].append(img)
-                else:
-                    unique_by_group[ann].append(img)
-                    if img not in per_annotator_seen[ann]:
-                        truly_new_by_group[ann].append(img)
+        for ann in annotators:
+            for img in unique_by_group[ann]:
+                if img not in per_annotator_seen[ann]:
+                    truly_new_by_group[ann].append(img)
 
         membership_histogram = defaultdict(int)
         total_shared_assignments = 0
@@ -176,34 +182,40 @@ def build_summary(
             if len(groups) > 1:
                 total_shared_assignments += len(groups)
 
-        round_images = sorted(set(img for ann_list in truly_new_by_group.values() for img in ann_list))
+        round_all_images = set(img for recs in assignments.values() for img in [r["image_path"] for r in recs])
+        round_images = sorted(round_all_images - prior_union)
+
+        designed_shared_count = len(shared_by_group[annotators[0]]) if annotators else 0
 
         round_summaries.append({
             "round": r_num,
             "total_original_images_in_round": len(round_images),
             "copying_enabled": True,
             "initial_group_sizes": {ann: len(truly_new_by_group[ann]) for ann in annotators},
-            "final_group_sizes": {ann: len(r["assignments"][ann]) for ann in annotators},
+            "final_group_sizes": {ann: len(assignments[ann]) for ann in annotators},
             "unique_counts_per_group": {ann: len(unique_by_group[ann]) for ann in annotators},
             "shared_counts_per_group": {ann: len(shared_by_group[ann]) for ann in annotators},
+            "calibration_counts_per_group": {ann: len(calibration_by_group[ann]) for ann in annotators},
+            "designed_shared_count": designed_shared_count,
             "unique_by_group": {ann: sorted(unique_by_group[ann]) for ann in annotators},
             "shared_by_group": {ann: sorted(shared_by_group[ann]) for ann in annotators},
+            "calibration_by_group": {ann: sorted(calibration_by_group[ann]) for ann in annotators},
             "image_membership": {img: sorted(groups) for img, groups in sorted(image_membership.items())},
             "membership_histogram": dict(sorted(membership_histogram.items())),
             "round_images": round_images,
             "global_accounting": {
                 "sum_initial_group_sizes": sum(len(truly_new_by_group[ann]) for ann in annotators),
-                "sum_final_group_sizes": sum(len(r["assignments"][ann]) for ann in annotators),
+                "sum_final_group_sizes": sum(len(assignments[ann]) for ann in annotators),
                 "sum_unique_counts": sum(len(unique_by_group[ann]) for ann in annotators),
                 "total_shared_assignments": total_shared_assignments,
             },
             "intra_rater_repeats": {ann: len(intra_by_group.get(ann, [])) for ann in annotators},
             "intra_rater_images": {ann: sorted(intra_by_group.get(ann, [])) for ann in annotators},
-            "inter_rater_shared_count": len([img for img, groups in image_membership.items() if len(groups) > 1]),
+            "inter_rater_shared_count": designed_shared_count,
         })
 
         for ann in annotators:
-            per_annotator_seen[ann].update(img for img in r["assignments"][ann])
+            per_annotator_seen[ann].update(img for rec in assignments[ann] for img in [rec["image_path"]])
 
     return {
         "total_original_images": total_images,
@@ -212,6 +224,7 @@ def build_summary(
         "round_shared_count": round_shared_count,
         "unique_per_person": unique_per_person,
         "intra_per_person": intra_per_person,
+        "seed": seed,
         "rounds": round_summaries,
         "files": produced_files,
     }
@@ -272,14 +285,14 @@ def main():
     produced_files = []
     for r in rounds:
         r_num = r["round_num"]
-        for ann, imgs in r["assignments"].items():
+        for ann, recs in r["assignments"].items():
             records = [{
-                "image_path": p,
+                "image_path": rec["image_path"],
                 "image_flag": False,
                 "view": None,
                 "image_direction": None,
                 "annotations": {},
-            } for p in imgs]
+            } for rec in recs]
 
             out_path = output_dir / f"{prefix}_round{r_num}_{ann}.json"
             out_path.write_text(json.dumps({
@@ -288,11 +301,12 @@ def main():
                 "images": records,
             }, indent=2))
             produced_files.append(str(out_path))
-            print(f"  Wrote {out_path} ({len(imgs)} images)")
+            print(f"  Wrote {out_path} ({len(recs)} images)")
 
     summary = build_summary(
         rounds, annotators, annotator_history, len(all_images), len(r1_universe),
         prefix, produced_files, round_shared_count, unique_per_person, intra_per_person,
+        seed,
     )
     summary_path = output_dir / f"{prefix}_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2))

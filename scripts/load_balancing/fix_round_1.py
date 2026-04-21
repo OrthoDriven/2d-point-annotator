@@ -20,10 +20,16 @@ from config_loader import load_config
 FOLDER_MAPPING = {"scott": "SAB", "andrew": "ajj"}
 
 
-def load_backup(annotator: str, backup_dir: Path, prefix: str) -> dict | None:
-    folder = FOLDER_MAPPING.get(annotator, annotator)
-    path = backup_dir / folder / f"{prefix}_{annotator}.json"
+def load_backup(annotator: str, backup_dir: Path, prefix: str, folder_mapping: dict | None = None) -> dict | None:
+    mapping = folder_mapping or FOLDER_MAPPING
+    folder = mapping.get(annotator, annotator)
+    folder_path = backup_dir / folder
+    path = folder_path / f"{prefix}_{annotator}.json"
+    if not folder_path.exists():
+        print(f"  [info] no backup folder for {annotator}: {folder_path}")
+        return None
     if not path.exists():
+        print(f"  [info] backup folder exists but no file: {path}")
         return None
     return json.loads(path.read_text())
 
@@ -42,15 +48,14 @@ def build_assignments(
     annotated_per_user: dict[str, set[str]],
     all_images: list[str],
     shared_pool_size: int,
-    target_n: int,
+    min_total_n: int,
     rng: random.Random,
 ) -> tuple[dict[str, list[str]], list[str]]:
     andrew_annotated = annotated_per_user.get("andrew", set())
     assignments: dict[str, list[str]] = {"andrew": sorted(andrew_annotated)}
 
     andrew_sorted = sorted(andrew_annotated)
-    shared_pool = andrew_sorted[:shared_pool_size]
-    rng.shuffle(shared_pool)
+    shared_pool = rng.sample(andrew_sorted, shared_pool_size)
 
     all_assigned = set(andrew_annotated)
     for ann in annotators:
@@ -68,7 +73,8 @@ def build_assignments(
         my_annotated = annotated_per_user.get(annotator, set())
         assignment_set = set(my_annotated) | set(shared_pool)
 
-        still_needed = target_n - len(assignment_set)
+        # min_total_n is a floor; preserved work may exceed it
+        still_needed = min_total_n - len(assignment_set)
         if still_needed > 0:
             while still_needed > 0 and fallback_idx < len(fallback_pool):
                 img = fallback_pool[fallback_idx]
@@ -119,6 +125,7 @@ def build_summary(
     shared_pool_size: int,
     output_prefix: str,
     total_images: int,
+    seed: int,
 ) -> dict:
     round1_universe = sorted(set().union(*assignments.values()))
 
@@ -203,6 +210,7 @@ def build_summary(
         "num_rounds": 1,
         "num_groups_per_round": n,
         "share_m": shared_pool_size,
+        "seed": seed,
         "round_sizes": {"round_1": len(round1_universe)},
         "rounds": [round_data],
         "group_mapping": group_mapping,
@@ -227,8 +235,15 @@ def main():
 
     annotators = config.get("annotators", ["scott", "andrew", "mark", "paris"])
     shared_pool_size = config.get("shared_pool_size", 20)
-    target_n = config.get("target_n", 100)
+    if "min_total_n" in config:
+        min_total_n = config["min_total_n"]
+    elif "target_n" in config:
+        print("[warn] config key 'target_n' is deprecated, use 'min_total_n'")
+        min_total_n = config["target_n"]
+    else:
+        min_total_n = 100
     prefix = config.get("prefix", "fluoro-r1")
+    folder_mapping = config.get("folder_mapping")
 
     rng = random.Random(seed)
     all_images = load_all_images_from_backup_summary(backup_summary)
@@ -237,7 +252,7 @@ def main():
     raw_data: dict[str, dict | None] = {}
     annotated_per_user: dict[str, set[str]] = {}
     for ann in annotators:
-        data = load_backup(ann, backup_dir, prefix)
+        data = load_backup(ann, backup_dir, prefix, folder_mapping)
         raw_data[ann] = data
         annotated_per_user[ann] = get_annotated_images(data) if data else set()
         print(f"  {ann}: {len(annotated_per_user[ann])} annotated")
@@ -246,7 +261,7 @@ def main():
     print(f"\nAndrew's set (source for shared pool): {len(andrew_annotated)}")
 
     assignments, shared_pool = build_assignments(
-        annotators, annotated_per_user, all_images, shared_pool_size, target_n, rng,
+        annotators, annotated_per_user, all_images, shared_pool_size, min_total_n, rng,
     )
 
     print(f"\nShared reliability pool ({shared_pool_size} images):")
@@ -269,14 +284,25 @@ def main():
             f"{shared_in_set} in-shared)"
         )
 
+    template_source = next((d for d in raw_data.values() if d is not None), None)
+    if template_source is None:
+        raise RuntimeError("No backup data found")
+
+    templates = [(ann, d) for ann, d in raw_data.items() if d is not None]
+    if len(templates) > 1:
+        ref_ann, ref = templates[0]
+        for ann, d in templates[1:]:
+            if d["landmarks"] != ref["landmarks"] or d["views"] != ref["views"]:
+                raise RuntimeError(
+                    f"Backup template drift: {ann} landmarks/views differ from {ref_ann}. "
+                    f"Investigate before regenerating."
+                )
+
     if args.dry_run:
         print("\n[dry-run] No files written.")
         return
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    template_source = next((d for d in raw_data.values() if d is not None), None)
-    if template_source is None:
-        raise RuntimeError("No backup data found")
 
     for ann in annotators:
         records = merge_annotations(assignments[ann], raw_data[ann])
@@ -286,7 +312,7 @@ def main():
 
     summary = build_summary(
         annotators, assignments, annotated_per_user, andrew_annotated,
-        shared_pool, shared_pool_size, prefix, len(all_images),
+        shared_pool, shared_pool_size, prefix, len(all_images), seed,
     )
     summary_path = output_dir / f"{prefix}_round1_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2))
