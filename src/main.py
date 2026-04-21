@@ -753,7 +753,7 @@ class AnnotationGUI(tk.Tk):
             ]
 
         for f in json_files:
-            listbox.insert(tk.END, f)
+            listbox.insert(tk.END, str(f))
 
         selected = [None]
 
@@ -5533,7 +5533,9 @@ class AnnotationGUI(tk.Tk):
                 else str(self.current_image_path)
             )
             disp_scale = self.disp_scale or 1.0
-            self.hover_radii.setdefault(img_key, {})[lm] = self.hover_radius.get() / disp_scale
+            self.hover_radii.setdefault(img_key, {})[lm] = (
+                self.hover_radius.get() / disp_scale
+            )
         if lm in self.landmark_found:
             self.landmark_found[lm].set(True)
         self._draw_points()
