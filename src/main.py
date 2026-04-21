@@ -745,14 +745,17 @@ class AnnotationGUI(tk.Tk):
 
         json_files = sorted(initial_dir.glob("*.json"))
         round_tag = f"_round{round_num[-1]}_"
+        json_files = []
         for root, dirs, files in initial_dir.walk():
-            json_files = [
+            json_files.extend(
                 (root / f).relative_to(initial_dir)
                 for f in files
-                if (round_tag in f.lower()) and f.endswith("json")
-            ]
+                if round_tag in f.lower() and f.endswith(".json")
+            )
+        json_files.sort()
 
         for f in json_files:
+
             listbox.insert(tk.END, str(f))
 
         selected = [None]
