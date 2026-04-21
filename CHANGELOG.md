@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.2](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.5.1...v2.5.2) (2026-04-21)
+
+
+### Bug Fixes
+
+* round-based file loading ([31e1ada](https://github.com/OrthoDriven/2d-point-annotator/commit/31e1ada34b792d51330ca440a3a289e7258559b6))
+
 ## [2.5.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.5.0...v2.5.1) (2026-04-21)
 
 
