@@ -20,8 +20,9 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from unittest.mock import patch
 
 import pytest
@@ -30,14 +31,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from auth import (
-    OneDriveBackup,
-    get_safe_username,
-    get_date_folder,
     AUTH_RECORD_PATH,
     BASE_BACKUP_FOLDER,
     SHAREPOINT_DRIVE_ID,
+    OneDriveBackup,
+    get_date_folder,
+    get_safe_username,
 )
-
 
 # =============================================================================
 # Safety: prevent interactive auth from ever triggering during tests.
@@ -152,12 +152,16 @@ class TestBasicFunctionality:
 class TestAuthInitialization:
     """Test authentication and client initialization."""
 
+    @pytest.mark.requirement("ODI-1234")
+    @pytest.mark.requirement("ODI-5678")
+    @pytest.mark.requirement("ODI-9102")
     def test_auth_record_path_exists(self):
         """Check if auth record exists (user must have authenticated previously)."""
         print(f"[TEST] Auth record path: {AUTH_RECORD_PATH}")
         print(f"[TEST] Auth record exists: {AUTH_RECORD_PATH.exists()}")
         # Don't assert - just informational
 
+    @pytest.mark.requirement("ODI-9102")
     def test_backup_instance_creation(self, backup_instance):
         """Creating OneDriveBackup should not block or hang."""
         print("[TEST] Creating OneDriveBackup instance...")
@@ -166,8 +170,12 @@ class TestAuthInitialization:
         assert backup_instance._initialized is False
         print("[TEST] Instance created successfully (not yet initialized)")
 
+    @pytest.mark.requirement("ODI-9102")
     def test_ensure_initialized_with_timeout(self, backup_instance):
         """_ensure_initialized should complete within timeout."""
+        if not AUTH_RECORD_PATH.exists():
+            pytest.skip("No auth record - skipping auth initialization test")
+
         print("[TEST] Testing _ensure_initialized with 10s timeout...")
 
         result = [None]
@@ -189,12 +197,16 @@ class TestAuthInitialization:
 
         if error[0]:
             print(f"[TEST] _ensure_initialized raised: {error[0]}")
+            pytest.fail(f"_ensure_initialized raised an exception: {error[0]}")
 
         print(f"[TEST] _ensure_initialized returned: {result[0]}")
-        # Result may be True or False depending on auth state
+        assert result[0] is True, f"_ensure_initialized failed: {result[0]}"
 
     def test_fresh_client_creation(self, backup_instance):
         """_create_fresh_client should work or fail gracefully."""
+        if not AUTH_RECORD_PATH.exists():
+            pytest.skip("No auth record - skipping fresh client test")
+
         print("[TEST] Testing _create_fresh_client...")
 
         # _create_fresh_client only needs an auth record on disk,
@@ -203,7 +215,7 @@ class TestAuthInitialization:
         # tested above.
         client = backup_instance._create_fresh_client()
         print(f"[TEST] Fresh client created: {client is not None}")
-        # Client may be None if no auth record exists
+        assert client is not None, "Failed to create fresh client"
 
 
 # =============================================================================
@@ -234,7 +246,7 @@ class TestUploads:
             try:
                 result = future.result(timeout=35.0)  # Extra 5s for overhead
                 print(f"[TEST] Upload result: {result}")
-                assert isinstance(result, bool)
+                assert result is True, f"Upload failed: {result}"
             except FuturesTimeoutError:
                 print("[TEST] FAILED: Upload hung beyond 35s total timeout")
                 pytest.fail("Upload hung - exceeded 35s total timeout")
@@ -252,7 +264,7 @@ class TestUploads:
             try:
                 result = future.result(timeout=35.0)
                 print(f"[TEST] Upload result: {result}")
-                assert isinstance(result, bool)
+                assert result is True, f"Upload failed: {result}"
             except FuturesTimeoutError:
                 print("[TEST] FAILED: DB upload hung beyond 35s")
                 pytest.fail("DB upload hung")
@@ -270,7 +282,7 @@ class TestUploads:
             try:
                 result = future.result(timeout=35.0)
                 print(f"[TEST] Upload result: {result}")
-                assert isinstance(result, bool)
+                assert result is True, f"Upload failed: {result}"
             except FuturesTimeoutError:
                 print("[TEST] FAILED: CSV upload hung beyond 35s")
                 pytest.fail("CSV upload hung")
@@ -318,7 +330,9 @@ class TestAsyncUploads:
         # Wait for callback with timeout
         if callback_called.wait(timeout=35.0):
             print(f"[TEST] Async upload completed: {callback_result[0]}")
-            assert isinstance(callback_result[0], bool)
+            assert callback_result[0] is True, (
+                f"Async upload failed: {callback_result[0]}"
+            )
         else:
             print("[TEST] FAILED: Async upload callback not received in 35s")
             pytest.fail("Async upload timed out")
@@ -345,6 +359,9 @@ class TestAsyncUploads:
                 f"[TEST] Multi-backup completed: {callback_result[0]}/{callback_result[1]}"
             )
             assert callback_result[1] == len(files)
+            assert callback_result[0] == len(files), (
+                f"Not all files uploaded successfully: {callback_result[0]}/{callback_result[1]}"
+            )
         else:
             print("[TEST] FAILED: Multi-backup callback not received in 60s")
             pytest.fail("Multi-backup timed out")
@@ -402,6 +419,9 @@ class TestThreadSafety:
 
         # At least check we didn't deadlock
         assert len(results) + len(errors) == 2, "Not all threads completed"
+        for name, result in results.items():
+            assert result is True, f"Thread {name} upload failed: {result}"
+        assert len(errors) == 0, f"Upload errors occurred: {errors}"
 
 
 # =============================================================================

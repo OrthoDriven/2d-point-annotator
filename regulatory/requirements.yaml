@@ -1,0 +1,18 @@
+- id: ODI-1234
+  title: Device shall produce diagnostically acceptable images across all claimed scanner systems
+
+- id: ODI-5678
+  title: Device shall be validated on each claimed acquisition system
+  parent: UN-001
+
+- id: SW-001
+  title: Device shall process images from GE Innova 9
+  parent: SYS-001
+
+- id: SW-002
+  title: Device shall process images from Siemens Artis zee
+  parent: SYS-001
+
+- id: SW-003
+  title: Performance on each system shall meet sensitivity ≥ X%, specificity ≥ Y%
+  parent: SYS-001

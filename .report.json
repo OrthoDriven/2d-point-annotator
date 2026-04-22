@@ -1,0 +1,1718 @@
+{
+  "created": 1776871057.2100189,
+  "duration": 7.7733776569366455,
+  "exitcode": 0,
+  "root": "/home/ajj/repo/odi/2d-point-annotator",
+  "environment": {},
+  "summary": {
+    "passed": 45,
+    "total": 45,
+    "collected": 45
+  },
+  "collectors": [
+    {
+      "nodeid": "",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests",
+          "type": "Package"
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_clahe.py",
+      "outcome": "passed",
+      "result": []
+    },
+    {
+      "nodeid": "tests/test_dataset_config.py",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_dataset_config.py::test_load_datasets_config",
+          "type": "Function",
+          "lineno": 17
+        },
+        {
+          "nodeid": "tests/test_dataset_config.py::test_load_missing_config",
+          "type": "Function",
+          "lineno": 30
+        },
+        {
+          "nodeid": "tests/test_dataset_config.py::test_get_dataset_dest",
+          "type": "Function",
+          "lineno": 36
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_download_graph.py",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_download_graph.py::test_download_graph_auth_failure",
+          "type": "Function",
+          "lineno": 56
+        },
+        {
+          "nodeid": "tests/test_download_graph.py::test_download_one_writes_file",
+          "type": "Function",
+          "lineno": 68
+        },
+        {
+          "nodeid": "tests/test_download_graph.py::test_download_one_reports_progress",
+          "type": "Function",
+          "lineno": 84
+        },
+        {
+          "nodeid": "tests/test_download_graph.py::test_download_concurrent_via_gather",
+          "type": "Function",
+          "lineno": 100
+        },
+        {
+          "nodeid": "tests/test_download_graph.py::test_download_folder_recursive_with_mock_list",
+          "type": "Function",
+          "lineno": 122
+        },
+        {
+          "nodeid": "tests/test_download_graph.py::test_download_folder_recursive_pagination_via_list",
+          "type": "Function",
+          "lineno": 159
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_download_zip.py",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_download_zip.py::test_download_zip_network_error",
+          "type": "Function",
+          "lineno": 13
+        },
+        {
+          "nodeid": "tests/test_download_zip.py::test_download_zip_extracts_zip",
+          "type": "Function",
+          "lineno": 32
+        },
+        {
+          "nodeid": "tests/test_download_zip.py::test_download_zip_saves_non_zip",
+          "type": "Function",
+          "lineno": 46
+        },
+        {
+          "nodeid": "tests/test_download_zip.py::test_download_zip_reports_progress",
+          "type": "Function",
+          "lineno": 56
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_femoral_axis_tool.py",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_femoral_axis_tool.py::test_toggle_hover_disables_femoral_axis_tool",
+          "type": "Function",
+          "lineno": 70
+        },
+        {
+          "nodeid": "tests/test_femoral_axis_tool.py::test_mousewheel_adjusts_femoral_axis_length_for_selected_fa_landmark",
+          "type": "Function",
+          "lineno": 87
+        },
+        {
+          "nodeid": "tests/test_femoral_axis_tool.py::test_update_femoral_axis_overlay_draws_whiskers_and_tip_caps",
+          "type": "Function",
+          "lineno": 101
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_json_annotations.py",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_json_annotations.py::test_parse_annotations_for_record_extracts_meta_and_segmentation_settings",
+          "type": "Function",
+          "lineno": 52
+        },
+        {
+          "nodeid": "tests/test_json_annotations.py::test_prepare_landmark_data_includes_meta_and_line_landmarks",
+          "type": "Function",
+          "lineno": 83
+        },
+        {
+          "nodeid": "tests/test_json_annotations.py::test_current_image_has_unsaved_changes_uses_json_snapshot",
+          "type": "Function",
+          "lineno": 126
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_direct_acronym_lookup",
+          "type": "Function",
+          "lineno": 102
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_right_prefix_lookup",
+          "type": "Function",
+          "lineno": 110
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_pubic_symphysis_sps",
+          "type": "Function",
+          "lineno": 116
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_pubic_symphysis_ips",
+          "type": "Function",
+          "lineno": 122
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_lesser_trochanter_plt",
+          "type": "Function",
+          "lineno": 128
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_lesser_trochanter_mlt",
+          "type": "Function",
+          "lineno": 134
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_lesser_trochanter_dlt",
+          "type": "Function",
+          "lineno": 140
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_unknown_landmark_returns_none",
+          "type": "Function",
+          "lineno": 146
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_no_prefix_returns_none",
+          "type": "Function",
+          "lineno": 150
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_get_all_definitions_order",
+          "type": "Function",
+          "lineno": 154
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_definition_omits_null_anatomy",
+          "type": "Function",
+          "lineno": 163
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_missing_file_raises",
+          "type": "Function",
+          "lineno": 169
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference",
+          "type": "Class"
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestBasicFunctionality",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestBasicFunctionality::test_get_safe_username",
+          "type": "Function",
+          "lineno": 124
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestBasicFunctionality::test_get_date_folder",
+          "type": "Function",
+          "lineno": 133
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization::test_auth_record_path_exists",
+          "type": "Function",
+          "lineno": 154
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization::test_backup_instance_creation",
+          "type": "Function",
+          "lineno": 164
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization::test_ensure_initialized_with_timeout",
+          "type": "Function",
+          "lineno": 172
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization::test_fresh_client_creation",
+          "type": "Function",
+          "lineno": 203
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestUploads",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestUploads::test_upload_small_file_sync",
+          "type": "Function",
+          "lineno": 233
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestUploads::test_upload_db_file_sync",
+          "type": "Function",
+          "lineno": 252
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestUploads::test_upload_csv_file_sync",
+          "type": "Function",
+          "lineno": 270
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestUploads::test_upload_nonexistent_file",
+          "type": "Function",
+          "lineno": 288
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestAsyncUploads",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestAsyncUploads::test_upload_async_with_callback",
+          "type": "Function",
+          "lineno": 312
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestAsyncUploads::test_backup_multiple_files",
+          "type": "Function",
+          "lineno": 338
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestThreadSafety",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestThreadSafety::test_concurrent_uploads_different_threads",
+          "type": "Function",
+          "lineno": 381
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestTimeoutBehavior",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestTimeoutBehavior::test_very_short_timeout",
+          "type": "Function",
+          "lineno": 433
+        }
+      ]
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestBasicFunctionality",
+          "type": "Class"
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization",
+          "type": "Class"
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestUploads",
+          "type": "Class"
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestAsyncUploads",
+          "type": "Class"
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestThreadSafety",
+          "type": "Class"
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py::TestTimeoutBehavior",
+          "type": "Class"
+        }
+      ]
+    },
+    {
+      "nodeid": "tests",
+      "outcome": "passed",
+      "result": [
+        {
+          "nodeid": "tests/test_clahe.py",
+          "type": "Module"
+        },
+        {
+          "nodeid": "tests/test_dataset_config.py",
+          "type": "Module"
+        },
+        {
+          "nodeid": "tests/test_download_graph.py",
+          "type": "Module"
+        },
+        {
+          "nodeid": "tests/test_download_zip.py",
+          "type": "Module"
+        },
+        {
+          "nodeid": "tests/test_femoral_axis_tool.py",
+          "type": "Module"
+        },
+        {
+          "nodeid": "tests/test_json_annotations.py",
+          "type": "Module"
+        },
+        {
+          "nodeid": "tests/test_landmark_reference.py",
+          "type": "Module"
+        },
+        {
+          "nodeid": "tests/test_onedrive_upload.py",
+          "type": "Module"
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "nodeid": "tests/test_dataset_config.py::test_load_datasets_config",
+      "lineno": 17,
+      "outcome": "passed",
+      "keywords": [
+        "test_load_datasets_config",
+        "test_dataset_config.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0007905319998826599,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0002094579999720736,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 9.429900001123315e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_dataset_config.py::test_load_missing_config",
+      "lineno": 30,
+      "outcome": "passed",
+      "keywords": [
+        "test_load_missing_config",
+        "test_dataset_config.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00022764800041841227,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00011580900036278763,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.929899993541767e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_dataset_config.py::test_get_dataset_dest",
+      "lineno": 36,
+      "outcome": "passed",
+      "keywords": [
+        "test_get_dataset_dest",
+        "test_dataset_config.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 7.76189999669441e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0001287989998672856,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 6.411000003936351e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_graph.py::test_download_graph_auth_failure",
+      "lineno": 56,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_graph_auth_failure",
+        "test_download_graph.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00022080799999457668,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00044815599994763033,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.482999990315875e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_graph.py::test_download_one_writes_file",
+      "lineno": 68,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_one_writes_file",
+        "test_download_graph.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0002261069998894527,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0013284870001371019,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.823900023140595e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_graph.py::test_download_one_reports_progress",
+      "lineno": 84,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_one_reports_progress",
+        "test_download_graph.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00022320799962471938,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.001051209000252129,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.813000001988257e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_graph.py::test_download_concurrent_via_gather",
+      "lineno": 100,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_concurrent_via_gather",
+        "test_download_graph.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00023598699999638484,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0018147320001844491,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.989999994606478e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_graph.py::test_download_folder_recursive_with_mock_list",
+      "lineno": 122,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_folder_recursive_with_mock_list",
+        "test_download_graph.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00022957800001677242,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0017797719997361128,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.995899977686349e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_graph.py::test_download_folder_recursive_pagination_via_list",
+      "lineno": 159,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_folder_recursive_pagination_via_list",
+        "test_download_graph.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0002474070001881046,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.002766871999938303,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 8.991899994725827e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_zip.py::test_download_zip_network_error",
+      "lineno": 13,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_zip_network_error",
+        "test_download_zip.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 8.299899991470738e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0002685380000002624,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.360899962804979e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_zip.py::test_download_zip_extracts_zip",
+      "lineno": 32,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_zip_extracts_zip",
+        "test_download_zip.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0002368979999118892,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.001052460000209976,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.843899993531522e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_zip.py::test_download_zip_saves_non_zip",
+      "lineno": 46,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_zip_saves_non_zip",
+        "test_download_zip.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00023980700007086853,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0006065640000088024,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.682900013605831e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_download_zip.py::test_download_zip_reports_progress",
+      "lineno": 56,
+      "outcome": "passed",
+      "keywords": [
+        "test_download_zip_reports_progress",
+        "test_download_zip.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 7.864899998821784e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0005762040000263369,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 6.787900019844528e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_femoral_axis_tool.py::test_toggle_hover_disables_femoral_axis_tool",
+      "lineno": 70,
+      "outcome": "passed",
+      "keywords": [
+        "test_toggle_hover_disables_femoral_axis_tool",
+        "test_femoral_axis_tool.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 9.778899993762025e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00010362900002292008,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 6.393000012394623e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_femoral_axis_tool.py::test_mousewheel_adjusts_femoral_axis_length_for_selected_fa_landmark",
+      "lineno": 87,
+      "outcome": "passed",
+      "keywords": [
+        "test_mousewheel_adjusts_femoral_axis_length_for_selected_fa_landmark",
+        "test_femoral_axis_tool.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 7.463900010407087e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 9.324900020146742e-05,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 6.16389997958322e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_femoral_axis_tool.py::test_update_femoral_axis_overlay_draws_whiskers_and_tip_caps",
+      "lineno": 101,
+      "outcome": "passed",
+      "keywords": [
+        "test_update_femoral_axis_overlay_draws_whiskers_and_tip_caps",
+        "test_femoral_axis_tool.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 9.077000004253932e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 9.373900002174196e-05,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 6.835899966972647e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_json_annotations.py::test_parse_annotations_for_record_extracts_meta_and_segmentation_settings",
+      "lineno": 52,
+      "outcome": "passed",
+      "keywords": [
+        "test_parse_annotations_for_record_extracts_meta_and_segmentation_settings",
+        "test_json_annotations.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00025454800015722867,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00018816900001183967,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.199999981821747e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_json_annotations.py::test_prepare_landmark_data_includes_meta_and_line_landmarks",
+      "lineno": 83,
+      "outcome": "passed",
+      "keywords": [
+        "test_prepare_landmark_data_includes_meta_and_line_landmarks",
+        "test_json_annotations.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00023593800005983212,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00024780800004009507,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 6.843899973318912e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_json_annotations.py::test_current_image_has_unsaved_changes_uses_json_snapshot",
+      "lineno": 126,
+      "outcome": "passed",
+      "keywords": [
+        "test_current_image_has_unsaved_changes_uses_json_snapshot",
+        "test_json_annotations.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00021684800003640703,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0005020850003347732,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.062899976517656e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_direct_acronym_lookup",
+      "lineno": 102,
+      "outcome": "passed",
+      "keywords": [
+        "test_direct_acronym_lookup",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0003494570000839303,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00015294900003937073,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.750899976599612e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_right_prefix_lookup",
+      "lineno": 110,
+      "outcome": "passed",
+      "keywords": [
+        "test_right_prefix_lookup",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0003292269998382835,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00013821899983668118,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.810899978721864e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_pubic_symphysis_sps",
+      "lineno": 116,
+      "outcome": "passed",
+      "keywords": [
+        "test_template_pubic_symphysis_sps",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0003089070000896754,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00014547799992215005,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.681899978706497e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_pubic_symphysis_ips",
+      "lineno": 122,
+      "outcome": "passed",
+      "keywords": [
+        "test_template_pubic_symphysis_ips",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00031536699998468976,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00013572899979408248,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.803000016792794e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_lesser_trochanter_plt",
+      "lineno": 128,
+      "outcome": "passed",
+      "keywords": [
+        "test_template_lesser_trochanter_plt",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00032054700022854377,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00013062900006843847,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 8.255900002041017e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_lesser_trochanter_mlt",
+      "lineno": 134,
+      "outcome": "passed",
+      "keywords": [
+        "test_template_lesser_trochanter_mlt",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0003180970002176764,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0001245379999090801,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.960999982969952e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_template_lesser_trochanter_dlt",
+      "lineno": 140,
+      "outcome": "passed",
+      "keywords": [
+        "test_template_lesser_trochanter_dlt",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0003118569998150633,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0001238389995705802,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.26589996702387e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_unknown_landmark_returns_none",
+      "lineno": 146,
+      "outcome": "passed",
+      "keywords": [
+        "test_unknown_landmark_returns_none",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00032073700003820704,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00012790799974027323,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.41399999242276e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_no_prefix_returns_none",
+      "lineno": 150,
+      "outcome": "passed",
+      "keywords": [
+        "test_no_prefix_returns_none",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0024081060000753496,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00013019900006838725,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.617900018885848e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_get_all_definitions_order",
+      "lineno": 154,
+      "outcome": "passed",
+      "keywords": [
+        "test_get_all_definitions_order",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0003050669997719524,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.0001270889997613267,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.309900001928327e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_definition_omits_null_anatomy",
+      "lineno": 163,
+      "outcome": "passed",
+      "keywords": [
+        "test_definition_omits_null_anatomy",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0003024870002263924,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00012171900016255677,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 7.311899980777525e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_landmark_reference.py::TestLandmarkReference::test_missing_file_raises",
+      "lineno": 169,
+      "outcome": "passed",
+      "keywords": [
+        "test_missing_file_raises",
+        "TestLandmarkReference",
+        "test_landmark_reference.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00021088799985591322,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00010931899987554061,
+        "outcome": "passed"
+      },
+      "teardown": {
+        "duration": 6.803900032537058e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestBasicFunctionality::test_get_safe_username",
+      "lineno": 124,
+      "outcome": "passed",
+      "keywords": [
+        "test_get_safe_username",
+        "TestBasicFunctionality",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0001416590002918383,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 9.151899985226919e-05,
+        "outcome": "passed",
+        "stdout": "[TEST] Username: ajj\n"
+      },
+      "teardown": {
+        "duration": 5.805000000691507e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestBasicFunctionality::test_get_date_folder",
+      "lineno": 133,
+      "outcome": "passed",
+      "keywords": [
+        "test_get_date_folder",
+        "TestBasicFunctionality",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 7.188900008259225e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00010396900006526266,
+        "outcome": "passed",
+        "stdout": "[TEST] Date folder: 2026-04-22\n"
+      },
+      "teardown": {
+        "duration": 5.843899998581037e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization::test_auth_record_path_exists",
+      "lineno": 154,
+      "outcome": "passed",
+      "keywords": [
+        "test_auth_record_path_exists",
+        "requirement",
+        "pytestmark",
+        "TestAuthInitialization",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 7.220899988169549e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": [
+          "ODI-1234",
+          "ODI-9102",
+          "ODI-5678",
+          "ODI-1234"
+        ]
+      },
+      "call": {
+        "duration": 0.00010710800006563659,
+        "outcome": "passed",
+        "stdout": "[TEST] Auth record path: /home/ajj/repo/odi/auth/auth_record.json\n[TEST] Auth record exists: True\n"
+      },
+      "teardown": {
+        "duration": 5.76900001760805e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization::test_backup_instance_creation",
+      "lineno": 164,
+      "outcome": "passed",
+      "keywords": [
+        "test_backup_instance_creation",
+        "TestAuthInitialization",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 9.693900028651115e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 8.359900039067725e-05,
+        "outcome": "passed",
+        "stdout": "[TEST] Creating OneDriveBackup instance...\n[TEST] Instance created successfully (not yet initialized)\n"
+      },
+      "teardown": {
+        "duration": 6.303899999693385e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization::test_ensure_initialized_with_timeout",
+      "lineno": 172,
+      "outcome": "passed",
+      "keywords": [
+        "test_ensure_initialized_with_timeout",
+        "TestAuthInitialization",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 9.751900006449432e-05,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.48357144200008406,
+        "outcome": "passed",
+        "stdout": "[TEST] Testing _ensure_initialized with 10s timeout...\n[TEST] _ensure_initialized returned: True\n"
+      },
+      "teardown": {
+        "duration": 0.00011722899989763391,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestAuthInitialization::test_fresh_client_creation",
+      "lineno": 203,
+      "outcome": "passed",
+      "keywords": [
+        "test_fresh_client_creation",
+        "TestAuthInitialization",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.00013114800003677374,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.004869281000082992,
+        "outcome": "passed",
+        "stdout": "[TEST] Testing _create_fresh_client...\n[TEST] Fresh client created: True\n"
+      },
+      "teardown": {
+        "duration": 7.513900027333875e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestUploads::test_upload_small_file_sync",
+      "lineno": 233,
+      "outcome": "passed",
+      "keywords": [
+        "test_upload_small_file_sync",
+        "TestUploads",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0006384339999385702,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 1.6822718590001386,
+        "outcome": "passed",
+        "stdout": "\n[TEST] === Testing small file sync upload ===\n[TEST] File: /tmp/pytest-of-ajj/pytest-33/test_upload_small_file_sync0/small_test.txt (1024 bytes)\n[TEST] Upload result: True\n"
+      },
+      "teardown": {
+        "duration": 0.0001469489998271456,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestUploads::test_upload_db_file_sync",
+      "lineno": 252,
+      "outcome": "passed",
+      "keywords": [
+        "test_upload_db_file_sync",
+        "TestUploads",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0006832529998064274,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 1.1571293510000942,
+        "outcome": "passed",
+        "stdout": "\n[TEST] === Testing DB file sync upload ===\n[TEST] File: /tmp/pytest-of-ajj/pytest-33/test_upload_db_file_sync0/test_annotations.db (9116 bytes)\n[TEST] Upload result: True\n"
+      },
+      "teardown": {
+        "duration": 0.0001467979996050417,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestUploads::test_upload_csv_file_sync",
+      "lineno": 270,
+      "outcome": "passed",
+      "keywords": [
+        "test_upload_csv_file_sync",
+        "TestUploads",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.000765591999879689,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.6631088929998441,
+        "outcome": "passed",
+        "stdout": "\n[TEST] === Testing CSV file sync upload ===\n[TEST] File: /tmp/pytest-of-ajj/pytest-33/test_upload_csv_file_sync0/test_annotations.csv (4585 bytes)\n[TEST] Upload result: True\n"
+      },
+      "teardown": {
+        "duration": 0.00013488900003721938,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestUploads::test_upload_nonexistent_file",
+      "lineno": 288,
+      "outcome": "passed",
+      "keywords": [
+        "test_upload_nonexistent_file",
+        "TestUploads",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0004284050000933348,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.00034347600012551993,
+        "outcome": "passed",
+        "stdout": "\n[TEST] === Testing nonexistent file upload ===\n[TEST] File: /tmp/pytest-of-ajj/pytest-33/test_upload_nonexistent_file0/does_not_exist.txt (exists: False)\n[TEST] Upload result: False\n",
+        "log": [
+          {
+            "name": "auth",
+            "msg": "File does not exist: /tmp/pytest-of-ajj/pytest-33/test_upload_nonexistent_file0/does_not_exist.txt",
+            "args": null,
+            "levelname": "WARNING",
+            "levelno": 30,
+            "pathname": "/home/ajj/repo/odi/2d-point-annotator/src/auth.py",
+            "filename": "auth.py",
+            "module": "auth",
+            "exc_info": null,
+            "exc_text": null,
+            "stack_info": null,
+            "lineno": 550,
+            "funcName": "upload_backup_sync",
+            "created": 1776871053.9718103,
+            "msecs": 971.0,
+            "relativeCreated": 4642.413357,
+            "thread": 140083872257920,
+            "threadName": "MainThread",
+            "processName": "MainProcess",
+            "process": 831843,
+            "taskName": null
+          }
+        ]
+      },
+      "teardown": {
+        "duration": 9.263900028599892e-05,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestAsyncUploads::test_upload_async_with_callback",
+      "lineno": 312,
+      "outcome": "passed",
+      "keywords": [
+        "test_upload_async_with_callback",
+        "TestAsyncUploads",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0006249740004022897,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.7043364629998905,
+        "outcome": "passed",
+        "stdout": "\n[TEST] === Testing async upload with callback ===\n[TEST] Starting async upload of /tmp/pytest-of-ajj/pytest-33/test_upload_async_with_callbac0/small_test.txt\n[TEST] Callback received: success=True\n[TEST] Async upload completed: True\n"
+      },
+      "teardown": {
+        "duration": 0.00013132799995219102,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestAsyncUploads::test_backup_multiple_files",
+      "lineno": 338,
+      "outcome": "passed",
+      "keywords": [
+        "test_backup_multiple_files",
+        "TestAsyncUploads",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0008963109999058361,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 1.3926173550003114,
+        "outcome": "passed",
+        "stdout": "\n[TEST] === Testing multiple file backup ===\n[TEST] Starting backup of 2 files\n[TEST] Multi-backup callback: 2/2\n[TEST] Multi-backup completed: 2/2\n"
+      },
+      "teardown": {
+        "duration": 0.0001396379998368502,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestThreadSafety::test_concurrent_uploads_different_threads",
+      "lineno": 381,
+      "outcome": "passed",
+      "keywords": [
+        "test_concurrent_uploads_different_threads",
+        "TestThreadSafety",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0007227430000966706,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 1.1290613609999127,
+        "outcome": "passed",
+        "stdout": "\n[TEST] === Testing concurrent uploads from different threads ===\n[TEST] Starting threads...\n[TEST] Thread A starting upload of small_test.txt\n[TEST] Thread B starting upload of test_annotations.csv\n[TEST] Waiting for threads (max 45s each)...\n[TEST] Thread B completed: True\n[TEST] Thread A completed: True\n[TEST] Results: {'B': True, 'A': True}\n[TEST] Errors: {}\n"
+      },
+      "teardown": {
+        "duration": 0.0001272380000045814,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "tests/test_onedrive_upload.py::TestTimeoutBehavior::test_very_short_timeout",
+      "lineno": 433,
+      "outcome": "passed",
+      "keywords": [
+        "test_very_short_timeout",
+        "TestTimeoutBehavior",
+        "test_onedrive_upload.py",
+        "tests",
+        "2d-point-annotator",
+        ""
+      ],
+      "setup": {
+        "duration": 0.0006668230003015196,
+        "outcome": "passed"
+      },
+      "metadata": {
+        "requirements": []
+      },
+      "call": {
+        "duration": 0.005875542000012501,
+        "outcome": "passed",
+        "stdout": "\n[TEST] === Testing very short timeout (0.001s) ===\n[TEST] Result: False, elapsed: 0.006s\n",
+        "log": [
+          {
+            "name": "auth",
+            "msg": "Upload timed out after 0.0s for /tmp/pytest-of-ajj/pytest-33/test_very_short_timeout0/small_test.txt",
+            "args": null,
+            "levelname": "WARNING",
+            "levelno": 30,
+            "pathname": "/home/ajj/repo/odi/2d-point-annotator/src/auth.py",
+            "filename": "auth.py",
+            "module": "auth",
+            "exc_info": null,
+            "exc_text": null,
+            "stack_info": null,
+            "lineno": 598,
+            "funcName": "upload_backup_sync",
+            "created": 1776871057.2093277,
+            "msecs": 209.0,
+            "relativeCreated": 7879.930751,
+            "thread": 140083872257920,
+            "threadName": "MainThread",
+            "processName": "MainProcess",
+            "process": 831843,
+            "taskName": null
+          }
+        ]
+      },
+      "teardown": {
+        "duration": 0.00025710699992487207,
+        "outcome": "passed"
+      }
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "ODI-1234",
+    "title": "Device shall produce diagnostically acceptable images across all claimed scanner systems",
+    "status": "verified",
+    "tests": [
+      {
+        "test": "tests/test_onedrive_upload.py::TestAuthInitialization::test_auth_record_path_exists",
+        "outcome": "passed"
+      }
+    ]
+  },
+  {
+    "id": "ODI-5678",
+    "title": "Device shall be validated on each claimed acquisition system",
+    "status": "verified",
+    "tests": [
+      {
+        "test": "tests/test_onedrive_upload.py::TestAuthInitialization::test_auth_record_path_exists",
+        "outcome": "passed"
+      }
+    ]
+  },
+  {
+    "id": "SW-001",
+    "title": "Device shall process images from GE Innova 9",
+    "status": "untested",
+    "tests": []
+  },
+  {
+    "id": "SW-002",
+    "title": "Device shall process images from Siemens Artis zee",
+    "status": "untested",
+    "tests": []
+  },
+  {
+    "id": "SW-003",
+    "title": "Performance on each system shall meet sensitivity \u2265 X%, specificity \u2265 Y%",
+    "status": "untested",
+    "tests": []
+  }
+]

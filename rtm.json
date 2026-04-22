@@ -1,0 +1,32 @@
+[
+  {
+    "requirement": "ODI-1234",
+    "tests": [
+      {
+        "test": "tests/test_onedrive_upload.py::TestAuthInitialization::test_auth_record_path_exists",
+        "outcome": "passed"
+      }
+    ],
+    "status": "verified"
+  },
+  {
+    "requirement": "ODI-5678",
+    "tests": [
+      {
+        "test": "tests/test_onedrive_upload.py::TestAuthInitialization::test_auth_record_path_exists",
+        "outcome": "passed"
+      }
+    ],
+    "status": "verified"
+  },
+  {
+    "requirement": "ODI-9102",
+    "tests": [
+      {
+        "test": "tests/test_onedrive_upload.py::TestAuthInitialization::test_auth_record_path_exists",
+        "outcome": "passed"
+      }
+    ],
+    "status": "verified"
+  }
+]
