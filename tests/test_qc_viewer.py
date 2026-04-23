@@ -112,18 +112,29 @@ def test_get_annotations_for_image():
 
 
 def test_landmark_distance_points():
-    dist = compute_landmark_distance([100.0, 200.0], [103.0, 204.0])
-    assert abs(dist - 5.0) < 0.01  # sqrt(3^2 + 4^2) = 5
+    result = compute_landmark_distance([100.0, 200.0], [103.0, 204.0])
+    assert result["type"] == "point"
+    assert abs(result["distance"] - 5.0) < 0.01
 
 
 def test_landmark_distance_lines():
-    # Line landmarks: [[x1,y1],[x2,y2]]
-    dist = compute_landmark_distance(
-        [[100.0, 200.0], [200.0, 300.0]],  # midpoint: 150, 250
-        [[110.0, 210.0], [210.0, 310.0]],  # midpoint: 160, 260
+    result = compute_landmark_distance(
+        [[0.0, 0.0], [100.0, 0.0]],
+        [[0.0, 10.0], [100.0, 10.0]],
     )
-    expected = math.dist([150.0, 250.0], [160.0, 260.0])
-    assert abs(dist - expected) < 0.01
+    assert result["type"] == "line"
+    assert abs(result["signed_dists"][0] - (-10.0)) < 0.01
+    assert abs(result["signed_dists"][1] - (-10.0)) < 0.01
+    assert abs(result["angle_deg"] - 0.0) < 0.01
+
+
+def test_landmark_distance_lines_angle():
+    result = compute_landmark_distance(
+        [[0.0, 0.0], [100.0, 0.0]],
+        [[0.0, 0.0], [0.0, 100.0]],
+    )
+    assert result["type"] == "line"
+    assert abs(result["angle_deg"] - 90.0) < 0.01
 
 
 def test_landmark_distance_none():
@@ -157,8 +168,12 @@ def test_pairwise_distances():
         },
     }
     distances = compute_pairwise_distances(annotators, "img_a.tiff", ["L-ASIS", "R-ASIS"])
-    assert abs(distances["L-ASIS"][("andrew", "mark")] - 5.0) < 0.01
-    assert abs(distances["R-ASIS"][("andrew", "mark")] - math.dist([300, 200], [305, 202])) < 0.01
+    l_result = distances["L-ASIS"][("andrew", "mark")]
+    assert l_result["type"] == "point"
+    assert abs(l_result["distance"] - 5.0) < 0.01
+    r_result = distances["R-ASIS"][("andrew", "mark")]
+    assert r_result["type"] == "point"
+    assert abs(r_result["distance"] - math.dist([300, 200], [305, 202])) < 0.01
 
 
 def test_detect_mismatches_all_ok():
