@@ -109,4 +109,77 @@ def detect_mismatches(
 
 
 if __name__ == "__main__":
-    pass
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description="Inter-Annotator QC Viewer — data verification")
+    parser.add_argument("--summary", required=True, help="Path to summary JSON")
+    parser.add_argument("--json-dir", required=True, help="Directory containing annotator JSONs")
+    parser.add_argument("--images-dir", default=None, help="Directory containing images (optional, for existence check)")
+    parser.add_argument("--max-images", type=int, default=5, help="Max shared images to report on (default 5)")
+    args = parser.parse_args()
+
+    summary_path = Path(args.summary)
+    json_dir = Path(args.json_dir)
+    images_dir = Path(args.images_dir) if args.images_dir else None
+
+    print(f"Loading summary: {summary_path}")
+    summary = load_summary(summary_path)
+
+    print(f"Discovering annotators in: {json_dir}")
+    annotator_files = discover_annotator_files(summary, json_dir)
+    print(f"Found {len(annotator_files)} annotators: {sorted(annotator_files.keys())}")
+
+    annotators = {}
+    for name, path in annotator_files.items():
+        annotators[name] = load_annotator_data(path)
+        n_images = len(annotators[name].get("images", []))
+        print(f"  {name}: {n_images} images")
+
+    shared_images = get_shared_images(summary)
+    print(f"\nShared images: {len(shared_images)}")
+
+    landmarks = next(iter(annotators.values()), {}).get("landmarks", [])
+    print(f"Landmarks: {len(landmarks)}")
+
+    print(f"\n{'='*60}")
+    print(f"Inspecting first {min(args.max_images, len(shared_images))} shared images:")
+    print(f"{'='*60}")
+
+    for image_path in shared_images[:args.max_images]:
+        print(f"\n--- {image_path} ---")
+
+        if images_dir:
+            full_path = images_dir / image_path
+            print(f"  Image exists: {full_path.exists()}")
+
+        mismatches = detect_mismatches(annotators, image_path, landmarks)
+        distances = compute_pairwise_distances(annotators, image_path, landmarks)
+
+        missing = [lm for lm, s in mismatches.items() if s == "missing"]
+        flagged = [lm for lm, s in mismatches.items() if s == "flagged"]
+        ok = [lm for lm, s in mismatches.items() if s == "ok"]
+
+        print(f"  Status: {len(ok)} ok, {len(flagged)} flagged, {len(missing)} missing")
+
+        if missing:
+            print(f"  Missing: {', '.join(missing)}")
+        if flagged:
+            print(f"  Flagged: {', '.join(flagged)}")
+
+        if distances:
+            all_dists = [d for pairs in distances.values() for d in pairs.values()]
+            if all_dists:
+                print(f"  Distances: min={min(all_dists):.1f}px, max={max(all_dists):.1f}px, mean={sum(all_dists)/len(all_dists):.1f}px")
+
+                worst = sorted(
+                    [(lm, max(pairs.values())) for lm, pairs in distances.items() if pairs],
+                    key=lambda x: x[1], reverse=True
+                )[:3]
+                if worst:
+                    print(f"  Worst landmarks:")
+                    for lm, d in worst:
+                        print(f"    {lm}: {d:.1f}px")
+
+    print(f"\n{'='*60}")
+    print("Data layer verification complete.")
