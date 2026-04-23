@@ -292,10 +292,18 @@ class QcViewer(tk.Tk):
         ttk.Button(toolbar, text="Load", command=self._load_data).grid(row=0, column=3, rowspan=3, padx=10)
         ttk.Button(toolbar, text="Export CSV", command=self._export_report).grid(row=0, column=4, rowspan=3, padx=10)
 
+    def _initial_dir(self) -> str:
+        if self.summary_path and self.summary_path.exists():
+            return str(self.summary_path.parent)
+        if self.data_dir and self.data_dir.exists():
+            return str(self.data_dir)
+        return str(Path.home())
+
     def _browse_summary(self):
         path = filedialog.askopenfilename(
             title="Select summary JSON",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            initialdir=self._initial_dir(),
         )
         if path:
             self.summary_var.set(path)
@@ -303,12 +311,12 @@ class QcViewer(tk.Tk):
             self.data_dir_var.set(str(p.parent))
 
     def _browse_data_dir(self):
-        path = filedialog.askdirectory(title="Select data directory")
+        path = filedialog.askdirectory(title="Select data directory", initialdir=self._initial_dir())
         if path:
             self.data_dir_var.set(path)
 
     def _browse_images_dir(self):
-        path = filedialog.askdirectory(title="Select images directory")
+        path = filedialog.askdirectory(title="Select images directory", initialdir=self._initial_dir())
         if path:
             self.images_dir_var.set(path)
 
@@ -354,6 +362,7 @@ class QcViewer(tk.Tk):
             title="Save comparison report",
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv")],
+            initialdir=self._initial_dir(),
         )
         if not out_path:
             return
