@@ -355,6 +355,7 @@ class QcViewer(tk.Tk):
         self.current_index = 0
 
         self._populate_annotator_toggles()
+        self._build_landmark_tree()
         self._render_current_image()
 
         self.status_var.set(
@@ -538,26 +539,38 @@ class QcViewer(tk.Tk):
     def _build_right_panel(self):
         ttk.Label(self.right_panel, text="Landmarks", font=("", 10, "bold")).pack(anchor="w", pady=(0, 5))
 
-        columns = ("landmark", "status", "max_dist")
-        self.lm_tree = ttk.Treeview(self.right_panel, columns=columns, show="headings", height=30)
-        self.lm_tree.heading("landmark", text="Landmark")
-        self.lm_tree.heading("status", text="Status")
-        self.lm_tree.heading("max_dist", text="Max Dist")
-        self.lm_tree.column("landmark", width=80)
-        self.lm_tree.column("status", width=80)
-        self.lm_tree.column("max_dist", width=80)
-        self.lm_tree.pack(fill="both", expand=True)
-
-        self.lm_tree.tag_configure("ok", background="#d5f5e3")
-        self.lm_tree.tag_configure("flagged", background="#fdebd0")
-        self.lm_tree.tag_configure("missing", background="#fadbd8")
+        self.lm_tree_frame = ttk.Frame(self.right_panel)
+        self.lm_tree_frame.pack(fill="both", expand=True)
+        self.lm_tree = None
 
         self.detail_var = tk.StringVar(value="")
         ttk.Label(self.right_panel, textvariable=self.detail_var, wraplength=280, justify="left").pack(anchor="w", pady=5)
 
+    def _build_landmark_tree(self):
+        if self.lm_tree:
+            self.lm_tree.destroy()
+
+        names = sorted(self.annotators.keys())
+        columns = ["landmark"] + names + ["max_dist"]
+        display = {"landmark": "Landmark", "max_dist": "Max Dist"}
+        for n in names:
+            display[n] = n
+
+        self.lm_tree = ttk.Treeview(self.lm_tree_frame, columns=columns, show="headings", height=30)
+        for col in columns:
+            self.lm_tree.heading(col, text=display.get(col, col))
+            w = 60 if col != "landmark" else 70
+            self.lm_tree.column(col, width=w, minwidth=50)
+        self.lm_tree.pack(fill="both", expand=True)
+
+        self.lm_tree.tag_configure("ok", background="#d5f5e3")
+        self.lm_tree.tag_configure("issue", background="#fadbd8")
+
         self.lm_tree.bind("<<TreeviewSelect>>", self._on_landmark_select)
 
     def _update_landmark_table(self, image_path: str):
+        if not self.lm_tree:
+            return
         for item in self.lm_tree.get_children():
             self.lm_tree.delete(item)
 
@@ -565,19 +578,36 @@ class QcViewer(tk.Tk):
         if not first_ann:
             return
         all_landmarks = first_ann.get("landmarks", [])
+        names = sorted(self.annotators.keys())
 
-        mismatches = detect_mismatches(self.annotators, image_path, all_landmarks)
         distances = compute_pairwise_distances(self.annotators, image_path, all_landmarks)
 
         for lm in all_landmarks:
-            status = mismatches.get(lm, "ok")
+            row = [lm]
+            has_issue = False
+            for name in names:
+                anns = get_annotations_for_image(self.annotators[name], image_path)
+                if lm not in anns:
+                    row.append("?")
+                    has_issue = True
+                elif anns[lm]["value"] is None:
+                    row.append("MISS")
+                    has_issue = True
+                elif anns[lm].get("flag", False):
+                    row.append("FLAG")
+                    has_issue = True
+                else:
+                    row.append("")
+
             lm_pairs = distances.get(lm, {})
             if lm_pairs:
                 max_dist = _max_metric(lm_pairs)
-                dist_str = f"{max_dist:.1f}"
+                row.append(f"{max_dist:.1f}")
             else:
-                dist_str = "---"
-            self.lm_tree.insert("", "end", values=(lm, status, dist_str), tags=(status,))
+                row.append("---")
+
+            tag = "issue" if has_issue else "ok"
+            self.lm_tree.insert("", "end", values=row, tags=(tag,))
 
     def _on_landmark_select(self, event):
         sel = self.lm_tree.selection()
