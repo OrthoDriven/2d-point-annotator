@@ -7,6 +7,19 @@ from tkinter import filedialog, ttk
 from pathlib import Path
 from datetime import datetime
 from PIL import Image, ImageTk
+import numpy as np
+
+
+def load_image_for_display(path: Path) -> Image.Image:
+    img = Image.open(path)
+    if img.mode == "I;16":
+        arr = np.array(img, dtype=np.uint16)
+        lo = np.percentile(arr, 1)
+        hi = np.percentile(arr, 99)
+        arr = np.clip(arr, lo, hi)
+        arr = ((arr - lo) / (hi - lo) * 255).astype(np.uint8)
+        img = Image.fromarray(arr, mode="L")
+    return img.convert("RGB")
 
 
 def load_summary(path: Path) -> dict:
@@ -458,7 +471,7 @@ class QcViewer(tk.Tk):
             )
             return
 
-        img = Image.open(full_path)
+        img = load_image_for_display(full_path)
         canvas_w = self.canvas.winfo_width() or 800
         canvas_h = self.canvas.winfo_height() or 600
 
