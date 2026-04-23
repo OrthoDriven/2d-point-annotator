@@ -299,6 +299,9 @@ class QcViewer(tk.Tk):
         return Path(__file__).resolve().parent.parent
 
     def _images_initial_dir(self) -> str:
+        installed = Path.home() / "2d-point-annotator" / "data"
+        if installed.is_dir():
+            return str(installed)
         data = self._repo_root() / "data"
         return str(data if data.is_dir() else self._repo_root())
 
