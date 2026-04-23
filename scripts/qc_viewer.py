@@ -446,8 +446,12 @@ class QcViewer(tk.Tk):
 
         for lm in all_landmarks:
             status = mismatches.get(lm, "ok")
-            max_dist = max(distances.get(lm, {}).values()) if distances.get(lm) else 0
-            dist_str = f"{max_dist:.1f}px" if max_dist > 0 else "---"
+            lm_pairs = distances.get(lm, {})
+            if lm_pairs:
+                max_dist = _max_metric(lm_pairs)
+                dist_str = f"{max_dist:.1f}"
+            else:
+                dist_str = "---"
             self.lm_tree.insert("", "end", values=(lm, status, dist_str), tags=(status,))
 
     def _on_landmark_select(self, event):
@@ -468,12 +472,107 @@ class QcViewer(tk.Tk):
         distances = compute_pairwise_distances(self.annotators, image_path, [lm])
         if distances.get(lm):
             lines.append("  Distances:")
-            for (a, b), d in sorted(distances[lm].items()):
-                lines.append(f"    {a}-{b}: {d:.1f}px")
+            for (a, b), result in sorted(distances[lm].items()):
+                if result["type"] == "point":
+                    lines.append(f"    {a}-{b}: {result['distance']:.1f}px")
+                elif result["type"] == "line":
+                    sd = result["signed_dists"]
+                    lines.append(
+                        f"    {a}-{b}: signed=[{sd[0]:.1f}, {sd[1]:.1f}]px, angle={result['angle_deg']:.1f}°"
+                    )
 
         self.detail_var.set("\n".join(lines))
 
 
 if __name__ == "__main__":
-    app = QcViewer()
-    app.mainloop()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Inter-Annotator QC Viewer")
+    parser.add_argument("--summary", default=None, help="Path to summary JSON")
+    parser.add_argument("--json-dir", default=None, help="Directory containing annotator JSONs")
+    parser.add_argument("--images-dir", default=None, help="Directory containing images")
+    parser.add_argument("--max-images", type=int, default=5, help="Max shared images to report on (default 5)")
+    args = parser.parse_args()
+
+    if args.summary and args.json_dir:
+        summary_path = Path(args.summary)
+        json_dir = Path(args.json_dir)
+        images_dir = Path(args.images_dir) if args.images_dir else None
+
+        print(f"Loading summary: {summary_path}")
+        summary = load_summary(summary_path)
+
+        print(f"Discovering annotators in: {json_dir}")
+        annotator_files = discover_annotator_files(summary, json_dir)
+        print(f"Found {len(annotator_files)} annotators: {sorted(annotator_files.keys())}")
+
+        annotators = {}
+        for name, path in annotator_files.items():
+            annotators[name] = load_annotator_data(path)
+            n_images = len(annotators[name].get("images", []))
+            print(f"  {name}: {n_images} images")
+
+        shared_images = get_shared_images(summary)
+        print(f"\nShared images: {len(shared_images)}")
+
+        landmarks = next(iter(annotators.values()), {}).get("landmarks", [])
+        print(f"Landmarks: {len(landmarks)}")
+
+        print(f"\n{'='*60}")
+        print(f"Inspecting first {min(args.max_images, len(shared_images))} shared images:")
+        print(f"{'='*60}")
+
+        for image_path in shared_images[:args.max_images]:
+            print(f"\n--- {image_path} ---")
+
+            if images_dir:
+                full_path = images_dir / image_path
+                print(f"  Image exists: {full_path.exists()}")
+
+            mismatches = detect_mismatches(annotators, image_path, landmarks)
+            distances = compute_pairwise_distances(annotators, image_path, landmarks)
+
+            missing = [lm for lm, s in mismatches.items() if s == "missing"]
+            flagged = [lm for lm, s in mismatches.items() if s == "flagged"]
+            ok = [lm for lm, s in mismatches.items() if s == "ok"]
+
+            print(f"  Status: {len(ok)} ok, {len(flagged)} flagged, {len(missing)} missing")
+
+            if missing:
+                print(f"  Missing: {', '.join(missing)}")
+            if flagged:
+                print(f"  Flagged: {', '.join(flagged)}")
+
+            if distances:
+                point_dists = []
+                line_angles = []
+                line_max_signed = []
+                for pairs in distances.values():
+                    for result in pairs.values():
+                        if result["type"] == "point":
+                            point_dists.append(result["distance"])
+                        elif result["type"] == "line":
+                            line_angles.append(result["angle_deg"])
+                            line_max_signed.append(max(abs(d) for d in result["signed_dists"]))
+
+                if point_dists:
+                    print(f"  Point distances: min={min(point_dists):.1f}px, max={max(point_dists):.1f}px, mean={sum(point_dists)/len(point_dists):.1f}px")
+                if line_angles:
+                    print(f"  Line angles: min={min(line_angles):.1f}°, max={max(line_angles):.1f}°, mean={sum(line_angles)/len(line_angles):.1f}°")
+                if line_max_signed:
+                    print(f"  Line offsets: min={min(line_max_signed):.1f}px, max={max(line_max_signed):.1f}px, mean={sum(line_max_signed)/len(line_max_signed):.1f}px")
+
+                worst = sorted(
+                    [(lm, _max_metric(pairs)) for lm, pairs in distances.items() if pairs],
+                    key=lambda x: x[1], reverse=True
+                )[:3]
+                if worst:
+                    print(f"  Worst landmarks:")
+                    for lm, d in worst:
+                        print(f"    {lm}: {d:.1f}")
+
+        print(f"\n{'='*60}")
+        print("Data layer verification complete.")
+    else:
+        app = QcViewer()
+        app.mainloop()
