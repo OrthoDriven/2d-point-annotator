@@ -159,3 +159,33 @@ def test_pairwise_distances():
     distances = compute_pairwise_distances(annotators, "img_a.tiff", ["L-ASIS", "R-ASIS"])
     assert abs(distances["L-ASIS"][("andrew", "mark")] - 5.0) < 0.01
     assert abs(distances["R-ASIS"][("andrew", "mark")] - math.dist([300, 200], [305, 202])) < 0.01
+
+
+def test_detect_mismatches_all_ok():
+    from qc_viewer import detect_mismatches
+    annotators = {
+        "a": {"images": [{"image_path": "img.tiff", "annotations": {"L-ASIS": {"value": [100, 200], "flag": False}}}]},
+        "b": {"images": [{"image_path": "img.tiff", "annotations": {"L-ASIS": {"value": [102, 201], "flag": False}}}]},
+    }
+    result = detect_mismatches(annotators, "img.tiff", ["L-ASIS"])
+    assert result["L-ASIS"] == "ok"
+
+
+def test_detect_mismatches_missing():
+    from qc_viewer import detect_mismatches
+    annotators = {
+        "a": {"images": [{"image_path": "img.tiff", "annotations": {"L-ASIS": {"value": [100, 200], "flag": False}}}]},
+        "b": {"images": [{"image_path": "img.tiff", "annotations": {"L-ASIS": {"value": None, "flag": False}}}]},
+    }
+    result = detect_mismatches(annotators, "img.tiff", ["L-ASIS"])
+    assert result["L-ASIS"] == "missing"
+
+
+def test_detect_mismatches_flagged():
+    from qc_viewer import detect_mismatches
+    annotators = {
+        "a": {"images": [{"image_path": "img.tiff", "annotations": {"L-ASIS": {"value": [100, 200], "flag": False}}}]},
+        "b": {"images": [{"image_path": "img.tiff", "annotations": {"L-ASIS": {"value": [102, 201], "flag": True}}}]},
+    }
+    result = detect_mismatches(annotators, "img.tiff", ["L-ASIS"])
+    assert result["L-ASIS"] == "flagged"

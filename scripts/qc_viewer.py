@@ -83,5 +83,30 @@ def compute_pairwise_distances(
     return result
 
 
+def detect_mismatches(
+    annotators: dict[str, dict], image_path: str, landmarks: list[str]
+) -> dict[str, str]:
+    """Detect mismatches across annotators for each landmark.
+
+    Returns {landmark: 'ok' | 'missing' | 'flagged'}
+    Priority: missing > flagged > ok
+    """
+    result = {}
+    for lm in landmarks:
+        has_null = False
+        has_flagged = False
+        for name, data in annotators.items():
+            anns = get_annotations_for_image(data, image_path)
+            if lm not in anns:
+                continue
+            ann = anns[lm]
+            if ann["value"] is None:
+                has_null = True
+            if ann.get("flag", False):
+                has_flagged = True
+        result[lm] = "missing" if has_null else ("flagged" if has_flagged else "ok")
+    return result
+
+
 if __name__ == "__main__":
     pass
