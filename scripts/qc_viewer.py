@@ -266,6 +266,10 @@ class QcViewer(tk.Tk):
         self.current_index = 0
         self.visible_annotators: set[str] = set()
         self.annotator_colors: dict[str, str] = {}
+        self.zoom_level = 1.0
+        self.pan_x = 0
+        self.pan_y = 0
+        self._drag_start = None
 
         self._build_toolbar()
         self._build_main_layout()
@@ -500,7 +504,51 @@ class QcViewer(tk.Tk):
     def _build_canvas(self):
         self.canvas = tk.Canvas(self.canvas_frame, bg="#2c3e50")
         self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<MouseWheel>", self._on_zoom)
+        self.canvas.bind("<Button-4>", self._on_zoom)
+        self.canvas.bind("<Button-5>", self._on_zoom)
+        self.canvas.bind("<ButtonPress-1>", self._on_pan_start)
+        self.canvas.bind("<B1-Motion>", self._on_pan_move)
+        self.canvas.bind("<ButtonRelease-1>", self._on_pan_end)
+
+        zoom_frame = ttk.Frame(self.canvas_frame)
+        zoom_frame.pack(fill="x")
+        ttk.Button(zoom_frame, text="Reset Zoom", command=self._reset_zoom).pack(side="right", padx=5, pady=2)
+        self.zoom_label = ttk.Label(zoom_frame, text="100%")
+        self.zoom_label.pack(side="right")
         self.photo = None
+
+    def _on_zoom(self, event):
+        if not self.shared_images:
+            return
+        if event.num == 4 or event.delta > 0:
+            self.zoom_level = min(self.zoom_level * 1.2, 10.0)
+        elif event.num == 5 or event.delta < 0:
+            self.zoom_level = max(self.zoom_level / 1.2, 0.1)
+        self.zoom_label.config(text=f"{self.zoom_level:.0%}")
+        self._render_current_image()
+
+    def _on_pan_start(self, event):
+        self._drag_start = (event.x, event.y)
+
+    def _on_pan_move(self, event):
+        if self._drag_start:
+            dx = event.x - self._drag_start[0]
+            dy = event.y - self._drag_start[1]
+            self.pan_x += dx
+            self.pan_y += dy
+            self._drag_start = (event.x, event.y)
+            self._render_current_image()
+
+    def _on_pan_end(self, event):
+        self._drag_start = None
+
+    def _reset_zoom(self):
+        self.zoom_level = 1.0
+        self.pan_x = 0
+        self.pan_y = 0
+        self.zoom_label.config(text="100%")
+        self._render_current_image()
 
     def _render_current_image(self):
         if not self.shared_images:
@@ -526,18 +574,23 @@ class QcViewer(tk.Tk):
         canvas_w = self.canvas.winfo_width() or 800
         canvas_h = self.canvas.winfo_height() or 600
 
-        scale = min(canvas_w / img.width, canvas_h / img.height, 1.0)
+        base_scale = min(canvas_w / img.width, canvas_h / img.height, 1.0)
+        scale = base_scale * self.zoom_level
         new_w = int(img.width * scale)
         new_h = int(img.height * scale)
-        img_resized = img.resize((new_w, new_h), Image.LANCZOS)
 
-        self.photo = ImageTk.PhotoImage(img_resized)
-        self.canvas.delete("all")
-        self.canvas.create_image(
-            canvas_w // 2, canvas_h // 2, image=self.photo, anchor="center"
-        )
+        if new_w > 0 and new_h > 0:
+            img_resized = img.resize((new_w, new_h), Image.NEAREST if self.zoom_level > 2 else Image.LANCZOS)
+            self.photo = ImageTk.PhotoImage(img_resized)
+            self.canvas.delete("all")
 
-        self._draw_landmarks(image_path, scale, canvas_w // 2 - new_w // 2, canvas_h // 2 - new_h // 2)
+            cx = canvas_w // 2 + self.pan_x
+            cy = canvas_h // 2 + self.pan_y
+            self.canvas.create_image(cx, cy, image=self.photo, anchor="center")
+
+            offset_x = cx - new_w // 2
+            offset_y = cy - new_h // 2
+            self._draw_landmarks(image_path, scale, offset_x, offset_y)
         self._update_landmark_table(image_path)
 
     def _draw_landmarks(self, image_path: str, scale: float, offset_x: int, offset_y: int):
