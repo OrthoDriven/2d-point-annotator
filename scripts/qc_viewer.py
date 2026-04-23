@@ -355,6 +355,7 @@ class QcViewer(tk.Tk):
         self.current_index = 0
 
         self._populate_annotator_toggles()
+        self._populate_landmark_toggles()
         self._build_landmark_tree()
         self._render_current_image()
 
@@ -409,6 +410,16 @@ class QcViewer(tk.Tk):
 
         ttk.Separator(self.left_panel, orient="horizontal").pack(fill="x", pady=10)
 
+        ttk.Label(self.left_panel, text="Landmarks", font=("", 10, "bold")).pack(anchor="w", pady=(0, 5))
+
+        lm_btn_frame = ttk.Frame(self.left_panel)
+        lm_btn_frame.pack(fill="x")
+        ttk.Button(lm_btn_frame, text="All", command=self._show_all_landmarks).pack(side="left", expand=True, fill="x")
+        ttk.Button(lm_btn_frame, text="None", command=self._hide_all_landmarks).pack(side="left", expand=True, fill="x")
+
+        self.lm_toggle_frame = ttk.Frame(self.left_panel)
+        self.lm_toggle_frame.pack(fill="both", expand=True)
+
         nav_frame = ttk.Frame(self.left_panel)
         nav_frame.pack(fill="x")
         ttk.Button(nav_frame, text="Prev", command=self._prev_image).pack(side="left", expand=True, fill="x")
@@ -439,6 +450,30 @@ class QcViewer(tk.Tk):
             swatch = tk.Canvas(frame, width=12, height=12, highlightthickness=0)
             swatch.create_oval(1, 1, 11, 11, fill=color, outline=color)
             swatch.pack(side="left", padx=5)
+
+    def _populate_landmark_toggles(self):
+        for widget in self.lm_toggle_frame.winfo_children():
+            widget.destroy()
+
+        self.lm_toggle_vars = {}
+        first_ann = next(iter(self.annotators.values()), None)
+        if not first_ann:
+            return
+        for lm in first_ann.get("landmarks", []):
+            var = tk.BooleanVar(value=True)
+            self.lm_toggle_vars[lm] = var
+            cb = ttk.Checkbutton(self.lm_toggle_frame, text=lm, variable=var, command=self._render_current_image)
+            cb.pack(anchor="w")
+
+    def _show_all_landmarks(self):
+        for var in self.lm_toggle_vars.values():
+            var.set(True)
+        self._render_current_image()
+
+    def _hide_all_landmarks(self):
+        for var in self.lm_toggle_vars.values():
+            var.set(False)
+        self._render_current_image()
 
     def _on_toggle_change(self):
         self.visible_annotators = {name for name, var in self.toggle_vars.items() if var.get()}
@@ -511,6 +546,7 @@ class QcViewer(tk.Tk):
         if not first_ann:
             return
         all_landmarks = first_ann.get("landmarks", [])
+        visible_lms = {lm for lm, var in self.lm_toggle_vars.items() if var.get()} if hasattr(self, "lm_toggle_vars") else set(all_landmarks)
 
         for name in sorted(self.visible_annotators):
             if name not in self.annotators:
@@ -519,6 +555,8 @@ class QcViewer(tk.Tk):
             anns = get_annotations_for_image(self.annotators[name], image_path)
 
             for lm in all_landmarks:
+                if lm not in visible_lms:
+                    continue
                 if lm not in anns:
                     continue
                 val = anns[lm]["value"]
