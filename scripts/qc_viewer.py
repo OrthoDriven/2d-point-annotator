@@ -1,9 +1,11 @@
 import json
+import csv
 import math
 import itertools
 import tkinter as tk
 from tkinter import filedialog, ttk
 from pathlib import Path
+from datetime import datetime
 from PIL import Image, ImageTk
 
 
@@ -153,6 +155,84 @@ def detect_mismatches(
     return result
 
 
+def generate_report_data(
+    annotators: dict[str, dict],
+    shared_images: list[str],
+    landmarks: list[str],
+) -> list[dict]:
+    rows = []
+    for image_path in shared_images:
+        distances = compute_pairwise_distances(annotators, image_path, landmarks)
+        mismatches = detect_mismatches(annotators, image_path, landmarks)
+
+        for lm in landmarks:
+            values = {}
+            for name, data in annotators.items():
+                anns = get_annotations_for_image(data, image_path)
+                if lm in anns:
+                    ann = anns[lm]
+                    val = ann["value"]
+                    if val is not None:
+                        if isinstance(val[0], list):
+                            values[name] = {"x": val[0][0], "y": val[0][1], "flag": ann.get("flag", False), "is_line": True, "x2": val[1][0], "y2": val[1][1]}
+                        else:
+                            values[name] = {"x": val[0], "y": val[1], "flag": ann.get("flag", False), "is_line": False, "x2": None, "y2": None}
+                    else:
+                        values[name] = {"x": None, "y": None, "flag": ann.get("flag", False), "is_line": False, "x2": None, "y2": None}
+                else:
+                    values[name] = {"x": None, "y": None, "flag": False, "is_line": False, "x2": None, "y2": None}
+
+            lm_distances = distances.get(lm, {})
+            point_dists = [r["distance"] for r in lm_distances.values() if r["type"] == "point"]
+            line_angles = [r["angle_deg"] for r in lm_distances.values() if r["type"] == "line"]
+            line_offsets = [max(abs(d) for d in r["signed_dists"]) for r in lm_distances.values() if r["type"] == "line"]
+
+            rows.append({
+                "image_path": image_path,
+                "landmark": lm,
+                "status": mismatches.get(lm, "ok"),
+                "values": values,
+                "max_point_dist": max(point_dists) if point_dists else None,
+                "mean_point_dist": sum(point_dists) / len(point_dists) if point_dists else None,
+                "max_line_angle": max(line_angles) if line_angles else None,
+                "max_line_offset": max(line_offsets) if line_offsets else None,
+            })
+    return rows
+
+
+def export_csv(report: list[dict], annotator_names: list[str], out_path: Path) -> None:
+    if not report:
+        return
+
+    base_cols = ["image_path", "landmark", "status"]
+    coord_cols = []
+    for name in sorted(annotator_names):
+        coord_cols.extend([f"{name}_x", f"{name}_y", f"{name}_x2", f"{name}_y2", f"{name}_flag"])
+
+    metric_cols = ["max_point_dist", "mean_point_dist", "max_line_angle", "max_line_offset"]
+    all_cols = base_cols + coord_cols + metric_cols
+
+    with open(out_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=all_cols)
+        writer.writeheader()
+        for row in report:
+            csv_row = {
+                "image_path": row["image_path"],
+                "landmark": row["landmark"],
+                "status": row["status"],
+            }
+            for name in sorted(annotator_names):
+                v = row["values"].get(name, {})
+                csv_row[f"{name}_x"] = v.get("x")
+                csv_row[f"{name}_y"] = v.get("y")
+                csv_row[f"{name}_x2"] = v.get("x2")
+                csv_row[f"{name}_y2"] = v.get("y2")
+                csv_row[f"{name}_flag"] = v.get("flag", False)
+            for mc in metric_cols:
+                csv_row[mc] = row.get(mc)
+            writer.writerow(csv_row)
+
+
 COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#e67e22", "#9b59b6", "#1abc9c"]
 
 
@@ -197,6 +277,7 @@ class QcViewer(tk.Tk):
         ttk.Button(toolbar, text="Browse", command=self._browse_images_dir).grid(row=2, column=2)
 
         ttk.Button(toolbar, text="Load", command=self._load_data).grid(row=0, column=3, rowspan=3, padx=10)
+        ttk.Button(toolbar, text="Export CSV", command=self._export_report).grid(row=0, column=4, rowspan=3, padx=10)
 
     def _browse_summary(self):
         path = filedialog.askopenfilename(
@@ -252,6 +333,22 @@ class QcViewer(tk.Tk):
         self.status_var.set(
             f"Loaded {len(self.annotators)} annotators, {len(self.shared_images)} shared images"
         )
+
+    def _export_report(self):
+        if not self.annotators or not self.shared_images:
+            return
+        out_path = filedialog.asksaveasfilename(
+            title="Save comparison report",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+        )
+        if not out_path:
+            return
+        first_ann = next(iter(self.annotators.values()), None)
+        landmarks = first_ann.get("landmarks", [])
+        report = generate_report_data(self.annotators, self.shared_images, landmarks)
+        export_csv(report, list(self.annotators.keys()), Path(out_path))
+        tk.messagebox.showinfo("Export Complete", f"Report saved to:\n{out_path}")
 
     def _build_main_layout(self):
         main_frame = ttk.Frame(self)
@@ -492,6 +589,7 @@ if __name__ == "__main__":
     parser.add_argument("--json-dir", default=None, help="Directory containing annotator JSONs")
     parser.add_argument("--images-dir", default=None, help="Directory containing images")
     parser.add_argument("--max-images", type=int, default=5, help="Max shared images to report on (default 5)")
+    parser.add_argument("--export", default=None, help="Export comparison report to CSV file")
     args = parser.parse_args()
 
     if args.summary and args.json_dir:
@@ -570,6 +668,11 @@ if __name__ == "__main__":
                     print(f"  Worst landmarks:")
                     for lm, d in worst:
                         print(f"    {lm}: {d:.1f}")
+
+        if args.export:
+            report = generate_report_data(annotators, shared_images, landmarks)
+            export_csv(report, list(annotators.keys()), Path(args.export))
+            print(f"\nReport exported to: {args.export}")
 
         print(f"\n{'='*60}")
         print("Data layer verification complete.")
