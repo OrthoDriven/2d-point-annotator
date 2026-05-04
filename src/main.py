@@ -755,7 +755,6 @@ class AnnotationGUI(tk.Tk):
         json_files.sort()
 
         for f in json_files:
-
             listbox.insert(tk.END, str(f))
 
         selected = [None]
