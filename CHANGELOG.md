@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.6.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.5.2...v2.6.0) (2026-05-04)
+
+
+### Features
+
+* **data:** add image injection and OneDrive backup for JSON management ([680f99b](https://github.com/OrthoDriven/2d-point-annotator/commit/680f99b0a4d361be03c61d60f550011aafbb235e))
+* **data:** add JSON metadata tracking, OneDrive original backup, and image injection script ([680f99b](https://github.com/OrthoDriven/2d-point-annotator/commit/680f99b0a4d361be03c61d60f550011aafbb235e))
+* **data:** add JSON update rules engine for dynamic load balancing ([680f99b](https://github.com/OrthoDriven/2d-point-annotator/commit/680f99b0a4d361be03c61d60f550011aafbb235e))
+* **load-balancing:** add multiplier for per-annotator global scaling ([680f99b](https://github.com/OrthoDriven/2d-point-annotator/commit/680f99b0a4d361be03c61d60f550011aafbb235e))
+* **load-balancing:** add per-annotator unique image count overrides ([680f99b](https://github.com/OrthoDriven/2d-point-annotator/commit/680f99b0a4d361be03c61d60f550011aafbb235e))
+* **qc_viewer:** adding zoom ([cec7b57](https://github.com/OrthoDriven/2d-point-annotator/commit/cec7b577e5048a77fdae7ac76e43cd0fa6b580d9))
+* **qc-viewer:** add annotator data loading and image lookup ([d5d3e70](https://github.com/OrthoDriven/2d-point-annotator/commit/d5d3e700df6d7e8c26792b31cec697b44c31974a))
+* **qc-viewer:** add CLI verification mode for data layer testing ([9a31dc7](https://github.com/OrthoDriven/2d-point-annotator/commit/9a31dc7da26874165a2e06e42ed30280c3429529))
+* **qc-viewer:** add complete UI with toolbar, canvas, and panels ([444fc2f](https://github.com/OrthoDriven/2d-point-annotator/commit/444fc2fe5dfa76eab6fc4a39ae571f91e17d1fa3))
+* **qc-viewer:** add CSV export for inter-annotator comparison report ([dcce0bc](https://github.com/OrthoDriven/2d-point-annotator/commit/dcce0bc6b773cf8d07d5831c460b975d038c5594))
+* **qc-viewer:** add mismatch detection for missing/flagged landmarks ([6f0346e](https://github.com/OrthoDriven/2d-point-annotator/commit/6f0346e2ffb4addd806f9ebd170d439057f36f4f))
+* **qc-viewer:** add mouse wheel zoom and pan with reset button ([de03159](https://github.com/OrthoDriven/2d-point-annotator/commit/de03159892d10b7a5e4e64104c07b593544fb620))
+* **qc-viewer:** add per-annotator columns in landmark table ([14fe9ac](https://github.com/OrthoDriven/2d-point-annotator/commit/14fe9acf5a9682a2818afe2659dd4a2740a42e65))
+* **qc-viewer:** add signed distance + angle for line landmarks ([6c97301](https://github.com/OrthoDriven/2d-point-annotator/commit/6c973018c62e6ad55632e1d7f6553477c0a1d9f4))
+* reducing load on Andrew/Paris for rounds 2/3/4 ([680f99b](https://github.com/OrthoDriven/2d-point-annotator/commit/680f99b0a4d361be03c61d60f550011aafbb235e))
+
+
+### Bug Fixes
+
+* **load-balancing:** allocate unique images correctly when capped annotators present ([680f99b](https://github.com/OrthoDriven/2d-point-annotator/commit/680f99b0a4d361be03c61d60f550011aafbb235e))
+* **load-balancing:** enforce hard cap on unique images for overridden annotators ([680f99b](https://github.com/OrthoDriven/2d-point-annotator/commit/680f99b0a4d361be03c61d60f550011aafbb235e))
+* **load-balancing:** shared images now same pool for all annotators ([680f99b](https://github.com/OrthoDriven/2d-point-annotator/commit/680f99b0a4d361be03c61d60f550011aafbb235e))
+* **qc-viewer:** fix dict comparison bugs in landmark table and restore CLI mode ([3d1f05f](https://github.com/OrthoDriven/2d-point-annotator/commit/3d1f05f5d352775de55842f8f946ae5e98b1ba18))
+* **qc-viewer:** normalize 16-bit TIFF images for display ([9267bf3](https://github.com/OrthoDriven/2d-point-annotator/commit/9267bf3dba7fdcf4986dc4cbd8fc9000659e7312))
+* **qc-viewer:** set summary to repo root, images to data dir ([f837881](https://github.com/OrthoDriven/2d-point-annotator/commit/f83788134414d7d95be6cb31f1c018fdd884ecf4))
+* **qc-viewer:** use install data dir for images initial directory ([58e35a9](https://github.com/OrthoDriven/2d-point-annotator/commit/58e35a97e948803bc815d4178621eef4888ae1f6))
+* **qc-viewer:** use summary directory as default for file dialogs ([88fe517](https://github.com/OrthoDriven/2d-point-annotator/commit/88fe5172881bc165c894a44fb02363ac6d81b7f8))
+
 ## [2.5.2](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.5.1...v2.5.2) (2026-04-21)
 
 
