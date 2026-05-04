@@ -113,83 +113,6 @@
   },
   "images": [
     {
-      "image_path": "fluoro_images_round_1/img_000307.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000021.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000181.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000681.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000385.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000814.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000462.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000690.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000376.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001201.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000985.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
       "image_path": "fluoro_images_round_1/img_000269.tiff",
       "image_flag": false,
       "view": null,
@@ -197,504 +120,42 @@
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000664.tiff",
+      "image_path": "fluoro_images_round_1/img_000551.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000175.tiff",
+      "image_path": "fluoro_images_round_1/img_000996.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000643.tiff",
+      "image_path": "fluoro_images_round_1/img_000442.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_001042.tiff",
+      "image_path": "fluoro_images_round_1/img_001103.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000540.tiff",
+      "image_path": "fluoro_images_round_1/img_001054.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000227.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000849.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001328.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000576.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000495.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000623.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001059.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001162.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000560.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000104.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000580.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001028.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000208.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000050.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000184.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000667.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000817.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001049.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000112.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000791.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000630.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001033.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000499.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000823.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000139.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000330.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000954.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000684.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000653.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001283.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000141.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000818.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000069.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000901.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001194.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000622.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001324.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000872.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000434.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001254.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000721.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000038.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000265.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000931.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000188.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000838.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000784.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001277.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001356.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000084.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000854.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001127.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000204.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000840.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000892.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001089.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000274.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000488.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000677.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000321.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000609.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_001102.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000903.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000727.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000578.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000386.tiff",
-      "image_flag": false,
-      "view": null,
-      "image_direction": null,
-      "annotations": {}
-    },
-    {
-      "image_path": "fluoro_images_round_1/img_000532.tiff",
+      "image_path": "fluoro_images_round_1/img_000722.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
@@ -708,49 +169,105 @@
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000216.tiff",
+      "image_path": "fluoro_images_round_1/img_000141.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000720.tiff",
+      "image_path": "fluoro_images_round_1/img_001156.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000377.tiff",
+      "image_path": "fluoro_images_round_1/img_000684.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000278.tiff",
+      "image_path": "fluoro_images_round_1/img_000578.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000019.tiff",
+      "image_path": "fluoro_images_round_1/img_000660.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000305.tiff",
+      "image_path": "fluoro_images_round_1/img_000338.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
       "annotations": {}
     },
     {
-      "image_path": "fluoro_images_round_1/img_000920.tiff",
+      "image_path": "fluoro_images_round_1/img_000604.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000487.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000970.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000858.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000946.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_001002.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000104.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000416.tiff",
+      "image_flag": false,
+      "view": null,
+      "image_direction": null,
+      "annotations": {}
+    },
+    {
+      "image_path": "fluoro_images_round_1/img_000462.tiff",
       "image_flag": false,
       "view": null,
       "image_direction": null,
