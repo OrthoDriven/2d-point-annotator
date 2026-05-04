@@ -182,6 +182,9 @@ class AnnotationGUI(tk.Tk):
         self.json_path: Optional[Path] = None
         self.json_dir: Optional[Path] = None
         self.json_data: Dict = {"landmarks": [], "views": {}, "images": []}
+        self._json_metadata: Dict = {}  # Metadata tracking for traceability
+        self._original_json_hash: Optional[str] = None  # SHA-256 of loaded JSON for backup dedup
+        self._original_json_backed_up: bool = False  # Track if original has been backed up
         self.allowed_views: Dict[str, List[str]] = {}
         self.landmark_meta: Dict[str, Dict[str, Dict[str, Union[bool, str]]]] = {}
         self.hover_radii: Dict[str, Dict[str, int]] = {}
@@ -613,10 +616,19 @@ class AnnotationGUI(tk.Tk):
             self._sync_current_state_to_json_record()
 
             images_to_save: List[Dict] = []
+
+            # Build metadata for traceability
+            now_iso = datetime.now().isoformat()
+            metadata = dict(self._json_metadata)
+            if "created" not in metadata:
+                metadata["created"] = now_iso
+            metadata["last_modified"] = now_iso
+
             save_data = {
                 "landmarks": list(self.json_data.get("landmarks", [])),
                 "views": dict(self.allowed_views),
                 "images": images_to_save,
+                "metadata": metadata,
             }
 
             for record in self.json_data.get("images", []):
@@ -630,6 +642,24 @@ class AnnotationGUI(tk.Tk):
             with tmp_path.open("w", encoding="utf-8") as handle:
                 json.dump(save_data, handle, indent=2)
             tmp_path.replace(self.json_path)
+
+            # Update in-memory metadata after successful save
+            self._json_metadata = metadata
+
+            # Backup original JSON to OneDrive before first modification
+            if (
+                self._original_json_hash is not None
+                and not self._original_json_backed_up
+                and self.json_path is not None
+            ):
+                import hashlib
+
+                # Check if content has changed from original
+                new_content = json.dumps(save_data, indent=2, sort_keys=False)
+                new_hash = hashlib.sha256(new_content.encode("utf-8")).hexdigest()
+                if new_hash != self._original_json_hash:
+                    self._backup_original_json()
+                    self._original_json_backed_up = True
 
             self._refresh_saved_snapshot_for_current_image()
             self.dirty = False
@@ -815,10 +845,16 @@ class AnnotationGUI(tk.Tk):
 
         try:
             with json_path.open("r", encoding="utf-8") as handle:
-                data = json.load(handle)
+                raw_content = handle.read()
+                data = json.loads(raw_content)
         except Exception as e:
             messagebox.showerror("Load Data", f"Failed to read JSON:\n{e}")
             return
+
+        # Compute hash of original file for backup dedup
+        import hashlib
+        self._original_json_hash = hashlib.sha256(raw_content.encode("utf-8")).hexdigest()
+        self._original_json_backed_up = False
 
         landmarks = data.get("landmarks")
         views = data.get("views")
@@ -862,6 +898,23 @@ class AnnotationGUI(tk.Tk):
         self.json_path = json_path
         self.json_dir = json_path.parent
         self.allowed_views = allowed_views
+        self._json_metadata = data.get("metadata", {})  # Preserve existing metadata
+
+        # Auto-merge: check if repo has a fresher version of this JSON
+        try:
+            from auto_merge import auto_merge_on_load
+            data = auto_merge_on_load(json_path)
+            self._json_metadata = data.get("metadata", {})
+            landmarks = data.get("landmarks", landmarks)
+            views = data.get("views", views)
+            images = data.get("images", images)
+            self.allowed_views = {}
+            for view_name, landmark_list in views.items():
+                if isinstance(view_name, str) and isinstance(landmark_list, list):
+                    self.allowed_views[view_name] = list(landmark_list)
+        except Exception as e:
+            logger.warning(f"Failed to auto-merge: {e}")
+
         self.json_data = {
             "landmarks": list(landmarks),
             "views": dict(self.allowed_views),
@@ -4433,6 +4486,64 @@ class AnnotationGUI(tk.Tk):
 
         thread = threading.Thread(target=_init, daemon=True)
         thread.start()
+
+    def _backup_original_json(self) -> None:
+        """
+        Backup the original JSON to OneDrive before first modification.
+
+        Uploads to: pelvic-2d-points-backup/original_jsons/{username}/{filename}_{timestamp}.json
+        This preserves the pre-edit state for traceability.
+        """
+        if self.json_path is None or not self.json_path.exists():
+            return
+
+        try:
+            from auth import get_safe_username
+
+            username = get_safe_username()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            stem = self.json_path.stem
+            suffix = self.json_path.suffix
+            backup_name = f"{stem}_{timestamp}{suffix}"
+
+            # Read original content
+            with self.json_path.open("rb") as f:
+                file_content = f.read()
+
+            # Upload in background thread
+            def _do_backup():
+                try:
+                    client = self.onedrive_backup._create_fresh_client()
+                    if not client:
+                        logger.warning("No Graph client available for original JSON backup")
+                        return
+
+                    import asyncio
+
+                    loop = asyncio.SelectorEventLoop()
+
+                    async def upload():
+                        remote_folder = f"pelvic-2d-points-backup/original_jsons/{username}"
+                        drive_item_path = f"root:/{remote_folder}/{backup_name}:"
+                        await (
+                            client.drives.by_drive_id(SHAREPOINT_DRIVE_ID)
+                            .items.by_drive_item_id(drive_item_path)
+                            .content.put(file_content)
+                        )
+                        logger.info(f"Backed up original JSON: {backup_name}")
+
+                    try:
+                        loop.run_until_complete(upload())
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.warning(f"Failed to backup original JSON: {e}")
+
+            thread = threading.Thread(target=_do_backup, daemon=True)
+            thread.start()
+
+        except Exception as e:
+            logger.warning(f"Failed to initiate original JSON backup: {e}")
 
     def _schedule_onedrive_backup(self, delay_ms: int = 5000) -> None:
         if self._onedrive_backup_timer is not None:

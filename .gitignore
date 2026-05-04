@@ -216,4 +216,7 @@ docs/superpowers
 .memory-bank
 .sisyphus
 data/remote_backups/
+.update_tracking/
 .panoptes
+
+docs/plans/

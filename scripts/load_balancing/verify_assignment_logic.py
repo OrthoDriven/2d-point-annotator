@@ -16,11 +16,15 @@ from collections import defaultdict
 from itertools import combinations
 from pathlib import Path
 
+from config_loader import load_config
+
 
 def main():
     data_dir = Path("data")
 
-    backup_summary = json.loads((data_dir / "remote_backups" / "fluoro-r1_summary.json").read_text())
+    backup_summary = json.loads(
+        (data_dir / "remote_backups" / "fluoro-r1_summary.json").read_text()
+    )
     total_images = len(backup_summary["image_membership"])
 
     r1_summary = json.loads((data_dir / "fluoro-r1_round1_summary.json").read_text())
@@ -33,7 +37,11 @@ def main():
         path = data_dir / f"fluoro-r1_round1_{ann}.json"
         ann_data = json.loads(path.read_text())
         r1_per_ann[ann] = {img["image_path"] for img in ann_data["images"]}
-        r1_annotated_per_ann[ann] = {img["image_path"] for img in ann_data["images"] if img.get("view") is not None}
+        r1_annotated_per_ann[ann] = {
+            img["image_path"]
+            for img in ann_data["images"]
+            if img.get("view") is not None
+        }
 
     r1_universe = set(r1_round["round_images"])
 
@@ -44,7 +52,9 @@ def main():
         bp = data_dir / "remote_backups" / folder / f"fluoro-r1_{ann}.json"
         if bp.exists():
             bd = json.loads(bp.read_text())
-            backup_annotated[ann] = {img["image_path"] for img in bd["images"] if img.get("view") is not None}
+            backup_annotated[ann] = {
+                img["image_path"] for img in bd["images"] if img.get("view") is not None
+            }
         else:
             backup_annotated[ann] = set()
 
@@ -60,14 +70,18 @@ def main():
         for combo in combinations(active.keys(), r):
             overlap = set.intersection(*(active[u] for u in combo))
             if overlap:
-                print(f"  Pre-existing overlap {'&'.join(combo)}: {len(overlap)} images")
+                print(
+                    f"  Pre-existing overlap {'&'.join(combo)}: {len(overlap)} images"
+                )
 
     shared_pool = set(r1_round.get("shared_pool_images", []))
     print(f"\n  Shared reliability pool: {len(shared_pool)} images (from Andrew's set)")
     print()
 
-    print(f"  {'Annotator':<10} {'Total':>6} {'Preserved':>10} {'New Work':>9} {'Shared':>7}")
-    print(f"  {'-'*10} {'-'*6} {'-'*10} {'-'*9} {'-'*7}")
+    print(
+        f"  {'Annotator':<10} {'Total':>6} {'Preserved':>10} {'New Work':>9} {'Shared':>7}"
+    )
+    print(f"  {'-' * 10} {'-' * 6} {'-' * 10} {'-' * 9} {'-' * 7}")
     for ann in r1_annotators:
         total = len(r1_per_ann[ann])
         preserved = len(backup_annotated.get(ann, set()) & r1_per_ann[ann])
@@ -89,7 +103,12 @@ def main():
     print("ROUNDS 2+ — 65/25/10 Reliability Model")
     print("=" * 70)
 
-    r2_annotators = ["scott", "andrew", "mark", "paris", "sonia"]
+    config = load_config(
+        Path("scripts/load_balancing/configs/build_future_rounds.yaml")
+    )
+    r2_annotators = config.get(
+        "annotators", ["scott", "andrew", "mark", "paris", "sonia"]
+    )
 
     all_seen = set(r1_universe)
     cumulative_shared = len(shared_pool)
@@ -115,22 +134,32 @@ def main():
         total_per = rd["final_group_sizes"].get(sample_ann, 0)
         intra_sample = rd.get("intra_rater_repeats", {}).get(sample_ann, 0)
 
-        round_rows.append({
-            "r_num": r_num,
-            "new_in_round": len(new_this_round),
-            "inter": inter,
-            "intra_sample": intra_sample,
-            "total_per": total_per,
-            "cumulative_shared": cumulative_shared,
-            "cumulative_new": len(all_seen),
-            "remaining": total_images - len(all_seen),
-        })
+        round_rows.append(
+            {
+                "r_num": r_num,
+                "new_in_round": len(new_this_round),
+                "inter": inter,
+                "intra_sample": intra_sample,
+                "total_per": total_per,
+                "cumulative_shared": cumulative_shared,
+                "cumulative_new": len(all_seen),
+                "remaining": total_images - len(all_seen),
+            }
+        )
 
-    print(f"\n  {'Round':<8} {'New Imgs':>8} {'Shared':>7} {'Intra':>6} {'Per Person':>11} {'Cum.Shared':>11} {'Cum.New':>8} {'Left':>6}")
-    print(f"  {'-'*8} {'-'*8} {'-'*7} {'-'*6} {'-'*11} {'-'*11} {'-'*8} {'-'*6}")
-    print(f"  {'R1':<8} {len(r1_universe):>8} {len(shared_pool):>7} {'—':>6} {'—':>11} {len(shared_pool):>11} {len(r1_universe):>8} {total_images - len(r1_universe):>6}")
+    print(
+        f"\n  {'Round':<8} {'New Imgs':>8} {'Shared':>7} {'Intra':>6} {'Per Person':>11} {'Cum.Shared':>11} {'Cum.New':>8} {'Left':>6}"
+    )
+    print(
+        f"  {'-' * 8} {'-' * 8} {'-' * 7} {'-' * 6} {'-' * 11} {'-' * 11} {'-' * 8} {'-' * 6}"
+    )
+    print(
+        f"  {'R1':<8} {len(r1_universe):>8} {len(shared_pool):>7} {'—':>6} {'—':>11} {len(shared_pool):>11} {len(r1_universe):>8} {total_images - len(r1_universe):>6}"
+    )
     for row in round_rows:
-        print(f"  R{row['r_num']:<7} {row['new_in_round']:>8} {row['inter']:>7} {row['intra_sample']:>6} {row['total_per']:>11} {row['cumulative_shared']:>11} {row['cumulative_new']:>8} {row['remaining']:>6}")
+        print(
+            f"  R{row['r_num']:<7} {row['new_in_round']:>8} {row['inter']:>7} {row['intra_sample']:>6} {row['total_per']:>11} {row['cumulative_shared']:>11} {row['cumulative_new']:>8} {row['remaining']:>6}"
+        )
 
     print()
     print("  Per-round breakdown by annotator:")
@@ -138,9 +167,9 @@ def main():
     for ann in r2_annotators:
         print(f" {ann:>10}", end="")
     print()
-    print(f"  {'-'*8}", end="")
+    print(f"  {'-' * 8}", end="")
     for _ in r2_annotators:
-        print(f" {'-'*10}", end="")
+        print(f" {'-' * 10}", end="")
     print()
     for rd in r2_summary["rounds"]:
         r_num = rd["round"]
@@ -157,11 +186,11 @@ def main():
     print("  Intra-rater QC per annotator per round:")
     print(f"  {'Annotator':<10}", end="")
     for rd in r2_summary["rounds"]:
-        print(f" {'R'+str(rd['round']):>6}", end="")
+        print(f" {'R' + str(rd['round']):>6}", end="")
     print()
-    print(f"  {'-'*10}", end="")
+    print(f"  {'-' * 10}", end="")
     for _ in r2_summary["rounds"]:
-        print(f" {'-'*6}", end="")
+        print(f" {'-' * 6}", end="")
     print()
     for ann in r2_annotators:
         print(f"  {ann:<10}", end="")
@@ -175,16 +204,28 @@ def main():
     print("LIFETIME TOTALS")
     print("=" * 70)
 
-    print(f"\n  {'Annotator':<10} {'R1':>5} {'R2+ New':>8} {'R2+ Shared':>11} {'R2+ Intra':>10} {'R2+ Work':>9} {'Grand':>7}")
-    print(f"  {'-'*10} {'-'*5} {'-'*8} {'-'*11} {'-'*10} {'-'*9} {'-'*7}")
+    print(
+        f"\n  {'Annotator':<10} {'R1':>5} {'R2+ New':>8} {'R2+ Shared':>11} {'R2+ Intra':>10} {'R2+ Work':>9} {'Grand':>7}"
+    )
+    print(f"  {'-' * 10} {'-' * 5} {'-' * 8} {'-' * 11} {'-' * 10} {'-' * 9} {'-' * 7}")
     for ann in r2_annotators:
         r1_total = len(r1_per_ann.get(ann, set()))
-        r2_unique = sum(rd["initial_group_sizes"].get(ann, 0) for rd in r2_summary["rounds"])
-        r2_shared = sum(rd["shared_counts_per_group"].get(ann, 0) for rd in r2_summary["rounds"])
-        r2_intra = sum(rd.get("intra_rater_repeats", {}).get(ann, 0) for rd in r2_summary["rounds"])
-        r2_total = sum(rd["final_group_sizes"].get(ann, 0) for rd in r2_summary["rounds"])
+        r2_unique = sum(
+            rd["initial_group_sizes"].get(ann, 0) for rd in r2_summary["rounds"]
+        )
+        r2_shared = sum(
+            rd["shared_counts_per_group"].get(ann, 0) for rd in r2_summary["rounds"]
+        )
+        r2_intra = sum(
+            rd.get("intra_rater_repeats", {}).get(ann, 0) for rd in r2_summary["rounds"]
+        )
+        r2_total = sum(
+            rd["final_group_sizes"].get(ann, 0) for rd in r2_summary["rounds"]
+        )
         grand = r1_total + r2_total
-        print(f"  {ann:<10} {r1_total:>5} {r2_unique:>8} {r2_shared:>11} {r2_intra:>10} {r2_total:>9} {grand:>7}")
+        print(
+            f"  {ann:<10} {r1_total:>5} {r2_unique:>8} {r2_shared:>11} {r2_intra:>10} {r2_total:>9} {grand:>7}"
+        )
 
     final_cumul_new = len(all_seen)
     print(f"\n  Cumulative inter-rater shared: {cumulative_shared}")

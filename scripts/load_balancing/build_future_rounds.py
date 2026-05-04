@@ -18,6 +18,50 @@ from pathlib import Path
 from config_loader import load_config
 
 
+def get_unique_count(
+    overrides: dict[str, dict],
+    ann: str,
+    round_num: int,
+    default: int,
+) -> int:
+    """
+    Look up per-annotator, per-round unique image count.
+
+    Priority:
+    1. annotator_overrides[ann]['unique_r{N}'] (round-specific)
+    2. annotator_overrides[ann]['unique'] (all rounds)
+    3. default unique_per_person from config
+    """
+    ann_overrides = overrides.get(ann, {})
+
+    # Round-specific override
+    round_key = f"unique_r{round_num}"
+    if round_key in ann_overrides:
+        return int(ann_overrides[round_key])
+
+    # General override for this annotator
+    if "unique" in ann_overrides:
+        return int(ann_overrides["unique"])
+
+    return default
+
+
+def get_multiplier(
+    overrides: dict[str, dict],
+    ann: str,
+) -> float:
+    """
+    Get the global multiplier for an annotator.
+
+    If set, all counts (unique, shared, intra) are multiplied by this value.
+    Default: 1.0 (no change)
+    """
+    ann_overrides = overrides.get(ann, {})
+    return float(ann_overrides.get("multiplier", 1.0))
+
+    return default
+
+
 def load_round1_data(summary_path: Path, backup_summary_path: Path):
     data = json.loads(summary_path.read_text())
     r1_round = data["rounds"][0]
@@ -51,10 +95,14 @@ def generate_rounds(
     unique_per_person: int,
     intra_per_person: int,
     seed: int,
+    annotator_overrides: dict[str, dict] | None = None,
 ):
     rng = random.Random(seed)
     pool = sorted(future_pool)
     rng.shuffle(pool)
+
+    if annotator_overrides is None:
+        annotator_overrides = {}
 
     rounds = []
     pool_offset = 0
@@ -64,20 +112,57 @@ def generate_rounds(
     while True:
         remaining = len(pool) - pool_offset
 
+        # Get per-annotator counts for this round (applying multiplier)
+        unique_counts = {}
+        shared_counts = {}
+        intra_counts = {}
+        for ann in annotators:
+            mult = get_multiplier(annotator_overrides, ann)
+            base_unique = get_unique_count(annotator_overrides, ann, round_num, unique_per_person)
+            unique_counts[ann] = max(1, round(base_unique * mult))
+            shared_counts[ann] = max(1, round(round_shared_count * mult))
+            intra_counts[ann] = max(1, round(intra_per_person * mult))
+
+        max_unique = max(unique_counts.values()) if unique_counts else unique_per_person
+
         if remaining < round_shared_count + len(annotators):
             break
 
-        r_shared = min(round_shared_count, remaining)
-        r_unique = min(unique_per_person, (remaining - r_shared) // len(annotators))
+        # Shared pool is the same for everyone — capped annotators see a subset
+        shared_pool = pool[pool_offset : pool_offset + round_shared_count]
+        pool_offset += round_shared_count
 
-        if r_unique == 0:
+        # Calculate unique allocation: capped annotators get their cap, rest divided among uncapped
+        available_for_unique = remaining - round_shared_count
+        capped_total = 0
+        uncapped_count = 0
+        for ann in annotators:
+            if unique_counts[ann] < max_unique:
+                capped_total += unique_counts[ann]
+            else:
+                uncapped_count += 1
+
+        if uncapped_count > 0:
+            uncapped_available = available_for_unique - capped_total
+            uncapped_per_person = min(max_unique, uncapped_available // uncapped_count)
+        else:
+            uncapped_per_person = max_unique
+
+        if uncapped_per_person <= 0 and capped_total == 0:
             break
-
-        shared_images = pool[pool_offset : pool_offset + r_shared]
-        pool_offset += r_shared
 
         round_assignments = {}
         for ann in annotators:
+            # Each annotator gets a subset of the shared pool
+            r_shared = shared_counts[ann]
+            shared_chunk = shared_pool[:r_shared]
+
+            # Capped annotators get their cap, uncapped get uncapped_per_person
+            if unique_counts[ann] < max_unique:
+                r_unique = unique_counts[ann]
+            else:
+                r_unique = uncapped_per_person
+
             unique_chunk = pool[pool_offset : pool_offset + r_unique]
             pool_offset += r_unique
 
@@ -91,14 +176,15 @@ def generate_rounds(
                 repeat_source = []
                 repeat_role = None
 
-            if len(repeat_source) >= intra_per_person:
-                intra_chunk = rng.sample(repeat_source, intra_per_person)
+            r_intra = intra_counts[ann]
+            if len(repeat_source) >= r_intra:
+                intra_chunk = rng.sample(repeat_source, r_intra)
             else:
                 intra_chunk = list(repeat_source)
 
             intra_from_own_history = [img for img in intra_chunk if img in current_history[ann]]
 
-            records = [{"image_path": img, "role": "shared"} for img in shared_images]
+            records = [{"image_path": img, "role": "shared"} for img in shared_chunk]
             records += [{"image_path": img, "role": "unique"} for img in unique_chunk]
             if repeat_role:
                 records += [{"image_path": img, "role": repeat_role} for img in intra_chunk]
@@ -106,7 +192,7 @@ def generate_rounds(
             round_assignments[ann] = records
 
             current_history[ann].update(unique_chunk)
-            current_history[ann].update(shared_images)
+            current_history[ann].update(shared_chunk)
 
         rounds.append({
             "round_num": round_num,
@@ -117,18 +203,43 @@ def generate_rounds(
     leftover = pool[pool_offset:]
     if leftover and rounds:
         last = rounds[-1]
-        leftover_shared = leftover[:min(len(leftover), round_shared_count)]
-        leftover_unique = leftover[len(leftover_shared):]
 
-        chunks = [[] for _ in annotators]
-        for i, img in enumerate(leftover_unique):
-            chunks[i % len(annotators)].append(img)
+        # Get the unique counts for the last round (hard cap)
+        last_unique_caps = {}
+        for ann in annotators:
+            last_unique_caps[ann] = get_unique_count(
+                annotator_overrides, ann, last["round_num"], unique_per_person
+            )
 
+        # Count how many unique each annotator already has in this round
+        current_unique_counts = {}
+        for ann in annotators:
+            current_unique_counts[ann] = len([
+                r for r in last["assignments"][ann] if r["role"] == "unique"
+            ])
+
+        # Distribute leftover only to annotators who haven't hit their cap
+        remaining_annotators = []
         for i, ann in enumerate(annotators):
-            last["assignments"][ann] += [{"image_path": img, "role": "shared"} for img in leftover_shared]
-            last["assignments"][ann] += [{"image_path": img, "role": "unique"} for img in chunks[i]]
-            current_history[ann].update(leftover_shared)
-            current_history[ann].update(chunks[i])
+            room = last_unique_caps[ann] - current_unique_counts[ann]
+            if room > 0:
+                remaining_annotators.append((i, ann, room))
+
+        if remaining_annotators and leftover:
+            # Distribute proportionally to room available
+            total_room = sum(r[2] for r in remaining_annotators)
+            allocated = 0
+            for idx, (i, ann, room) in enumerate(remaining_annotators):
+                if idx == len(remaining_annotators) - 1:
+                    chunk_size = len(leftover) - allocated
+                else:
+                    chunk_size = round(len(leftover) * room / total_room)
+                # Cap at available room
+                chunk_size = min(chunk_size, room)
+                chunk = leftover[allocated:allocated + chunk_size]
+                last["assignments"][ann] += [{"image_path": img, "role": "unique"} for img in chunk]
+                current_history[ann].update(chunk)
+                allocated += chunk_size
 
     return rounds
 
@@ -247,6 +358,7 @@ def main():
     unique_per_person = config.get("unique_per_person", 65)
     intra_per_person = config.get("intra_per_person", 10)
     prefix = config.get("prefix", "fluoro-r2")
+    annotator_overrides = config.get("annotator_overrides", {})
 
     backup_summary_path = Path(config.get("backup_summary", "data/remote_backups/fluoro-r1_summary.json"))
     r1_universe, annotator_history, r1_shared, all_images = load_round1_data(round1_summary_path, backup_summary_path)
@@ -264,10 +376,13 @@ def main():
     rounds = generate_rounds(
         future_pool, r1_shared, annotator_history, annotators,
         round_shared_count, unique_per_person, intra_per_person, seed,
+        annotator_overrides=annotator_overrides,
     )
 
     print(f"\nRounds generated: {len(rounds)}")
-    print(f"Per annotator per round: {unique_per_person} unique + {round_shared_count} shared + {intra_per_person} intra = {unique_per_person + round_shared_count + intra_per_person}")
+    print(f"Default per annotator per round: {unique_per_person} unique + {round_shared_count} shared + {intra_per_person} intra")
+    if annotator_overrides:
+        print(f"Annotator overrides: {', '.join(annotator_overrides.keys())}")
     for r in rounds:
         sizes = {ann: len(imgs) for ann, imgs in r["assignments"].items()}
         print(f"  Round {r['round_num']}: {sizes}")
