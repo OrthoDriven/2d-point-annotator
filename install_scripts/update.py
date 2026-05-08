@@ -7,7 +7,9 @@ Runs outside the app directory to safely replace it.
 
 import argparse
 import contextlib
+import hashlib
 import json
+import logging
 import os
 import platform
 import shutil
@@ -180,6 +182,36 @@ def find_project_root(extract_dir):
     return None
 
 
+def _safe_extractall(zip_path: Path, dest_dir: Path) -> None:
+    """Extract zip file with Zip Slip path-traversal protection."""
+    dest_resolved = dest_dir.resolve()
+    with zipfile.ZipFile(zip_path) as zf:
+        for member in zf.infolist():
+            member_path = (dest_dir / member.filename).resolve()
+            if not member_path.is_relative_to(dest_resolved):
+                print(f'[warn] Skipping path traversal entry: {member.filename}')
+                continue
+            zf.extract(member, dest_dir)
+
+
+def _verify_zip_integrity(zip_path: Path, expected_sha256: Optional[str] = None) -> bool:
+    """Verify downloaded file is a valid zip; optionally check SHA-256.
+
+    TODO: Full hash verification requires the release pipeline to publish
+    SHA-256 checksums (e.g. in a release asset or API response field).
+    Once available, pass expected_sha256 from the release metadata.
+    """
+    if not zipfile.is_zipfile(zip_path):
+        print(f'[error] Downloaded file is not a valid zip: {zip_path}')
+        return False
+    if expected_sha256 is not None:
+        sha = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+        if sha != expected_sha256:
+            print(f'[error] SHA-256 mismatch: expected {expected_sha256}, got {sha}')
+            return False
+    return True
+
+
 # ============================================================================
 # Atomic Swap
 # ============================================================================
@@ -315,8 +347,11 @@ def run_nightly_update(config, state, state_path):
                 timeout=timeout * 6,
             )
 
-            with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                zip_ref.extractall(temp_path)
+            if not _verify_zip_integrity(zip_path):
+                print('[error] Nightly zip failed integrity check')
+                return
+
+            _safe_extractall(zip_path, temp_path)
 
             project_root = find_project_root(temp_path)
             if not project_root:
@@ -405,8 +440,12 @@ def run_update():
                 timeout=int(config["REQUEST_TIMEOUT_SEC"]) * 6,
             )
 
-            with zipfile.ZipFile(zip_path, "r") as zip_ref:
-                zip_ref.extractall(temp_path)
+            # TODO: pass expected SHA-256 from release metadata when available
+            if not _verify_zip_integrity(zip_path):
+                print('[error] Release zip failed integrity check')
+                return
+
+            _safe_extractall(zip_path, temp_path)
 
             project_root = find_project_root(temp_path)
             if not project_root:

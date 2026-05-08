@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -11,6 +12,8 @@ from msgraph.generated.drives.item.items.item.children.children_request_builder 
 # requests per app; 8 keeps us safely under while still being much faster than
 # sequential.
 _MAX_CONCURRENT_DOWNLOADS = 8
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadError(Exception):
@@ -72,13 +75,18 @@ async def _download_one(
         file_count[0] += 1
         if on_progress:
             on_progress(f"Downloading file {file_count[0]}: {item.name}\u2026")
-        content = await (
-            client.drives.by_drive_id(drive_id)
-            .items.by_drive_item_id(item.id)
-            .content.get()
-        )
+        try:
+            resp = await asyncio.wait_for(
+                client.drives.by_drive_id(drive_id)
+                .items.by_drive_item_id(item.id)
+                .content.get(),
+                timeout=120,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Download timed out for %s", item.name)
+            return
         dest_dir.mkdir(parents=True, exist_ok=True)
-        (dest_dir / item.name).write_bytes(content)
+        (dest_dir / item.name).write_bytes(resp)
 
 
 async def _download_folder_recursive(
