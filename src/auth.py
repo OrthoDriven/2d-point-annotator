@@ -131,11 +131,14 @@ def _show_auth_dialog(uri: str, code: str, done_event: Optional[threading.Event]
     )
     title_label.pack(pady=(0, 15))
 
+    instructions_font = font.nametofont("TkDefaultFont").copy()
+    instructions_font.configure(size=28)
+
     # Instructions
     instructions = ttk.Label(
         frame,
         text="A browser window has opened.\nEnter this code to sign in:",
-        font=font.nametofont("TkDefaultFont").copy().configure(size=28),
+        font=instructions_font,
         justify="center",
     )
     instructions.pack(pady=(0, 20))
@@ -144,10 +147,13 @@ def _show_auth_dialog(uri: str, code: str, done_event: Optional[threading.Event]
     code_frame = ttk.Frame(frame)
     code_frame.pack(pady=10)
 
+    code_font = font.nametofont("TkDefaultFont").copy()
+    code_font.configure(size=36)
+
     code_label = ttk.Label(
         code_frame,
         text=code,
-        font=font.nametofont("TkDefaultFont").copy().configure(size=36),
+        font=code_font,
         foreground="#0066cc",
     )
     code_label.pack(padx=20, pady=15)
