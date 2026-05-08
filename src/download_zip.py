@@ -1,9 +1,12 @@
+import logging
 import zipfile
 from io import BytesIO
 from pathlib import Path
 from typing import Callable, Optional
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadError(Exception):
@@ -53,15 +56,25 @@ def download_zip(
                 tops = {m.split("/")[0] for m in members}
                 if len(tops) == 1:
                     prefix = tops.pop() + "/"
+            dest_resolved = dest_dir.resolve()
             for member in members:
                 stripped = member[len(prefix) :] if prefix else member
                 if not stripped:
                     continue
                 target = dest_dir / stripped
+                # Zip Slip guard: ensure resolved path stays inside dest_dir
+                if not target.resolve().is_relative_to(dest_resolved):
+                    logger.warning("Skipping path traversal entry: %s", member)
+                    continue
                 if member.endswith("/"):
                     target.mkdir(parents=True, exist_ok=True)
                 else:
                     if skip_existing and target.exists():
+                        continue
+                    # Also guard parent directory creation
+                    parent_resolved = target.parent.resolve()
+                    if not parent_resolved.is_relative_to(dest_resolved):
+                        logger.warning("Skipping traversal in parent of: %s", member)
                         continue
                     target.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(member) as src, open(target, "wb") as dst:
