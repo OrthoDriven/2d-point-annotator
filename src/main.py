@@ -10,6 +10,7 @@ import json
 import logging
 import sqlite3
 import threading
+import time
 import tkinter as tk
 import tkinter.font as tkfont
 from datetime import datetime
@@ -125,6 +126,8 @@ class AnnotationGUI(tk.Tk):
         self.window_close_flag = False
         self._onedrive_backup_timer: str | None = None
         self._onedrive_upload_in_flight: bool = False
+        self._upload_flag_lock = threading.Lock()
+        self._pending_autosave_id: str | None = None
         if PLATFORM == "Linux":
             self._configure_linux_fonts()
 
@@ -456,17 +459,23 @@ class AnnotationGUI(tk.Tk):
         record = self._get_current_image_record()
         if record is None:
             return
+        old_view = record.get("view")
         record["view"] = view_name
         self.current_view_var.set(view_name)
-        self._prune_annotations_for_current_view()
+        if not self._prune_annotations_for_current_view():
+            # User cancelled — revert view
+            record["view"] = old_view
+            self.current_view_var.set(old_view or "")
+            return
         self._rebuild_landmark_panel_for_view()
         self._load_note_for_selected_landmark()
         self.dirty = True
         self._refresh_image_listbox()
 
-    def _prune_annotations_for_current_view(self) -> None:
+    def _prune_annotations_for_current_view(self) -> bool:
+        """Remove annotations not in the current view. Returns False if user cancelled."""
         if self.current_image_path is None:
-            return
+            return True
 
         allowed = self._get_allowed_landmarks_for_current_view()
         key = self._path_key(self.current_image_path)
@@ -475,10 +484,20 @@ class AnnotationGUI(tk.Tk):
         radii = getattr(self, "hover_radii", {}).get(key, {})
 
         to_delete = [lm for lm in pts if lm not in allowed]
+        if not to_delete:
+            return True
+        names = ", ".join(sorted(to_delete))
+        if not messagebox.askyesno(
+            "Change View",
+            f"Switching view will remove {len(to_delete)} annotation(s) "
+            f"not in the new view:\n{names}\n\nContinue?",
+        ):
+            return False
         for lm in to_delete:
             del pts[lm]
             meta.pop(lm, None)
             radii.pop(lm, None)
+        return True
 
     def _rebuild_landmark_panel_for_view(self) -> None:
         allowed = self._get_allowed_landmarks_for_current_view()
@@ -641,25 +660,32 @@ class AnnotationGUI(tk.Tk):
             tmp_path = self.json_path.with_suffix(self.json_path.suffix + ".tmp")
             with tmp_path.open("w", encoding="utf-8") as handle:
                 json.dump(save_data, handle, indent=2)
+
+            # Capture original content BEFORE atomic replace for backup
+            original_content = None
+            if (
+                self._original_json_hash is not None
+                and not self._original_json_backed_up
+                and self.json_path is not None
+                and self.json_path.exists()
+            ):
+                import hashlib
+
+                new_hash = hashlib.sha256(
+                    json.dumps(save_data, indent=2, sort_keys=False).encode("utf-8")
+                ).hexdigest()
+                if new_hash != self._original_json_hash:
+                    original_content = self.json_path.read_bytes()
+
             tmp_path.replace(self.json_path)
 
             # Update in-memory metadata after successful save
             self._json_metadata = metadata
 
-            # Backup original JSON to OneDrive before first modification
-            if (
-                self._original_json_hash is not None
-                and not self._original_json_backed_up
-                and self.json_path is not None
-            ):
-                import hashlib
-
-                # Check if content has changed from original
-                new_content = json.dumps(save_data, indent=2, sort_keys=False)
-                new_hash = hashlib.sha256(new_content.encode("utf-8")).hexdigest()
-                if new_hash != self._original_json_hash:
-                    self._backup_original_json()
-                    self._original_json_backed_up = True
+            # Backup original JSON to OneDrive (using captured content)
+            if original_content is not None:
+                self._backup_original_json_content(original_content)
+                self._original_json_backed_up = True
 
             self._refresh_saved_snapshot_for_current_image()
             self.dirty = False
@@ -1054,7 +1080,7 @@ class AnnotationGUI(tk.Tk):
         try:
             with path.open() as f:
                 return json.load(f).get("metadata")["version"]
-        except:
+        except Exception:
             return "N/A"
 
     # -------------------------------------------------------------------------
@@ -3426,24 +3452,32 @@ class AnnotationGUI(tk.Tk):
 
     # Handles window close, offering to save unsaved annotations.
     def _on_close(self) -> None:
+        # Flush any pending debounced autosave before the save prompt
+        # so that autosave-on users aren't prompted about stale dirty state.
+        if self._pending_autosave_id is not None:
+            self.after_cancel(self._pending_autosave_id)
+            self._pending_autosave_id = None
+            self._execute_autosave()
         if not self._maybe_save_before_destructive_action("exit"):
             return
         self.window_close_flag = True
         if self._onedrive_backup_timer is not None:
             self.after_cancel(self._onedrive_backup_timer)
             self._onedrive_backup_timer = None
-        if self.json_path is not None and not self._onedrive_upload_in_flight:
-            # Non-daemon thread so Python waits for it during shutdown
-            # instead of killing it mid-write (which crashes stdout).
+        if self.json_path is not None:
+            if self._is_upload_in_flight():
+                # Wait for in-flight upload to complete (up to 3 seconds)
+                for _ in range(30):
+                    if not self._is_upload_in_flight():
+                        break
+                    time.sleep(0.1)
+            # Always do a final upload to ensure latest annotations are backed up
             t = threading.Thread(
                 target=self.onedrive_backup.upload_backup_sync,
                 args=(self.json_path,),
                 daemon=False,
             )
             t.start()
-            # Give the upload a moment to finish before tearing down Tk.
-            # If it takes longer, Python shutdown will still wait for the
-            # non-daemon thread — but Tk will already be gone.
             t.join(timeout=2.0)
         if self.db_path is not None:
             self._export_db_to_csv()
@@ -3922,12 +3956,20 @@ class AnnotationGUI(tk.Tk):
 
         autosave_var = getattr(self, "autosave_var", None)
         if autosave_var is not None and bool(autosave_var.get()):
-            ok = self._save_json_file(show_success=False)
-            if ok:
-                self.dirty = False
-            return ok
+            # Cancel any previously scheduled autosave to debounce
+            if self._pending_autosave_id is not None:
+                self.after_cancel(self._pending_autosave_id)
+            self._pending_autosave_id = self.after(100, self._execute_autosave)
+            return True
 
         return True
+
+    def _execute_autosave(self) -> None:
+        """Perform the actual autosave after debounce delay."""
+        self._pending_autosave_id = None
+        ok = self._save_json_file(show_success=False)
+        if ok:
+            self.dirty = False
 
     def _auto_save_to_db(self) -> bool:
         """
@@ -4487,6 +4529,62 @@ class AnnotationGUI(tk.Tk):
         thread = threading.Thread(target=_init, daemon=True)
         thread.start()
 
+    def _backup_original_json_content(self, content: bytes) -> None:
+        """
+        Backup original JSON content to OneDrive.
+
+        Takes pre-captured content bytes instead of reading from file,
+        ensuring the pre-edit state is preserved even after atomic replace.
+
+        Uploads to: pelvic-2d-points-backup/original_jsons/{username}/{filename}_{timestamp}.json
+        """
+        if self.json_path is None:
+            return
+
+        try:
+            from auth import get_safe_username
+
+            username = get_safe_username()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            stem = self.json_path.stem
+            suffix = self.json_path.suffix
+            backup_name = f"{stem}_{timestamp}{suffix}"
+
+            # Upload in background thread
+            def _do_backup():
+                try:
+                    client = self.onedrive_backup._create_fresh_client()
+                    if not client:
+                        logger.warning("No Graph client available for original JSON backup")
+                        return
+
+                    import asyncio
+
+                    loop = asyncio.SelectorEventLoop()
+
+                    async def upload():
+                        remote_folder = f"pelvic-2d-points-backup/original_jsons/{username}"
+                        drive_item_path = f"root:/{remote_folder}/{backup_name}:"
+                        await (
+                            client.drives.by_drive_id(SHAREPOINT_DRIVE_ID)
+                            .items.by_drive_item_id(drive_item_path)
+                            .content.put(content)
+                        )
+                        logger.info(f"Backed up original JSON: {backup_name}")
+
+                    try:
+                        loop.run_until_complete(upload())
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    logger.warning(f"Failed to backup original JSON: {e}")
+
+            thread = threading.Thread(target=_do_backup, daemon=True)
+            thread.start()
+
+        except Exception as e:
+            logger.warning(f"Failed to initiate original JSON backup: {e}")
+
     def _backup_original_json(self) -> None:
         """
         Backup the original JSON to OneDrive before first modification.
@@ -4545,6 +4643,16 @@ class AnnotationGUI(tk.Tk):
         except Exception as e:
             logger.warning(f"Failed to initiate original JSON backup: {e}")
 
+    def _set_upload_in_flight(self, value: bool) -> None:
+        """Thread-safe setter for the OneDrive upload in-flight flag."""
+        with self._upload_flag_lock:
+            self._onedrive_upload_in_flight = value
+
+    def _is_upload_in_flight(self) -> bool:
+        """Thread-safe getter for the OneDrive upload in-flight flag."""
+        with self._upload_flag_lock:
+            return self._onedrive_upload_in_flight
+
     def _schedule_onedrive_backup(self, delay_ms: int = 5000) -> None:
         if self._onedrive_backup_timer is not None:
             self.after_cancel(self._onedrive_backup_timer)
@@ -4552,9 +4660,9 @@ class AnnotationGUI(tk.Tk):
 
     def _fire_onedrive_backup(self) -> None:
         self._onedrive_backup_timer = None
-        if self.json_path is None or self._onedrive_upload_in_flight:
+        if self.json_path is None or self._is_upload_in_flight():
             return
-        self._onedrive_upload_in_flight = True
+        self._set_upload_in_flight(True)
         self._backup_to_onedrive(self.json_path)
 
     def _backup_to_onedrive(self, *paths: Path) -> None:
@@ -4563,7 +4671,7 @@ class AnnotationGUI(tk.Tk):
             return
 
         def _on_done(success, total):
-            self._onedrive_upload_in_flight = False
+            self._set_upload_in_flight(False)
             logger.info(f"OneDrive backup: {success}/{total} files uploaded")
 
         self.onedrive_backup.backup_multiple(
@@ -5623,6 +5731,10 @@ class AnnotationGUI(tk.Tk):
                     return
                 self._set_line_points(lm, [pts[0], (x, y)])
                 self._clear_line_preview()
+            elif len(pts) == 2:
+                # Two points already placed — require explicit deletion to re-place
+                self._set_status(f"{lm}: already has 2 endpoints. Uncheck to clear.")
+                return
             else:
                 if not self._check_left_right_order_for_landmark(lm, x, y):
                     return
