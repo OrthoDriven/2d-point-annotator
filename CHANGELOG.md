@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.6.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.6.0...v2.6.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* **auth,download:** font dialog sizing and download timeout ([588beb7](https://github.com/OrthoDriven/2d-point-annotator/commit/588beb7d12bf73422b53bca3fa96a5ea790245b3))
+* **auth:** thread-safe auth dialog, atomic writes, upload retry, folder exception handling ([23fe03b](https://github.com/OrthoDriven/2d-point-annotator/commit/23fe03b563b8d71a5edc5ec769a7906ecb508111))
+* **data,reliability,perf:** data integrity, thread safety, and autosave debounce ([fd73d04](https://github.com/OrthoDriven/2d-point-annotator/commit/fd73d046b4c00eee0a0a1c4167c05222d9e264fa))
+* **security:** zip slip protection and download integrity verification ([70ca3ea](https://github.com/OrthoDriven/2d-point-annotator/commit/70ca3eacebc52b0c0f965f4ded5f952643ec4e44))
+
 ## [2.6.0](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.5.2...v2.6.0) (2026-05-04)
 
 
