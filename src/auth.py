@@ -16,8 +16,10 @@ from __future__ import annotations
 import asyncio
 import getpass
 import logging
+import os
 import socket
 import threading
+import time
 import tkinter as tk
 
 # Prioritize IPv4 to avoid 5s hangs on broken IPv6 routes (common on some networks)
@@ -72,8 +74,20 @@ _credential_lock = threading.Lock()
 _auth_dialog: Optional[tk.Toplevel] = None
 
 
-def _show_auth_dialog(uri: str, code: str) -> None:
-    """Show a Tkinter dialog with the authentication code."""
+def _show_auth_dialog(uri: str, code: str, done_event: Optional[threading.Event] = None) -> None:
+    """Show a Tkinter dialog with the authentication code.
+
+    Parameters
+    ----------
+    uri : str
+        The device code login URI.
+    code : str
+        The device code to display.
+    done_event : threading.Event, optional
+        If provided, ``set()`` is called when the dialog is closed or when
+        the user dismisses it.  Used by ``_threadsafe_prompt_callback`` to
+        synchronise with the calling thread.
+    """
     global _auth_dialog
 
     # Try to get existing Tk root, or create temporary one
@@ -170,6 +184,14 @@ def _show_auth_dialog(uri: str, code: str) -> None:
     )
     note_label.pack(pady=(5, 0))
 
+    # When the dialog is destroyed (e.g. after login completes), signal
+    # the waiting thread so it unblocks.
+    if done_event is not None:
+        def _on_dialog_destroy(_event=None):
+            done_event.set()
+
+        dialog.bind("<Destroy>", _on_dialog_destroy)
+
     # Store reference globally to prevent garbage collection
     _auth_dialog = dialog
 
@@ -188,6 +210,24 @@ def _close_auth_dialog() -> None:
         _auth_dialog = None
 
 
+def _console_prompt_callback(uri: str, code: str, expires_on) -> None:
+    """Fallback prompt callback that uses console output.
+
+    Used when no Tk root is available (headless / no display).
+    """
+    if uri:
+        try:
+            webbrowser.open(uri, new=2)
+        except Exception:
+            pass
+
+    print(f"\n{'=' * 60}")
+    print("ONE-TIME LOGIN")
+    print(f"Open: {uri}")
+    print(f"\nENTER THIS CODE:\n\n    {code}\n")
+    print("=" * 60)
+
+
 def _prompt_callback(uri: str, code: str, expires_on) -> None:
     """Display device code authentication prompt via Tkinter dialog."""
     # Open browser
@@ -203,11 +243,56 @@ def _prompt_callback(uri: str, code: str, expires_on) -> None:
     except Exception as e:
         # Fallback to console if Tkinter fails
         logger.warning(f"Failed to show auth dialog: {e}")
-        print(f"\n{'=' * 60}")
-        print("ONE-TIME LOGIN")
-        print(f"Open: {uri}")
-        print(f"\nENTER THIS CODE:\n\n    {code}\n")
-        print("=" * 60)
+        _console_prompt_callback(uri, code, expires_on)
+
+
+def _threadsafe_prompt_callback(
+    tk_root: tk.Misc, original_callback: Callable
+) -> Callable:
+    """Factory that returns a prompt callback safe to call from any thread.
+
+    The returned callback marshals dialog creation to the main Tk thread
+    via ``tk_root.after(0, ...)`` and blocks the calling (background) thread
+    until the dialog is closed.  If the main-thread dispatch fails, it falls
+    back to ``original_callback`` directly.
+
+    Parameters
+    ----------
+    tk_root : tk.Misc
+        The Tk root window (must be running a mainloop on the main thread).
+    original_callback : callable
+        The original ``prompt_callback(uri, code, expires_on)`` to fall
+        back to if marshalling fails.
+
+    Returns
+    -------
+    callable
+        A wrapper with the same ``(uri, code, expires_on)`` signature.
+    """
+
+    def _wrapper(uri: str, code: str, expires_on) -> None:
+        done_event = threading.Event()
+
+        try:
+            # Marshal the dialog creation to the main thread
+            tk_root.after(0, lambda: _show_auth_dialog(uri, code, done_event=done_event))
+        except Exception as e:
+            logger.warning("Failed to marshal auth dialog to main thread: %s", e)
+            # Fall back to original callback (console or direct)
+            original_callback(uri, code, expires_on)
+            return
+
+        # Open browser from this thread (safe — no Tk interaction)
+        if uri:
+            try:
+                webbrowser.open(uri, new=2)
+            except Exception:
+                pass
+
+        # Block until the dialog signals completion
+        done_event.wait()
+
+    return _wrapper
 
 
 def get_safe_username() -> str:
@@ -277,7 +362,9 @@ def _get_or_create_credential(
         return _shared_credential
 
 
-def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
+def get_graph_client(
+    prompt_callback_fn=None, tk_root: Optional[tk.Misc] = None
+) -> GraphServiceClient:
     """
     Create an authenticated Graph client, triggering device-code auth if needed.
 
@@ -300,7 +387,16 @@ def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
     Exception
         If authentication fails completely.
     """
-    credential = _get_or_create_credential(prompt_callback_fn)
+    # Resolve the effective prompt callback — prefer a thread-safe wrapper
+    # when a Tk root is available so the device-code dialog is always created
+    # on the main thread.
+    effective_callback = prompt_callback_fn
+    if effective_callback is None:
+        effective_callback = _prompt_callback
+    if tk_root is not None:
+        effective_callback = _threadsafe_prompt_callback(tk_root, effective_callback)
+
+    credential = _get_or_create_credential(effective_callback)
 
     # Always try to get a token to verify/refresh credentials
     try:
@@ -312,8 +408,7 @@ def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
         if not AUTH_RECORD_PATH.exists():
             logger.info("No auth record existed, creating one...")
             record = credential.authenticate(scopes=SCOPES)
-            AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
-            AUTH_RECORD_PATH.write_text(record.serialize())
+            _save_auth_record(record)
             _close_auth_dialog()
             logger.info("Auth record saved")
 
@@ -321,14 +416,32 @@ def get_graph_client(prompt_callback_fn=None) -> GraphServiceClient:
         logger.warning("Token acquisition failed: %s", token_error)
         logger.info("Re-authenticating with device code...")
         record = credential.authenticate(scopes=SCOPES)
-        AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
-        AUTH_RECORD_PATH.write_text(record.serialize())
+        _save_auth_record(record)
         _close_auth_dialog()
         logger.info("Re-authentication successful, saved new auth record")
 
     client = GraphServiceClient(credentials=credential, scopes=SCOPES)
     logger.info("Client created successfully")
     return client
+
+
+def _save_auth_record(record: AuthenticationRecord) -> None:
+    """Atomically persist an AuthenticationRecord with restrictive permissions.
+
+    Writes to a temporary file first, then atomically renames it into place
+    to avoid corruption from partial writes.  Sets file permissions to 0o600
+    (owner read/write only) for security.
+    """
+    AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = AUTH_RECORD_PATH.with_suffix(".tmp")
+    tmp_path.write_text(record.serialize())
+    # Atomic rename — on POSIX this is guaranteed by the OS
+    tmp_path.replace(AUTH_RECORD_PATH)
+    # Restrict permissions: owner read/write only
+    try:
+        os.chmod(str(AUTH_RECORD_PATH), 0o600)
+    except OSError as e:
+        logger.warning("Failed to set auth record permissions: %s", e)
 
 
 class OneDriveBackup:
@@ -427,9 +540,12 @@ class OneDriveBackup:
                     )
                     logger.info(f"Created folder: {current_path}")
                 except Exception as e:
-                    # Might already exist due to race condition, continue
-                    if "nameAlreadyExists" not in str(e):
-                        logger.warning(f"Failed to create folder {current_path}: {e}")
+                    # Only ignore the benign "already exists" race condition;
+                    # re-raise everything else so callers see the real error.
+                    if "nameAlreadyExists" in str(e):
+                        logger.debug("Folder already exists: %s", current_path)
+                    else:
+                        raise
 
         return True
 
@@ -532,6 +648,30 @@ class OneDriveBackup:
             logger.error("Failed to create fresh client: %s", e)
             return None
 
+    # Maximum number of upload attempts (including the first).
+    _UPLOAD_MAX_RETRIES = 3
+    # Delays between retries (index 0 = after first failure, etc.).
+    _UPLOAD_RETRY_DELAYS = (1.0, 2.0, 4.0)
+
+    @staticmethod
+    def _is_transient_error(exc: Exception) -> bool:
+        """Return True if *exc* represents a transient / retryable failure.
+
+        Transient errors include network timeouts, connection resets, and
+        HTTP 429 / 5xx responses.  Client errors (4xx except 429) are
+        considered permanent.
+        """
+        exc_str = str(exc).lower()
+        # Network-level errors
+        if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+            return True
+        # asyncio.TimeoutError is a subclass of TimeoutError, already covered
+        # HTTP status hints in exception messages from the Graph SDK
+        for code in ("429", "500", "502", "503", "504"):
+            if code in exc_str:
+                return True
+        return False
+
     def upload_backup_sync(self, file_path: str | Path, timeout: float = 30.0) -> bool:
         """
         Upload a file to OneDrive backup synchronously with timeout.
@@ -539,9 +679,13 @@ class OneDriveBackup:
         Use this for critical saves (e.g., on window close) where
         you need to ensure the upload completes before continuing.
 
+        Transient failures (timeouts, network errors, HTTP 429/5xx) are
+        retried up to ``_UPLOAD_MAX_RETRIES`` times with exponential
+        backoff.  Permanent client errors (4xx except 429) fail immediately.
+
         Args:
             file_path: Path to file to upload
-            timeout: Maximum seconds to wait for upload (default 30s)
+            timeout: Maximum seconds to wait for each upload attempt
 
         Returns True on success, False on failure or timeout.
         """
@@ -552,54 +696,91 @@ class OneDriveBackup:
 
         logger.info("Starting sync upload: %s", path.name)
 
-        try:
-            client = self._create_fresh_client()
-            if not client:
-                logger.warning("No client available, skipping upload")
-                return False
+        last_exc: Optional[Exception] = None
 
-            loop = asyncio.SelectorEventLoop()
-
-            async def do_upload():
-                logger.info("Reading file: %s", path.name)
-                with open(path, "rb") as f:
-                    file_content = f.read()
-                logger.info("File size: %d bytes", len(file_content))
-
-                username = get_safe_username()
-                date_folder = get_date_folder()
-                remote_folder = f"{BASE_BACKUP_FOLDER}/{username}/{date_folder}"
-                drive_item_path = f"root:/{remote_folder}/{path.name}:"
-
-                logger.info("Uploading to: %s", drive_item_path)
-
-                uploaded_file = await (
-                    client.drives.by_drive_id(SHAREPOINT_DRIVE_ID)
-                    .items.by_drive_item_id(drive_item_path)
-                    .content.put(file_content)
-                )
-
+        for attempt in range(self._UPLOAD_MAX_RETRIES):
+            if attempt > 0:
+                delay = self._UPLOAD_RETRY_DELAYS[attempt - 1]
                 logger.info(
-                    "Upload complete: %s",
-                    uploaded_file.name if uploaded_file else "unknown",
+                    "Retry %d/%d for %s after %.1fs backoff...",
+                    attempt + 1,
+                    self._UPLOAD_MAX_RETRIES,
+                    path.name,
+                    delay,
                 )
-                return uploaded_file is not None
+                time.sleep(delay)
 
-            logger.info("Running upload with %.1fs timeout...", timeout)
-            coro = asyncio.wait_for(do_upload(), timeout=timeout)
             try:
-                success = loop.run_until_complete(coro)
-            finally:
-                loop.close()
-            logger.info("Sync upload result: %s", "success" if success else "failed")
-            return success
+                client = self._create_fresh_client()
+                if not client:
+                    logger.warning("No client available, skipping upload")
+                    return False
 
-        except asyncio.TimeoutError:
-            logger.warning("Upload timed out after %.1fs for %s", timeout, path)
-            return False
-        except Exception as e:
-            logger.error("Sync backup error: %s", e, exc_info=True)
-            return False
+                loop = asyncio.SelectorEventLoop()
+
+                async def do_upload():
+                    logger.info("Reading file: %s", path.name)
+                    with open(path, "rb") as f:
+                        file_content = f.read()
+                    logger.info("File size: %d bytes", len(file_content))
+
+                    username = get_safe_username()
+                    date_folder = get_date_folder()
+                    remote_folder = f"{BASE_BACKUP_FOLDER}/{username}/{date_folder}"
+                    drive_item_path = f"root:/{remote_folder}/{path.name}:"
+
+                    logger.info("Uploading to: %s", drive_item_path)
+
+                    uploaded_file = await (
+                        client.drives.by_drive_id(SHAREPOINT_DRIVE_ID)
+                        .items.by_drive_item_id(drive_item_path)
+                        .content.put(file_content)
+                    )
+
+                    logger.info(
+                        "Upload complete: %s",
+                        uploaded_file.name if uploaded_file else "unknown",
+                    )
+                    return uploaded_file is not None
+
+                logger.info("Running upload with %.1fs timeout...", timeout)
+                coro = asyncio.wait_for(do_upload(), timeout=timeout)
+                try:
+                    success = loop.run_until_complete(coro)
+                finally:
+                    loop.close()
+                logger.info(
+                    "Sync upload result: %s", "success" if success else "failed"
+                )
+                return success
+
+            except asyncio.TimeoutError as e:
+                last_exc = e
+                logger.warning(
+                    "Upload attempt %d timed out after %.1fs for %s",
+                    attempt + 1, timeout, path,
+                )
+                # Timeout is transient — retry if we have attempts left
+                continue
+            except Exception as e:
+                last_exc = e
+                if self._is_transient_error(e):
+                    logger.warning(
+                        "Transient error on upload attempt %d for %s: %s",
+                        attempt + 1, path, e,
+                    )
+                    continue
+                else:
+                    # Permanent error — no point retrying
+                    logger.error("Permanent sync backup error: %s", e, exc_info=True)
+                    return False
+
+        # All retries exhausted
+        logger.error(
+            "Upload failed after %d attempts for %s: %s",
+            self._UPLOAD_MAX_RETRIES, path, last_exc,
+        )
+        return False
 
     def backup_multiple(
         self,
