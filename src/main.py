@@ -113,7 +113,6 @@ class AnnotationGUI(tk.Tk):
 
     def __init__(self) -> None:
         super().__init__()
-        self.tk.call("tk", "scaling", 1.25)
 
         # Force Tk named fonts (for classic tk widgets)
         import tkinter.font as tkfont
@@ -186,8 +185,12 @@ class AnnotationGUI(tk.Tk):
         self.json_dir: Optional[Path] = None
         self.json_data: Dict = {"landmarks": [], "views": {}, "images": []}
         self._json_metadata: Dict = {}  # Metadata tracking for traceability
-        self._original_json_hash: Optional[str] = None  # SHA-256 of loaded JSON for backup dedup
-        self._original_json_backed_up: bool = False  # Track if original has been backed up
+        self._original_json_hash: Optional[str] = (
+            None  # SHA-256 of loaded JSON for backup dedup
+        )
+        self._original_json_backed_up: bool = (
+            False  # Track if original has been backed up
+        )
         self.allowed_views: Dict[str, List[str]] = {}
         self.landmark_meta: Dict[str, Dict[str, Dict[str, Union[bool, str]]]] = {}
         self.hover_radii: Dict[str, Dict[str, int]] = {}
@@ -879,7 +882,10 @@ class AnnotationGUI(tk.Tk):
 
         # Compute hash of original file for backup dedup
         import hashlib
-        self._original_json_hash = hashlib.sha256(raw_content.encode("utf-8")).hexdigest()
+
+        self._original_json_hash = hashlib.sha256(
+            raw_content.encode("utf-8")
+        ).hexdigest()
         self._original_json_backed_up = False
 
         landmarks = data.get("landmarks")
@@ -929,6 +935,7 @@ class AnnotationGUI(tk.Tk):
         # Auto-merge: check if repo has a fresher version of this JSON
         try:
             from auto_merge import auto_merge_on_load
+
             data = auto_merge_on_load(json_path)
             self._json_metadata = data.get("metadata", {})
             landmarks = data.get("landmarks", landmarks)
@@ -1220,7 +1227,22 @@ class AnnotationGUI(tk.Tk):
 
     def _compute_panel_width(self) -> int:
         screen_w = self.winfo_screenwidth()
-        return max(300, min(450, int(screen_w * 0.25)))
+        # Target: 25% of screen width for each panel
+        desired = int(screen_w * 0.25)
+        # Ensure both panels + minimum canvas (400px) + padding (30px) fit
+        min_canvas = 400
+        panel_padding = 30
+        max_combined = screen_w - min_canvas - panel_padding
+
+        if max_combined <= 0:
+            # Screen too small for the layout; return a minimal workable width
+            return 100
+
+        max_each = max_combined // 2
+        # Use the smaller of desired and max_each, clamp to [100, 450]
+        # (100 is an absolute minimum for usability)
+        optimal = min(desired, max_each)
+        return max(100, min(450, optimal))
 
     def _setup_ui(self) -> None:
         self._panel_width = self._compute_panel_width()
@@ -1236,10 +1258,43 @@ class AnnotationGUI(tk.Tk):
         main = tk.Frame(self)
         main.pack(fill="both", expand=True)
 
-        left_tools = tk.Frame(main, width=self._panel_width)
-        left_tools.pack(side=tk.LEFT, fill="y", padx=(10, 5), pady=10)
-        left_tools.pack_propagate(False)
+        # LEFT PANEL (scrollable)
+        left_outer = tk.Frame(main)
+        left_outer.pack(side=tk.LEFT, fill="y", padx=(10, 5), pady=10)
+
+        self._left_canvas = tk.Canvas(
+            left_outer, width=self._panel_width, highlightthickness=0
+        )
+        self._left_scrollbar = ttk.Scrollbar(
+            left_outer, orient="vertical", command=self._left_canvas.yview
+        )
+        self._left_canvas.configure(yscrollcommand=self._left_scrollbar.set)
+
+        self._left_canvas.pack(side=tk.LEFT, fill="y")
+        self._left_scrollbar.pack(side=tk.RIGHT, fill="y")
+
+        left_tools = tk.Frame(self._left_canvas)
+        self._left_win_id = self._left_canvas.create_window(
+            (0, 0), window=left_tools, anchor="nw"
+        )
         self._left_tools = left_tools
+
+        # Width sync: canvas Configure → set inner frame width
+        self._left_canvas.bind(
+            "<Configure>",
+            lambda e: self._left_canvas.itemconfigure(self._left_win_id, width=e.width),
+        )
+        # Scrollregion: inner frame Configure → update scrollregion
+        left_tools.bind(
+            "<Configure>",
+            lambda e: self._left_canvas.configure(
+                scrollregion=self._left_canvas.bbox("all")
+            ),
+        )
+
+        # Mousewheel support for left panel
+        left_tools.bind("<Enter>", lambda e: self._bind_left_panel_scroll(True))
+        left_tools.bind("<Leave>", lambda e: self._bind_left_panel_scroll(False))
 
         self.canvas = tk.Canvas(main, bg="grey", highlightthickness=0)
         self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
@@ -1262,10 +1317,43 @@ class AnnotationGUI(tk.Tk):
         )
         self.shadow_font = tkfont.Font(family="Liberation Sans", size=20, weight="bold")
 
-        ctrl = tk.Frame(main, width=self._panel_width)
-        ctrl.pack(side=tk.RIGHT, fill="y", padx=(5, 10), pady=10)
-        ctrl.pack_propagate(False)
+        # RIGHT PANEL (scrollable)
+        right_outer = tk.Frame(main)
+        right_outer.pack(side=tk.RIGHT, fill="y", padx=(5, 10), pady=10)
+
+        self._ctrl_canvas = tk.Canvas(
+            right_outer, width=self._panel_width, highlightthickness=0
+        )
+        self._ctrl_scrollbar = ttk.Scrollbar(
+            right_outer, orient="vertical", command=self._ctrl_canvas.yview
+        )
+        self._ctrl_canvas.configure(yscrollcommand=self._ctrl_scrollbar.set)
+
+        self._ctrl_canvas.pack(side=tk.LEFT, fill="y")
+        self._ctrl_scrollbar.pack(side=tk.RIGHT, fill="y")
+
+        ctrl = tk.Frame(self._ctrl_canvas)
+        self._ctrl_win_id = self._ctrl_canvas.create_window(
+            (0, 0), window=ctrl, anchor="nw"
+        )
         self._ctrl = ctrl
+
+        # Width sync: canvas Configure → set inner frame width
+        self._ctrl_canvas.bind(
+            "<Configure>",
+            lambda e: self._ctrl_canvas.itemconfigure(self._ctrl_win_id, width=e.width),
+        )
+        # Scrollregion: inner frame Configure → update scrollregion
+        ctrl.bind(
+            "<Configure>",
+            lambda e: self._ctrl_canvas.configure(
+                scrollregion=self._ctrl_canvas.bbox("all")
+            ),
+        )
+
+        # Mousewheel support for right panel
+        ctrl.bind("<Enter>", lambda e: self._bind_right_panel_scroll(True))
+        ctrl.bind("<Leave>", lambda e: self._bind_right_panel_scroll(False))
 
         zoom_wrap = ttk.LabelFrame(left_tools, text="Zoom View")
         zoom_wrap.pack(fill="x", pady=(0, 8))
@@ -2848,9 +2936,9 @@ class AnnotationGUI(tk.Tk):
 
         self._panel_width = new_w
 
-        # Update panels
-        self._left_tools.config(width=new_w)
-        self._ctrl.config(width=new_w)
+        # Update panel canvases
+        self._left_canvas.config(width=new_w)
+        self._ctrl_canvas.config(width=new_w)
 
         # Update zoom canvas (stay square)
         self.zoom_canvas.config(width=new_w, height=new_w)
@@ -2882,18 +2970,31 @@ class AnnotationGUI(tk.Tk):
         self.update_idletasks()
         req_w = self.winfo_reqwidth()
         req_h = self.winfo_reqheight()
-        target_w = req_w
-        target_h = req_h
-        self.geometry(f"{target_w}x{target_h}")
+        # Ensure window fits on screen (use 92% to leave margin for window decorations)
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        target_w = min(req_w, int(screen_w * 0.92))
+        target_h = min(req_h, int(screen_h * 0.92))
+        # Center window on screen
+        pos_x = (screen_w - target_w) // 2
+        pos_y = (screen_h - target_h) // 2
+        self.geometry(f"{target_w}x{target_h}+{pos_x}+{pos_y}")
         self.update_idletasks()
         self.minsize(target_w, target_h)
 
-    # Enables or disables mousewheel scrolling for the landmark list.
-    def _bind_landmark_scroll(self, bind: bool) -> None:
+    # Enables or disables mousewheel scrolling for the left panel.
+    def _bind_left_panel_scroll(self, bind: bool) -> None:
         if bind:
-            self.lp_canvas.bind_all("<MouseWheel>", self._landmark_mousewheel)
+            self._left_canvas.bind_all("<MouseWheel>", self._left_panel_mousewheel)
         else:
-            self.lp_canvas.unbind_all("<MouseWheel>")
+            self._left_canvas.unbind_all("<MouseWheel>")
+
+    # Enables or disables mousewheel scrolling for the right panel.
+    def _bind_right_panel_scroll(self, bind: bool) -> None:
+        if bind:
+            self._ctrl_canvas.bind_all("<MouseWheel>", self._right_panel_mousewheel)
+        else:
+            self._ctrl_canvas.unbind_all("<MouseWheel>")
 
     def _bind_image_list_scroll(self, bind: bool) -> None:
         if self.image_tree is None:
@@ -2942,6 +3043,23 @@ class AnnotationGUI(tk.Tk):
     def _landmark_mousewheel(self, event) -> None:
         delta = -1 if event.delta > 0 else 1
         self.lp_canvas.yview_scroll(delta, "units")
+
+    # Scrolls the left panel in response to mouse wheel events.
+    def _left_panel_mousewheel(self, event) -> None:
+        delta = -1 if event.delta > 0 else 1
+        self._left_canvas.yview_scroll(delta, "units")
+
+    # Scrolls the right panel in response to mouse wheel events.
+    def _right_panel_mousewheel(self, event) -> None:
+        delta = -1 if event.delta > 0 else 1
+        self._ctrl_canvas.yview_scroll(delta, "units")
+
+    # Enables or disables mousewheel scrolling for the landmark list.
+    def _bind_landmark_scroll(self, bind: bool) -> None:
+        if bind:
+            self.lp_canvas.bind_all("<MouseWheel>", self._landmark_mousewheel)
+        else:
+            self.lp_canvas.unbind_all("<MouseWheel>")
 
     def _scroll_landmark_into_view(self, lm: str) -> None:
         rb = getattr(self, "landmark_radio_widgets", {}).get(lm)
@@ -3774,8 +3892,6 @@ class AnnotationGUI(tk.Tk):
 
         self._refresh_image_flag_checkbox_style()
 
-        w, h = self.current_image.size
-        self.canvas.config(width=w, height=h)
         self.canvas.delete("all")
         self.base_img_item = None
         self._remove_all_overlays()
@@ -4555,7 +4671,9 @@ class AnnotationGUI(tk.Tk):
                 try:
                     client = self.onedrive_backup._create_fresh_client()
                     if not client:
-                        logger.warning("No Graph client available for original JSON backup")
+                        logger.warning(
+                            "No Graph client available for original JSON backup"
+                        )
                         return
 
                     import asyncio
@@ -4563,7 +4681,9 @@ class AnnotationGUI(tk.Tk):
                     loop = asyncio.SelectorEventLoop()
 
                     async def upload():
-                        remote_folder = f"pelvic-2d-points-backup/original_jsons/{username}"
+                        remote_folder = (
+                            f"pelvic-2d-points-backup/original_jsons/{username}"
+                        )
                         drive_item_path = f"root:/{remote_folder}/{backup_name}:"
                         await (
                             client.drives.by_drive_id(SHAREPOINT_DRIVE_ID)
@@ -4613,7 +4733,9 @@ class AnnotationGUI(tk.Tk):
                 try:
                     client = self.onedrive_backup._create_fresh_client()
                     if not client:
-                        logger.warning("No Graph client available for original JSON backup")
+                        logger.warning(
+                            "No Graph client available for original JSON backup"
+                        )
                         return
 
                     import asyncio
@@ -4621,7 +4743,9 @@ class AnnotationGUI(tk.Tk):
                     loop = asyncio.SelectorEventLoop()
 
                     async def upload():
-                        remote_folder = f"pelvic-2d-points-backup/original_jsons/{username}"
+                        remote_folder = (
+                            f"pelvic-2d-points-backup/original_jsons/{username}"
+                        )
                         drive_item_path = f"root:/{remote_folder}/{backup_name}:"
                         await (
                             client.drives.by_drive_id(SHAREPOINT_DRIVE_ID)
