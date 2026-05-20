@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.2](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.6.1...v2.6.2) (2026-05-20)
+
+
+### Bug Fixes
+
+* **ui:** added scrollable side panels and better resize logic ([621d378](https://github.com/OrthoDriven/2d-point-annotator/commit/621d3784c69c102c1ca103e2fbd7011ab8842232))
+
 ## [2.6.1](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.6.0...v2.6.1) (2026-05-08)
 
 
