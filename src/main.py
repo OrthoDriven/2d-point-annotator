@@ -304,7 +304,7 @@ class AnnotationGUI(tk.Tk):
         self.csv_local_image_directory_path: Optional[str] = None
 
         # OneDrive backup integration - initialize early to check/prompt for credentials
-        self.onedrive_backup = OneDriveBackup()
+        self.onedrive_backup = OneDriveBackup(tk_root=self)
         # Trigger credential check at startup (will show auth dialog if needed)
         self.after(100, self._init_onedrive_credentials)
 
