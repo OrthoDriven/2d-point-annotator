@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.3](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.6.2...v2.6.3) (2026-06-03)
+
+
+### Bug Fixes
+
+* **auth:** fixed bug in linux that caused auth to hang ([a854af8](https://github.com/OrthoDriven/2d-point-annotator/commit/a854af8f305df75b441089d20e72bc1c486d770f))
+
 ## [2.6.2](https://github.com/OrthoDriven/2d-point-annotator/compare/v2.6.1...v2.6.2) (2026-05-20)
 
 
